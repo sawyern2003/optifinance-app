@@ -1,0 +1,831 @@
+
+import React, { useState } from "react";
+import { base44 } from "@/api/base44Client";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Download, TrendingUp, Sparkles, Plus, Trash2, Loader2, Lightbulb, AlertCircle } from "lucide-react";
+import { format } from "date-fns";
+import { useToast } from "@/components/ui/use-toast";
+
+export default function Pricing() {
+  const { toast } = useToast();
+  const queryClient = useQueryClient();
+  const [activeTab, setActiveTab] = useState("price-list");
+  const [competitorDialogOpen, setCompetitorDialogOpen] = useState(false);
+  const [analyzingCompetitors, setAnalyzingCompetitors] = useState(false);
+  const [aiInsights, setAiInsights] = useState(null);
+  const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
+  const [competitorToDelete, setCompetitorToDelete] = useState(null);
+  const [competitorForm, setCompetitorForm] = useState({
+    competitor_name: '',
+    location: '',
+    treatment_name: '',
+    treatment_category: '',
+    price: '',
+    notes: ''
+  });
+
+  const { data: treatmentCatalog } = useQuery({
+    queryKey: ['treatmentCatalog'],
+    queryFn: () => base44.entities.TreatmentCatalog.list('treatment_name'),
+    initialData: [],
+  });
+
+  const { data: treatments } = useQuery({
+    queryKey: ['treatments'],
+    queryFn: () => base44.entities.TreatmentEntry.list('-date'),
+    initialData: [],
+  });
+
+  const { data: competitorPricing } = useQuery({
+    queryKey: ['competitorPricing'],
+    queryFn: () => base44.entities.CompetitorPricing.list('-created_date'),
+    initialData: [],
+  });
+
+  const { data: user } = useQuery({
+    queryKey: ['currentUser'],
+    queryFn: () => base44.auth.me(),
+    initialData: null,
+  });
+
+  const createCompetitorMutation = useMutation({
+    mutationFn: (data) => base44.entities.CompetitorPricing.create(data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['competitorPricing'] });
+      toast({
+        title: "Competitor price added",
+        className: "bg-green-50 border-green-200"
+      });
+      setCompetitorForm({
+        competitor_name: '',
+        location: '',
+        treatment_name: '',
+        treatment_category: '',
+        price: '',
+        notes: ''
+      });
+      setCompetitorDialogOpen(false);
+    },
+  });
+
+  const deleteCompetitorMutation = useMutation({
+    mutationFn: (id) => base44.entities.CompetitorPricing.delete(id),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['competitorPricing'] });
+      toast({
+        title: "Competitor price deleted",
+        className: "bg-red-50 border-red-200"
+      });
+      setDeleteConfirmOpen(false);
+      setCompetitorToDelete(null);
+    },
+  });
+
+  const handleDeleteClick = (competitor) => {
+    setCompetitorToDelete(competitor);
+    setDeleteConfirmOpen(true);
+  };
+
+  const confirmDelete = () => {
+    if (competitorToDelete) {
+      deleteCompetitorMutation.mutate(competitorToDelete.id);
+    }
+  };
+
+  const handleCompetitorSubmit = (e) => {
+    e.preventDefault();
+    createCompetitorMutation.mutate({
+      competitor_name: competitorForm.competitor_name,
+      location: competitorForm.location,
+      treatment_name: competitorForm.treatment_name,
+      treatment_category: competitorForm.treatment_category,
+      price: parseFloat(competitorForm.price),
+      notes: competitorForm.notes
+    });
+  };
+
+  const calculateOptimizerMetrics = () => {
+    const metrics = treatmentCatalog.map(treatment => {
+      const treatmentEntries = treatments.filter(t => t.treatment_name === treatment.treatment_name);
+      const count = treatmentEntries.length;
+      const totalRevenue = treatmentEntries.reduce((sum, t) => sum + (t.amount_paid || 0), 0);
+      const revenuePerMinute = treatment.duration_minutes 
+        ? treatment.default_price / treatment.duration_minutes 
+        : 0;
+      const margin = treatment.typical_product_cost 
+        ? ((treatment.default_price - treatment.typical_product_cost) / treatment.default_price * 100)
+        : 100;
+
+      return {
+        ...treatment,
+        count,
+        totalRevenue,
+        revenuePerMinute,
+        margin,
+        priorityScore: (revenuePerMinute * 0.4) + (count * 0.3) + (margin * 0.3)
+      };
+    }).sort((a, b) => b.priorityScore - a.priorityScore);
+
+    return metrics;
+  };
+
+  // Group treatments by category and sort alphabetically within each category
+  const groupedTreatments = treatmentCatalog.reduce((acc, treatment) => {
+    const category = treatment.category || 'Other';
+    if (!acc[category]) {
+      acc[category] = [];
+    }
+    acc[category].push(treatment);
+    return acc;
+  }, {});
+
+  // Sort treatments alphabetically within each category
+  Object.keys(groupedTreatments).forEach(category => {
+    groupedTreatments[category].sort((a, b) => 
+      a.treatment_name.localeCompare(b.treatment_name)
+    );
+  });
+
+  // Sort categories alphabetically
+  const sortedCategories = Object.keys(groupedTreatments).sort();
+
+  const downloadPriceList = async () => {
+    const clinicName = user?.clinic_name || 'OptiFinance Clinic';
+    
+    const htmlContent = `
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <title>Price List - ${clinicName}</title>
+        <style>
+          @media print {
+            body { margin: 0; }
+            .no-print { display: none; }
+          }
+          body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Arial, sans-serif;
+            padding: 60px;
+            color: #1e293b;
+            line-height: 1.6;
+            max-width: 800px;
+            margin: 0 auto;
+          }
+          .header {
+            text-align: center;
+            margin-bottom: 50px;
+            padding-bottom: 30px;
+            border-bottom: 3px solid #2C3E50;
+          }
+          .header h1 {
+            color: #2C3E50;
+            font-size: 32px;
+            margin: 0 0 10px 0;
+          }
+          .header p {
+            color: #64748b;
+            margin: 4px 0;
+          }
+          .category-section {
+            margin: 40px 0;
+          }
+          .category-title {
+            font-size: 24px;
+            font-weight: 700;
+            color: #2C3E50;
+            margin: 0 0 20px 0;
+            padding-bottom: 10px;
+            border-bottom: 2px solid #e2e8f0;
+          }
+          .treatment-item {
+            display: flex;
+            justify-content: space-between;
+            padding: 15px 0;
+            border-bottom: 1px solid #f1f5f9;
+          }
+          .treatment-name {
+            font-weight: 600;
+            color: #1e293b;
+          }
+          .treatment-duration {
+            color: #64748b;
+            font-size: 14px;
+            margin-top: 4px;
+          }
+          .treatment-price {
+            font-size: 20px;
+            font-weight: 700;
+            color: #2C3E50;
+          }
+          .footer {
+            margin-top: 60px;
+            padding-top: 30px;
+            border-top: 1px solid #e2e8f0;
+            text-align: center;
+            color: #64748b;
+            font-size: 12px;
+          }
+          .print-button {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            padding: 12px 24px;
+            background: #2C3E50;
+            color: white;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 14px;
+            font-weight: 600;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.15);
+            z-index: 1000;
+          }
+          .print-button:hover {
+            background: #34495E;
+          }
+        </style>
+      </head>
+      <body>
+        <button class="print-button no-print" onclick="window.print()">Print / Save as PDF</button>
+        
+        <div class="header">
+          <h1>${clinicName}</h1>
+          <p>Treatment Price List</p>
+          <p>Updated: ${format(new Date(), 'dd MMMM yyyy')}</p>
+        </div>
+
+        ${sortedCategories.map(category => `
+          <div class="category-section">
+            <h2 class="category-title">${category}</h2>
+            ${groupedTreatments[category].map(treatment => `
+              <div class="treatment-item">
+                <div>
+                  <div class="treatment-name">${treatment.treatment_name}</div>
+                  ${treatment.duration_minutes ? `<div class="treatment-duration">${treatment.duration_minutes} minutes</div>` : ''}
+                </div>
+                <div class="treatment-price">£${treatment.default_price.toFixed(2)}</div>
+              </div>
+            `).join('')}
+          </div>
+        `).join('')}
+
+        <div class="footer">
+          <p>All prices are subject to consultation and may vary based on individual requirements.</p>
+          <p>${clinicName} • ${format(new Date(), 'yyyy')}</p>
+        </div>
+
+        <script>
+          window.onload = function() {
+            setTimeout(function() {
+              window.print();
+            }, 500);
+          };
+        </script>
+      </body>
+      </html>
+    `;
+
+    const printWindow = window.open('', '_blank');
+    printWindow.document.write(htmlContent);
+    printWindow.document.close();
+
+    toast({
+      title: "Price list opened",
+      description: "Use your browser's print dialog to save as PDF",
+      className: "bg-green-50 border-green-200"
+    });
+  };
+
+  // Get competitor comparison data
+  const getCompetitorComparison = () => {
+    return treatmentCatalog.map(treatment => {
+      const competitorPrices = competitorPricing.filter(
+        cp => cp.treatment_name.toLowerCase() === treatment.treatment_name.toLowerCase()
+      );
+      
+      const avgCompetitorPrice = competitorPrices.length > 0
+        ? competitorPrices.reduce((sum, cp) => sum + cp.price, 0) / competitorPrices.length
+        : null;
+      
+      const priceDifference = avgCompetitorPrice 
+        ? ((treatment.default_price - avgCompetitorPrice) / avgCompetitorPrice * 100)
+        : null;
+
+      return {
+        treatment,
+        competitorPrices,
+        avgCompetitorPrice,
+        priceDifference
+      };
+    }).filter(item => item.competitorPrices.length > 0);
+  };
+
+  // AI-powered pricing analysis
+  const analyzeWithAI = async () => {
+    setAnalyzingCompetitors(true);
+    
+    const optimizerMetrics = calculateOptimizerMetrics();
+    const competitorComparison = getCompetitorComparison();
+    
+    const prompt = `You are a pricing strategy consultant for an aesthetic clinic. Analyze the following data and provide strategic pricing recommendations:
+
+CLINIC'S CURRENT TREATMENTS:
+${optimizerMetrics.map(m => `- ${m.treatment_name}: £${m.default_price}, ${m.count} performed, ${m.duration_minutes || 'N/A'} min, £${m.revenuePerMinute.toFixed(2)}/min`).join('\n')}
+
+COMPETITOR PRICING DATA:
+${competitorComparison.map(c => 
+  `- ${c.treatment.treatment_name}: 
+    Our price: £${c.treatment.default_price}
+    Competitor avg: £${c.avgCompetitorPrice.toFixed(2)}
+    Difference: ${c.priceDifference > 0 ? '+' : ''}${c.priceDifference.toFixed(1)}%
+    Competitors: ${c.competitorPrices.map(cp => `${cp.competitor_name} (£${cp.price})`).join(', ')}`
+).join('\n\n')}
+
+Please provide:
+1. Top 3 pricing adjustment recommendations with specific new prices and reasoning
+2. Market positioning analysis (are we premium, competitive, or budget?)
+3. Opportunities for bundling or package deals
+4. Treatments that are underpriced or overpriced compared to market
+5. Strategic insights on which treatments to promote more
+
+Be specific, actionable, and focus on maximizing revenue while staying competitive.`;
+
+    try {
+      const response = await base44.integrations.Core.InvokeLLM({
+        prompt: prompt,
+        add_context_from_internet: false
+      });
+      
+      setAiInsights(response);
+      toast({
+        title: "Analysis complete",
+        description: "AI recommendations generated",
+        className: "bg-green-50 border-green-200"
+      });
+    } catch (error) {
+      console.error('AI analysis failed:', error);
+      toast({
+        title: "Analysis failed",
+        description: "Could not generate AI recommendations",
+        className: "bg-red-50 border-red-200"
+      });
+    }
+    
+    setAnalyzingCompetitors(false);
+  };
+
+  const optimizerMetrics = calculateOptimizerMetrics();
+  const competitorComparison = getCompetitorComparison();
+
+  return (
+    <div className="p-6 md:p-10 bg-[#F5F6F8] min-h-screen">
+      <div className="max-w-7xl mx-auto">
+        <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-8 gap-4">
+          <div>
+            <h1 className="text-3xl font-light tracking-tight text-[#1a2845] mb-2">Pricing Intelligence</h1>
+            <p className="text-sm text-gray-500 font-light">Optimize pricing strategy and analyze market positioning</p>
+          </div>
+        </div>
+
+        {/* Tabs */}
+        <div className="bg-white rounded-2xl shadow-sm border border-gray-100 mb-6">
+          <div className="border-b border-gray-100 p-6 pb-0">
+            <div className="flex gap-2 overflow-x-auto">
+              <button
+                onClick={() => setActiveTab("price-list")}
+                className={`flex items-center gap-2 px-6 py-3 rounded-t-xl font-medium transition-colors whitespace-nowrap ${
+                  activeTab === "price-list"
+                    ? 'bg-[#2C3E50] text-white'
+                    : 'text-gray-600 hover:text-gray-900'
+                }`}
+              >
+                <Download className="w-5 h-5" />
+                Price List
+              </button>
+              <button
+                onClick={() => setActiveTab("optimizer")}
+                className={`flex items-center gap-2 px-6 py-3 rounded-t-xl font-medium transition-colors whitespace-nowrap ${
+                  activeTab === "optimizer"
+                    ? 'bg-[#2C3E50] text-white'
+                    : 'text-gray-600 hover:text-gray-900'
+                }`}
+              >
+                <TrendingUp className="w-5 h-5" />
+                Price Optimizer
+              </button>
+              <button
+                onClick={() => setActiveTab("competitors")}
+                className={`flex items-center gap-2 px-6 py-3 rounded-t-xl font-medium transition-colors whitespace-nowrap ${
+                  activeTab === "competitors"
+                    ? 'bg-[#2C3E50] text-white'
+                    : 'text-gray-600 hover:text-gray-900'
+                }`}
+              >
+                <Sparkles className="w-5 h-5" />
+                Competitor Analysis
+              </button>
+            </div>
+          </div>
+
+          <div className="p-6">
+            {/* Price List Tab */}
+            {activeTab === "price-list" && (
+              <div>
+                <div className="flex justify-between items-center mb-6">
+                  <p className="text-gray-600">
+                    Visual price list organized by treatment category
+                  </p>
+                  <Button
+                    onClick={downloadPriceList}
+                    className="bg-[#2C3E50] hover:bg-[#34495E] text-white rounded-xl"
+                  >
+                    <Download className="w-5 h-5 mr-2" />
+                    Download PDF
+                  </Button>
+                </div>
+
+                <div className="space-y-8">
+                  {sortedCategories.map(category => (
+                    <div key={category} className="bg-gray-50 rounded-2xl p-6 border border-gray-200">
+                      <h3 className="text-2xl font-bold text-gray-900 mb-4 pb-3 border-b-2 border-gray-300">
+                        {category}
+                      </h3>
+                      <div className="space-y-3">
+                        {groupedTreatments[category].map(treatment => (
+                          <div key={treatment.id} className="flex justify-between items-start bg-white rounded-lg p-4">
+                            <div>
+                              <h4 className="font-semibold text-gray-900 text-lg">{treatment.treatment_name}</h4>
+                              {treatment.duration_minutes && (
+                                <p className="text-sm text-gray-500 mt-1">{treatment.duration_minutes} minutes</p>
+                              )}
+                            </div>
+                            <div className="text-right">
+                              <p className="text-2xl font-bold text-[#2C3E50]">£{treatment.default_price.toFixed(2)}</p>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Price Optimizer Tab */}
+            {activeTab === "optimizer" && (
+              <div>
+                <div className="bg-blue-50 border border-blue-200 rounded-xl p-4 mb-6">
+                  <div className="flex items-start gap-3">
+                    <Lightbulb className="w-5 h-5 text-blue-600 flex-shrink-0 mt-0.5" />
+                    <div>
+                      <h4 className="font-semibold text-blue-900">Priority Score Calculation</h4>
+                      <p className="text-sm text-blue-800 mt-1">
+                        Treatments are ranked by: Revenue/Minute (40%) + Frequency (30%) + Profit Margin (30%)
+                      </p>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="space-y-4">
+                  {optimizerMetrics.map((metric, index) => (
+                    <div 
+                      key={metric.id} 
+                      className={`bg-white rounded-xl p-6 border-2 ${
+                        index === 0 ? 'border-green-500' : 
+                        index === 1 ? 'border-blue-500' : 
+                        index === 2 ? 'border-purple-500' : 
+                        'border-gray-200'
+                      }`}
+                    >
+                      <div className="flex items-start justify-between mb-4">
+                        <div className="flex items-start gap-3">
+                          {index < 3 && (
+                            <div className={`w-8 h-8 rounded-full flex items-center justify-center font-bold text-white ${
+                              index === 0 ? 'bg-green-500' : 
+                              index === 1 ? 'bg-blue-500' : 
+                              'bg-[#1a2845]'
+                            }`}>
+                              {index + 1}
+                            </div>
+                          )}
+                          <div>
+                            <h3 className="text-xl font-bold text-gray-900">{metric.treatment_name}</h3>
+                            <p className="text-sm text-gray-500">{metric.category}</p>
+                          </div>
+                        </div>
+                        <div className="text-right">
+                          <p className="text-sm text-gray-600">Priority Score</p>
+                          <p className="text-2xl font-bold text-[#2C3E50]">{metric.priorityScore.toFixed(1)}</p>
+                        </div>
+                      </div>
+
+                      <div className="grid grid-cols-2 md:grid-cols-5 gap-4 mt-4 pt-4 border-t border-gray-200">
+                        <div>
+                          <p className="text-xs text-gray-600 mb-1">Price</p>
+                          <p className="text-lg font-semibold text-gray-900">£{metric.default_price.toFixed(2)}</p>
+                        </div>
+                        <div>
+                          <p className="text-xs text-gray-600 mb-1">Revenue/Min</p>
+                          <p className="text-lg font-semibold text-green-600">
+                            £{metric.revenuePerMinute.toFixed(2)}
+                          </p>
+                        </div>
+                        <div>
+                          <p className="text-xs text-gray-600 mb-1">Performed</p>
+                          <p className="text-lg font-semibold text-blue-600">{metric.count}x</p>
+                        </div>
+                        <div>
+                          <p className="text-xs text-gray-600 mb-1">Total Revenue</p>
+                          <p className="text-lg font-semibold text-[#1a2845]">£{metric.totalRevenue.toFixed(0)}</p>
+                        </div>
+                        <div>
+                          <p className="text-xs text-gray-600 mb-1">Margin</p>
+                          <p className="text-lg font-semibold text-green-600">{metric.margin.toFixed(0)}%</p>
+                        </div>
+                      </div>
+
+                      {index < 3 && (
+                        <div className="mt-4 pt-4 border-t border-gray-200">
+                          <p className="text-sm font-medium text-green-700">
+                            ✓ High priority - Consider promoting this treatment more actively
+                          </p>
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Competitor Analysis Tab */}
+            {activeTab === "competitors" && (
+              <div>
+                <div className="flex justify-between items-center mb-6">
+                  <p className="text-gray-600">
+                    Compare your pricing with competitors and get AI-powered recommendations
+                  </p>
+                  <div className="flex gap-3">
+                    <Button
+                      onClick={() => setCompetitorDialogOpen(true)}
+                      variant="outline"
+                      className="border-[#2C3E50] text-[#2C3E50] hover:bg-gray-50 rounded-xl"
+                    >
+                      <Plus className="w-5 h-5 mr-2" />
+                      Add Competitor Price
+                    </Button>
+                    <Button
+                      onClick={analyzeWithAI}
+                      disabled={analyzingCompetitors || competitorPricing.length === 0}
+                      className="bg-[#2C3E50] hover:bg-[#34495E] text-white rounded-xl"
+                    >
+                      {analyzingCompetitors ? (
+                        <>
+                          <Loader2 className="w-5 h-5 mr-2 animate-spin" />
+                          Analyzing...
+                        </>
+                      ) : (
+                        <>
+                          <Sparkles className="w-5 h-5 mr-2" />
+                          AI Analysis
+                        </>
+                      )}
+                    </Button>
+                  </div>
+                </div>
+
+                {aiInsights && (
+                  <div className="bg-gradient-to-r from-purple-50 to-blue-50 border-2 border-[#f0e9d8] rounded-2xl p-6 mb-6">
+                    <div className="flex items-start gap-3 mb-4">
+                      <div className="w-10 h-10 bg-[#1a2845] rounded-xl flex items-center justify-center flex-shrink-0">
+                        <Sparkles className="w-6 h-6 text-white" />
+                      </div>
+                      <div>
+                        <h3 className="text-xl font-bold text-gray-900">AI Pricing Recommendations</h3>
+                        <p className="text-sm text-gray-600">Generated by advanced market analysis</p>
+                      </div>
+                    </div>
+                    <div className="prose prose-sm max-w-none text-gray-800 whitespace-pre-wrap bg-white rounded-xl p-6">
+                      {aiInsights}
+                    </div>
+                  </div>
+                )}
+
+                {competitorComparison.length === 0 ? (
+                  <div className="text-center py-12 bg-white rounded-xl border-2 border-dashed border-gray-300">
+                    <AlertCircle className="w-12 h-12 text-gray-400 mx-auto mb-3" />
+                    <p className="text-gray-500 mb-2">No competitor data yet</p>
+                    <p className="text-sm text-gray-400">Add competitor pricing to see comparison analysis</p>
+                  </div>
+                ) : (
+                  <div className="space-y-4">
+                    {competitorComparison.map((item) => (
+                      <div key={item.treatment.id} className="bg-white rounded-xl p-6 border border-gray-200">
+                        <div className="flex justify-between items-start mb-4">
+                          <div>
+                            <h3 className="text-xl font-bold text-gray-900">{item.treatment.treatment_name}</h3>
+                            <p className="text-sm text-gray-500">{item.treatment.category}</p>
+                          </div>
+                          <div className={`px-4 py-2 rounded-lg font-semibold ${
+                            item.priceDifference > 10 ? 'bg-red-100 text-red-700' :
+                            item.priceDifference > 0 ? 'bg-yellow-100 text-yellow-700' :
+                            item.priceDifference > -10 ? 'bg-green-100 text-green-700' :
+                            'bg-blue-100 text-blue-700'
+                          }`}>
+                            {item.priceDifference > 0 ? '+' : ''}{item.priceDifference.toFixed(1)}%
+                          </div>
+                        </div>
+
+                        <div className="grid grid-cols-2 gap-4 mb-4">
+                          <div className="bg-gray-50 rounded-lg p-4">
+                            <p className="text-sm text-gray-600 mb-1">Your Price</p>
+                            <p className="text-2xl font-bold text-[#2C3E50]">£{item.treatment.default_price.toFixed(2)}</p>
+                          </div>
+                          <div className="bg-gray-50 rounded-lg p-4">
+                            <p className="text-sm text-gray-600 mb-1">Competitor Average</p>
+                            <p className="text-2xl font-bold text-gray-900">£{item.avgCompetitorPrice.toFixed(2)}</p>
+                          </div>
+                        </div>
+
+                        <div className="pt-4 border-t border-gray-200">
+                          <p className="text-sm font-semibold text-gray-700 mb-2">Competitor Prices:</p>
+                          <div className="space-y-2">
+                            {item.competitorPrices.map((cp) => (
+                              <div key={cp.id} className="flex justify-between items-center bg-gray-50 rounded-lg p-3">
+                                <div>
+                                  <p className="font-medium text-gray-900">{cp.competitor_name}</p>
+                                  {cp.location && <p className="text-xs text-gray-500">{cp.location}</p>}
+                                </div>
+                                <div className="flex items-center gap-3">
+                                  <p className="font-semibold text-gray-900">£{cp.price.toFixed(2)}</p>
+                                  <button
+                                    onClick={() => handleDeleteClick(cp)}
+                                    className="p-1 hover:bg-red-100 rounded text-gray-400 hover:text-red-600"
+                                  >
+                                    <Trash2 className="w-4 h-4" />
+                                  </button>
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* Add Competitor Dialog */}
+        <Dialog open={competitorDialogOpen} onOpenChange={setCompetitorDialogOpen}>
+          <DialogContent className="sm:max-w-md">
+            <DialogHeader>
+              <DialogTitle className="text-xl font-semibold">Add Competitor Pricing</DialogTitle>
+            </DialogHeader>
+            <form onSubmit={handleCompetitorSubmit} className="space-y-5 mt-4">
+              <div className="space-y-2">
+                <Label htmlFor="competitor_name" className="text-sm font-medium text-gray-700">Competitor Name *</Label>
+                <Input
+                  id="competitor_name"
+                  value={competitorForm.competitor_name}
+                  onChange={(e) => setCompetitorForm({...competitorForm, competitor_name: e.target.value})}
+                  placeholder="e.g. Elite Aesthetics"
+                  className="rounded-xl border-gray-300 h-11"
+                  required
+                />
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="location" className="text-sm font-medium text-gray-700">Location</Label>
+                <Input
+                  id="location"
+                  value={competitorForm.location}
+                  onChange={(e) => setCompetitorForm({...competitorForm, location: e.target.value})}
+                  placeholder="e.g. London, Manchester"
+                  className="rounded-xl border-gray-300 h-11"
+                />
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="treatment_name" className="text-sm font-medium text-gray-700">Treatment *</Label>
+                <Select
+                  value={competitorForm.treatment_name}
+                  onValueChange={(value) => {
+                    const treatment = treatmentCatalog.find(t => t.treatment_name === value);
+                    setCompetitorForm({
+                      ...competitorForm, 
+                      treatment_name: value,
+                      treatment_category: treatment?.category || ''
+                    });
+                  }}
+                  required
+                >
+                  <SelectTrigger className="rounded-xl border-gray-300 h-11">
+                    <SelectValue placeholder="Select treatment" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {treatmentCatalog.map((treatment) => (
+                      <SelectItem key={treatment.id} value={treatment.treatment_name}>
+                        {treatment.treatment_name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="price" className="text-sm font-medium text-gray-700">Price (£) *</Label>
+                <Input
+                  id="price"
+                  type="number"
+                  step="0.01"
+                  value={competitorForm.price}
+                  onChange={(e) => setCompetitorForm({...competitorForm, price: e.target.value})}
+                  placeholder="0.00"
+                  className="rounded-xl border-gray-300 h-11"
+                  required
+                />
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="notes" className="text-sm font-medium text-gray-700">Notes</Label>
+                <Textarea
+                  id="notes"
+                  value={competitorForm.notes}
+                  onChange={(e) => setCompetitorForm({...competitorForm, notes: e.target.value})}
+                  placeholder="Additional information..."
+                  className="rounded-xl border-gray-300"
+                  rows={3}
+                />
+              </div>
+
+              <div className="flex gap-3 pt-4">
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => setCompetitorDialogOpen(false)}
+                  className="flex-1 rounded-xl border-gray-300"
+                >
+                  Cancel
+                </Button>
+                <Button
+                  type="submit"
+                  className="flex-1 bg-[#2C3E50] hover:bg-[#34495E] rounded-xl"
+                  disabled={createCompetitorMutation.isPending}
+                >
+                  Add Competitor
+                </Button>
+              </div>
+            </form>
+          </DialogContent>
+        </Dialog>
+
+        {/* Delete Confirmation Dialog */}
+        <Dialog open={deleteConfirmOpen} onOpenChange={setDeleteConfirmOpen}>
+          <DialogContent className="sm:max-w-md">
+            <DialogHeader>
+              <DialogTitle className="text-xl font-semibold flex items-center gap-2">
+                <Trash2 className="w-6 h-6 text-red-600" />
+                Confirm Deletion
+              </DialogTitle>
+            </DialogHeader>
+            <div className="space-y-4 mt-4">
+              <p className="text-gray-700">
+                Are you sure you want to delete this competitor price?
+              </p>
+              {competitorToDelete && (
+                <div className="bg-gray-50 rounded-lg p-3">
+                  <p className="text-sm text-gray-600">Competitor: <span className="font-semibold text-gray-900">{competitorToDelete.competitor_name}</span></p>
+                  <p className="text-sm text-gray-600">Treatment: <span className="font-semibold text-gray-900">{competitorToDelete.treatment_name}</span></p>
+                  <p className="text-sm text-gray-600">Price: <span className="font-semibold text-gray-900">£{competitorToDelete.price?.toFixed(2)}</span></p>
+                </div>
+              )}
+              <p className="text-sm text-red-600 font-medium">This action cannot be undone.</p>
+              <div className="flex gap-3 pt-4">
+                <Button
+                  variant="outline"
+                  onClick={() => setDeleteConfirmOpen(false)}
+                  className="flex-1 rounded-xl border-gray-300"
+                >
+                  Cancel
+                </Button>
+                <Button
+                  onClick={confirmDelete}
+                  className="flex-1 bg-red-600 hover:bg-red-700 rounded-xl"
+                >
+                  Delete
+                </Button>
+              </div>
+            </div>
+          </DialogContent>
+        </Dialog>
+      </div>
+    </div>
+  );
+}
