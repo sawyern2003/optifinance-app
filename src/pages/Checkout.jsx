@@ -4,6 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Loader2, ArrowLeft } from "lucide-react";
 import { supabase } from "@/config/supabase";
+import { FunctionsHttpError } from "@supabase/supabase-js";
 import { useToast } from "@/components/ui/use-toast";
 
 
@@ -36,8 +37,13 @@ function CheckoutForm({ priceId, planName, planPrice }) {
           });
 
           if (error) {
-            // Prefer error message from Edge Function response body
-            const message = (data && typeof data.error === 'string') ? data.error : error.message;
+            let message = (data && typeof data.error === 'string') ? data.error : error.message;
+            if (error instanceof FunctionsHttpError && error.context) {
+              try {
+                const body = await error.context.json();
+                if (body && typeof body.error === 'string') message = body.error;
+              } catch (_) {}
+            }
             if (message && message.includes('Failed to send a request to the Edge Function') && attempt < maxRetries) {
               await new Promise((r) => setTimeout(r, 800));
               continue;
