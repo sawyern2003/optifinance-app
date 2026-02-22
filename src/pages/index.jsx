@@ -145,14 +145,13 @@ function ProtectedRoute({ children }) {
         return <Navigate to="/auth" replace />;
     }
 
-    // Pay barrier disabled: any logged-in user can access the full app.
-    // To re-enable subscription gating, uncomment the block below.
-    // const allowedPaths = ['/Billing', '/Checkout', '/SubscriptionPricing'];
-    // const currentPath = location.pathname;
-    // const isAllowedPath = allowedPaths.some(path => currentPath.includes(path));
-    // if (!isAllowedPath && !hasSubscription) {
-    //     return <Navigate to="/SubscriptionPricing" replace />;
-    // }
+    // Subscription required: redirect to pricing if no active subscription
+    const allowedPaths = ['/Billing', '/Checkout', '/SubscriptionPricing'];
+    const currentPath = location.pathname;
+    const isAllowedPath = allowedPaths.some(path => currentPath.includes(path));
+    if (!isAllowedPath && !hasSubscription) {
+        return <Navigate to="/SubscriptionPricing" replace />;
+    }
 
     return children;
 }
