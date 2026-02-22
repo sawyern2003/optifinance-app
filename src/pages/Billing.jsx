@@ -1,41 +1,82 @@
 import React, { useState, useEffect } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Loader2, CreditCard, Calendar, CheckCircle, XCircle, AlertCircle } from "lucide-react";
+import { Loader2, CreditCard, Calendar, CheckCircle, XCircle, AlertCircle, RefreshCw } from "lucide-react";
 import { subscriptionsAPI } from "@/api/subscriptions";
 import { useToast } from "@/components/ui/use-toast";
 import { format } from "date-fns";
 import { supabase } from "@/config/supabase";
 
+const RETRY_DELAY_MS = 2000;
+const MAX_RETRIES = 3;
+
 export default function Billing() {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const { toast } = useToast();
   const [subscription, setSubscription] = useState(null);
   const [loading, setLoading] = useState(true);
   const [portalLoading, setPortalLoading] = useState(false);
+  const justPaid = searchParams.get("success") === "true";
+  const sessionId = searchParams.get("session_id");
 
   useEffect(() => {
-    loadSubscription();
+    let cancelled = false;
+    (async () => {
+      // If we landed here after Stripe checkout, sync subscription from Stripe first (backup if webhook failed)
+      if (sessionId && justPaid) {
+        try {
+          await supabase.functions.invoke("sync-checkout-session", {
+            body: { session_id: sessionId },
+          });
+        } catch (_) {
+          // Non-blocking: webhook may have already updated; we'll load and retry below
+        }
+      }
+      if (!cancelled) loadSubscriptionWithRetry();
+    })();
+    return () => { cancelled = true; };
   }, []);
 
   const loadSubscription = async () => {
-    try {
-      const sub = await subscriptionsAPI.getSubscription();
-      setSubscription(sub);
-    } catch (error) {
-      console.error('Error loading subscription:', error);
-      if (error.code !== 'PGRST116') {
-        toast({
-          title: "Error",
-          description: "Failed to load subscription information",
-          variant: "destructive"
-        });
+    const sub = await subscriptionsAPI.getSubscription();
+    return sub;
+  };
+
+  const loadSubscriptionWithRetry = async (isRetry = false) => {
+    setLoading(true);
+    let lastError = null;
+    for (let attempt = 0; attempt <= (justPaid ? MAX_RETRIES : 0); attempt++) {
+      try {
+        const sub = await loadSubscription();
+        setSubscription(sub);
+        setLoading(false);
+        return;
+      } catch (error) {
+        lastError = error;
+        if (error?.code === "PGRST116") {
+          setSubscription(null);
+        }
+        if (attempt < (justPaid ? MAX_RETRIES : 0)) {
+          await new Promise((r) => setTimeout(r, RETRY_DELAY_MS));
+        }
       }
-    } finally {
-      setLoading(false);
     }
+    setLoading(false);
+    setSubscription(null);
+    if (lastError && lastError.code !== "PGRST116") {
+      toast({
+        title: "Error",
+        description: "Failed to load subscription information",
+        variant: "destructive"
+      });
+    }
+  };
+
+  const handleRetry = () => {
+    loadSubscriptionWithRetry(true);
   };
 
   const handleManageBilling = async () => {
@@ -109,10 +150,16 @@ export default function Billing() {
             <CardHeader>
               <CardTitle>No Active Subscription</CardTitle>
               <CardDescription>
-                Subscribe to start using OptiFinance
+                {justPaid
+                  ? "Your payment is being processed. If you just completed checkout, it may take a few seconds."
+                  : "Subscribe to start using OptiFinance"}
               </CardDescription>
             </CardHeader>
-            <CardContent>
+            <CardContent className="flex flex-wrap gap-3">
+              <Button onClick={handleRetry} variant="outline" disabled={loading}>
+                <RefreshCw className="w-4 h-4 mr-2" />
+                Retry
+              </Button>
               <Button onClick={() => navigate('/Pricing')} className="bg-[#1a2845] hover:bg-[#0f1829] text-white">
                 View Pricing Plans
               </Button>

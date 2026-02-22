@@ -96,18 +96,12 @@ function ProtectedRoute({ children }) {
                 setAuthenticated(!!session);
 
                 if (session) {
-                    // Check subscription status
+                    // Check subscription status (or free-access exemption)
                     try {
-                        const { data: subscription } = await supabase
-                            .from('subscriptions')
-                            .select('status')
-                            .eq('user_id', session.user.id)
-                            .single();
-
-                        const isActive = subscription?.status === 'active' || subscription?.status === 'trialing';
+                        const { subscriptionsAPI } = await import('@/api/subscriptions');
+                        const isActive = await subscriptionsAPI.hasActiveSubscription();
                         setHasSubscription(isActive);
                     } catch (error) {
-                        // No subscription found or error
                         setHasSubscription(false);
                     }
                 }

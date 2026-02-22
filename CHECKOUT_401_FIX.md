@@ -54,7 +54,42 @@ Use a normal (non-incognito) window so the session is stored.
 
 ---
 
+## 5. Workaround: deploy with `--no-verify-jwt` (gateway still returns 401)
+
+If the URL, anon key, and JWT issuer (`iss`) are all correct but you still get **401** and **no log** for `create-checkout-session`, the gateway’s JWT check may be failing (e.g. algorithm, expiry, or key quirk). You can bypass the gateway check and still enforce auth inside the function:
+
+1. From your app repo (e.g. `optifinance-app`), deploy the function with JWT verification disabled at the gateway:
+   ```bash
+   supabase functions deploy create-checkout-session --no-verify-jwt
+   ```
+2. The function **still** validates the user: it reads the `Authorization` header and calls `supabase.auth.getUser()`, so unauthenticated or invalid tokens are rejected with "User not authenticated". Only the gateway no longer does its own JWT check.
+3. Try checkout again from the live app (signed in). If the token is expired, sign out and sign in to get a fresh one.
+
+---
+
+## 6. "Not a valid url" from Stripe
+
+Stripe validates the **success_url** and **cancel_url** it receives. Those are built from the **SITE_URL** secret in your Edge Function. If SITE_URL is missing or invalid, Stripe returns an error like "not a valid url".
+
+**Fix:** set SITE_URL to your live app URL (no trailing slash), then redeploy the function so it picks up the secret:
+
+1. **Supabase Dashboard:** [Project Settings → Edge Functions → Secrets](https://supabase.com/dashboard/project/xfkitnutpzhaamuaaelp/settings/functions). Add or edit:
+   - **SITE_URL** = `https://optifinance-app.vercel.app`
+2. Or via CLI from your app folder:
+   ```bash
+   supabase secrets set SITE_URL=https://optifinance-app.vercel.app
+   ```
+3. Redeploy so the function sees the new secret:
+   ```bash
+   supabase functions deploy create-checkout-session --no-verify-jwt
+   ```
+
+Use your real Vercel URL if different (e.g. `https://your-project.vercel.app`). No trailing slash.
+
+---
+
 ## Summary
 
 - **401** = Supabase rejected the request: wrong/missing **VITE_SUPABASE_URL** or **VITE_SUPABASE_ANON_KEY** on Vercel, or not signed in / expired session.
+- If everything is correct and you still get 401 with no function log, deploy with **`--no-verify-jwt`** (see step 5); the function still enforces auth.
 - Fix: set both env vars in Vercel to the **xfkitnutpzhaamuaaelp** project, set Root Directory if needed, redeploy, then sign in and try checkout again.

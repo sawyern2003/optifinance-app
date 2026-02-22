@@ -1,11 +1,5 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-import Stripe from "https://esm.sh/stripe@14.21.0?target=deno";
-
-const stripe = new Stripe(Deno.env.get("STRIPE_SECRET_KEY") || "", {
-  apiVersion: "2023-10-16",
-  httpClient: Stripe.createFetchHttpClient(),
-});
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -13,8 +7,21 @@ const corsHeaders = {
     "authorization, x-client-info, apikey, content-type",
 };
 
+function stripeFetch(path: string, body: Record<string, string>, secret: string) {
+  const form = new URLSearchParams(body).toString();
+  // Stripe expects Basic auth: secret key as username, empty password
+  const auth = btoa(`${secret}:`);
+  return fetch(`https://api.stripe.com/v1/${path}`, {
+    method: "POST",
+    headers: {
+      "Authorization": `Basic ${auth}`,
+      "Content-Type": "application/x-www-form-urlencoded",
+    },
+    body: form,
+  });
+}
+
 serve(async (req) => {
-  // Handle CORS preflight requests
   if (req.method === "OPTIONS") {
     return new Response("ok", { headers: corsHeaders });
   }
@@ -26,7 +33,6 @@ serve(async (req) => {
       throw new Error("Price ID is required");
     }
 
-    // Get the user from the Authorization header
     const authHeader = req.headers.get("Authorization");
     if (!authHeader) {
       throw new Error("No authorization header");
@@ -50,7 +56,14 @@ serve(async (req) => {
       throw new Error("User not authenticated");
     }
 
-    // Create or get Stripe customer
+    const stripeSecret = Deno.env.get("STRIPE_SECRET_KEY");
+    if (!stripeSecret) {
+      throw new Error("STRIPE_SECRET_KEY is not set");
+    }
+
+    const siteUrl = Deno.env.get("SITE_URL") || "http://localhost:5173";
+
+    // Get or create Stripe customer
     const { data: subscription } = await supabaseClient
       .from("subscriptions")
       .select("stripe_customer_id")
@@ -60,50 +73,67 @@ serve(async (req) => {
     let customerId = subscription?.stripe_customer_id;
 
     if (!customerId) {
-      // Get user email for Stripe customer
-      const { data: profile } = await supabaseClient
-        .from("profiles")
-        .select("clinic_name")
-        .eq("id", user.id)
-        .single();
-
-      // Create Stripe customer
-      const customer = await stripe.customers.create({
-        email: user.email,
-        metadata: {
-          supabase_user_id: user.id,
+      const customerRes = await stripeFetch(
+        "customers",
+        {
+          email: user.email ?? "",
+          "metadata[supabase_user_id]": user.id,
         },
-      });
-
+        stripeSecret
+      );
+      if (!customerRes.ok) {
+        const errText = await customerRes.text();
+        let errMsg = errText;
+        try {
+          const errJson = JSON.parse(errText);
+          if (errJson?.error?.message) errMsg = errJson.error.message;
+        } catch (_) {}
+        throw new Error(`Stripe customer: ${errMsg}`);
+      }
+      const customer = await customerRes.json();
       customerId = customer.id;
 
-      // Store customer ID in database
       await supabaseClient.from("subscriptions").upsert({
         user_id: user.id,
         stripe_customer_id: customerId,
       });
     }
 
-    // Create Stripe Checkout session
-    const session = await stripe.checkout.sessions.create({
-      customer: customerId,
-      mode: "subscription",
-      payment_method_types: ["card"],
-      line_items: [
-        {
-          price: priceId,
-          quantity: 1,
-        },
-      ],
-      success_url: `${Deno.env.get("SITE_URL") || "http://localhost:5173"}/Billing?success=true`,
-      cancel_url: `${Deno.env.get("SITE_URL") || "http://localhost:5173"}/SubscriptionPricing?canceled=true`,
-      metadata: {
-        user_id: user.id,
+    // Create Checkout session via Stripe API
+    const sessionRes = await stripeFetch(
+      "checkout/sessions",
+      {
+        customer: customerId,
+        "mode": "subscription",
+        "payment_method_types[0]": "card",
+        "line_items[0][price]": priceId,
+        "line_items[0][quantity]": "1",
+        "success_url": `${siteUrl}/Billing?success=true&session_id={CHECKOUT_SESSION_ID}`,
+        "cancel_url": `${siteUrl}/SubscriptionPricing?canceled=true`,
+        "metadata[user_id]": user.id,
       },
-    });
+      stripeSecret
+    );
+
+    if (!sessionRes.ok) {
+      const errText = await sessionRes.text();
+      let errMsg = errText;
+      try {
+        const errJson = JSON.parse(errText);
+        if (errJson?.error?.message) errMsg = errJson.error.message;
+      } catch (_) {}
+      throw new Error(`Stripe checkout: ${errMsg}`);
+    }
+
+    const session = await sessionRes.json();
+    const url = session.url ?? null;
+
+    if (!url) {
+      throw new Error("No checkout URL returned from Stripe");
+    }
 
     return new Response(
-      JSON.stringify({ url: session.url }),
+      JSON.stringify({ url }),
       {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
         status: 200,
@@ -111,7 +141,7 @@ serve(async (req) => {
     );
   } catch (error) {
     return new Response(
-      JSON.stringify({ error: error.message }),
+      JSON.stringify({ error: error instanceof Error ? error.message : String(error) }),
       {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
         status: 400,
