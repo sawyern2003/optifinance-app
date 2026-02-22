@@ -1,6 +1,6 @@
 
 import React, { useState } from "react";
-import { base44 } from "@/api/base44Client";
+import { api } from "@/api/api";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -23,24 +23,24 @@ export default function Reports() {
 
   const { data: treatments } = useQuery({
     queryKey: ['treatments'],
-    queryFn: () => base44.entities.TreatmentEntry.list('-date'),
+    queryFn: () => api.entities.TreatmentEntry.list('-date'),
     initialData: [],
   });
 
   const { data: expenses } = useQuery({
     queryKey: ['expenses'],
-    queryFn: () => base44.entities.Expense.list('-date'),
+    queryFn: () => api.entities.Expense.list('-date'),
     initialData: [],
   });
 
   const { data: exportHistory, isLoading: loadingHistory } = useQuery({
     queryKey: ['exportHistory'],
-    queryFn: () => base44.entities.ExportHistory.list('-created_date'),
+    queryFn: () => api.entities.ExportHistory.list('-created_date'),
     initialData: [],
   });
 
   const deleteExportMutation = useMutation({
-    mutationFn: (id) => base44.entities.ExportHistory.delete(id),
+    mutationFn: (id) => api.entities.ExportHistory.delete(id),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['exportHistory'] });
       toast({
@@ -478,10 +478,10 @@ export default function Reports() {
       const blob = new Blob([htmlContent], { type: 'text/html' });
       const file = new File([blob], fileName, { type: 'text/html' });
       
-      const { file_url } = await base44.integrations.Core.UploadFile({ file });
+      const { file_url } = await api.integrations.Core.UploadFile({ file });
       
       // Save export to history with file URL
-      await base44.entities.ExportHistory.create({
+      await api.entities.ExportHistory.create({
         export_type: 'Financial Report (PDF)',
         date_range: start && end ? `${format(start, 'dd MMM yyyy')} - ${format(end, 'dd MMM yyyy')}` : 'All Time',
         file_name: fileName,
@@ -617,10 +617,10 @@ export default function Reports() {
     // Upload CSV file to storage
     try {
       const file = new File([blob], fileName, { type: 'text/csv' });
-      const { file_url } = await base44.integrations.Core.UploadFile({ file });
+      const { file_url } = await api.integrations.Core.UploadFile({ file });
       
       // Save export to history with file URL
-      await base44.entities.ExportHistory.create({
+      await api.entities.ExportHistory.create({
         export_type: 'Financial Report (CSV)',
         date_range: start && end ? `${format(start, 'dd MMM yyyy')} - ${format(end, 'dd MMM yyyy')}` : 'All Time',
         file_name: fileName,

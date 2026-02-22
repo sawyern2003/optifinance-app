@@ -1,6 +1,6 @@
 
 import React, { useState } from "react";
-import { base44 } from "@/api/base44Client";
+import { api } from "@/api/api";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -28,25 +28,25 @@ export default function Catalog() {
 
   const { data: treatments, isLoading: loadingTreatments } = useQuery({
     queryKey: ['treatmentCatalog'],
-    queryFn: () => base44.entities.TreatmentCatalog.list('treatment_name'),
+    queryFn: () => api.entities.TreatmentCatalog.list('treatment_name'),
     initialData: [],
   });
 
   const { data: practitioners, isLoading: loadingPractitioners } = useQuery({
     queryKey: ['practitioners'],
-    queryFn: () => base44.entities.Practitioner.list('name'),
+    queryFn: () => api.entities.Practitioner.list('name'),
     initialData: [],
   });
 
   const { data: patients, isLoading: loadingPatients } = useQuery({
     queryKey: ['patients'],
-    queryFn: () => base44.entities.Patient.list('name'),
+    queryFn: () => api.entities.Patient.list('name'),
     initialData: [],
   });
 
   // Treatment Mutations
   const createTreatmentMutation = useMutation({
-    mutationFn: (data) => base44.entities.TreatmentCatalog.create(data),
+    mutationFn: (data) => api.entities.TreatmentCatalog.create(data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['treatmentCatalog'] });
       toast({
@@ -59,7 +59,7 @@ export default function Catalog() {
   });
 
   const updateTreatmentMutation = useMutation({
-    mutationFn: ({ id, data }) => base44.entities.TreatmentCatalog.update(id, data),
+    mutationFn: ({ id, data }) => api.entities.TreatmentCatalog.update(id, data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['treatmentCatalog'] });
       toast({
@@ -71,7 +71,7 @@ export default function Catalog() {
   });
 
   const deleteTreatmentMutation = useMutation({
-    mutationFn: (id) => base44.entities.TreatmentCatalog.delete(id),
+    mutationFn: (id) => api.entities.TreatmentCatalog.delete(id),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['treatmentCatalog'] });
       toast({
@@ -83,7 +83,7 @@ export default function Catalog() {
 
   // Practitioner Mutations
   const createPractitionerMutation = useMutation({
-    mutationFn: (data) => base44.entities.Practitioner.create(data),
+    mutationFn: (data) => api.entities.Practitioner.create(data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['practitioners'] });
       toast({
@@ -95,7 +95,7 @@ export default function Catalog() {
   });
 
   const updatePractitionerMutation = useMutation({
-    mutationFn: ({ id, data }) => base44.entities.Practitioner.update(id, data),
+    mutationFn: ({ id, data }) => api.entities.Practitioner.update(id, data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['practitioners'] });
       toast({
@@ -107,7 +107,7 @@ export default function Catalog() {
   });
 
   const deletePractitionerMutation = useMutation({
-    mutationFn: (id) => base44.entities.Practitioner.delete(id),
+    mutationFn: (id) => api.entities.Practitioner.delete(id),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['practitioners'] });
       toast({
@@ -119,7 +119,7 @@ export default function Catalog() {
 
   // Patient Mutations
   const createPatientMutation = useMutation({
-    mutationFn: (data) => base44.entities.Patient.create(data),
+    mutationFn: (data) => api.entities.Patient.create(data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['patients'] });
       toast({
@@ -131,7 +131,7 @@ export default function Catalog() {
   });
 
   const updatePatientMutation = useMutation({
-    mutationFn: ({ id, data }) => base44.entities.Patient.update(id, data),
+    mutationFn: ({ id, data }) => api.entities.Patient.update(id, data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['patients'] });
       toast({
@@ -143,7 +143,7 @@ export default function Catalog() {
   });
 
   const deletePatientMutation = useMutation({
-    mutationFn: (id) => base44.entities.Patient.delete(id),
+    mutationFn: (id) => api.entities.Patient.delete(id),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['patients'] });
       toast({

@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from "react";
-import { base44 } from "@/api/base44Client";
+import { api } from "@/api/api";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
@@ -24,31 +24,31 @@ export default function VoiceDiary() {
 
   const { data: treatmentCatalog } = useQuery({
     queryKey: ['treatmentCatalog'],
-    queryFn: () => base44.entities.TreatmentCatalog.list('treatment_name'),
+    queryFn: () => api.entities.TreatmentCatalog.list('treatment_name'),
     initialData: [],
   });
 
   const { data: practitioners } = useQuery({
     queryKey: ['practitioners'],
-    queryFn: () => base44.entities.Practitioner.list('name'),
+    queryFn: () => api.entities.Practitioner.list('name'),
     initialData: [],
   });
 
   const { data: patients } = useQuery({
     queryKey: ['patients'],
-    queryFn: () => base44.entities.Patient.list('name'),
+    queryFn: () => api.entities.Patient.list('name'),
     initialData: [],
   });
 
   const { data: treatments } = useQuery({
     queryKey: ['treatments'],
-    queryFn: () => base44.entities.TreatmentEntry.list('-date'),
+    queryFn: () => api.entities.TreatmentEntry.list('-date'),
     initialData: [],
   });
 
   const { data: user } = useQuery({
     queryKey: ['currentUser'],
-    queryFn: () => base44.auth.me(),
+    queryFn: () => api.auth.me(),
     initialData: null,
   });
 
@@ -285,7 +285,7 @@ Return in this JSON format:
   ]
 }`;
 
-      const response = await base44.integrations.Core.InvokeLLM({
+      const response = await api.integrations.Core.InvokeLLM({
         prompt: prompt,
         add_context_from_internet: false,
         response_json_schema: {
@@ -405,7 +405,7 @@ Return in this JSON format:
       const patientMap = new Map();
       for (const patientData of confirmedData.patients.filter(p => p.include)) {
         try {
-          const newPatient = await base44.entities.Patient.create({
+          const newPatient = await api.entities.Patient.create({
             name: patientData.name,
             contact: patientData.contact || null,
             phone: patientData.phone || null
@@ -455,7 +455,7 @@ Return in this JSON format:
             : (treatmentData.payment_status === 'paid' ? pricePaid : 0);
           const profit = amountPaid - productCost;
 
-          const createdTreatment = await base44.entities.TreatmentEntry.create({
+          const createdTreatment = await api.entities.TreatmentEntry.create({
             date: treatmentData.date,
             patient_id: patientId,
             patient_name: patientName,
@@ -485,7 +485,7 @@ Return in this JSON format:
           const updatedAmountPaid = treatment.amount_paid + update.amount_paid;
           const isFullyPaid = updatedAmountPaid >= treatment.price_paid;
 
-          await base44.entities.TreatmentEntry.update(treatment.id, {
+          await api.entities.TreatmentEntry.update(treatment.id, {
             payment_status: isFullyPaid ? 'paid' : 'partially_paid',
             amount_paid: Math.min(updatedAmountPaid, treatment.price_paid),
             profit: Math.min(updatedAmountPaid, treatment.price_paid) - (treatment.product_cost || 0)
@@ -515,7 +515,7 @@ Return in this JSON format:
           if (!treatment) continue;
 
           const invoiceNumber = generateInvoiceNumber();
-          await base44.entities.Invoice.create({
+          await api.entities.Invoice.create({
             invoice_number: invoiceNumber,
             treatment_entry_id: treatment.id,
             patient_name: invoiceData.patient_name,

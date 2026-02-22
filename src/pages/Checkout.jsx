@@ -13,31 +13,64 @@ function CheckoutForm({ priceId, planName, planPrice }) {
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
-    // Automatically redirect to Stripe Checkout
     const createCheckout = async () => {
       setLoading(true);
-      try {
-        // Create checkout session via Supabase Edge Function
-        const { data, error } = await supabase.functions.invoke('create-checkout-session', {
-          body: { priceId }
-        });
 
-        if (error) throw error;
-
-        // Redirect to Stripe Checkout
-        if (data.url) {
-          window.location.href = data.url;
-        } else {
-          throw new Error('No checkout URL returned');
-        }
-      } catch (error) {
-        console.error('Checkout error:', error);
+      // 401 usually means not logged in or session expired – check first
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) {
         toast({
           title: "Checkout failed",
-          description: error.message || "Failed to start checkout process",
+          description: "Please sign in first, then try checkout again.",
           variant: "destructive"
         });
         setLoading(false);
+        return;
+      }
+
+      const maxRetries = 2;
+      for (let attempt = 1; attempt <= maxRetries; attempt++) {
+        try {
+          const { data, error } = await supabase.functions.invoke('create-checkout-session', {
+            body: { priceId }
+          });
+
+          if (error) {
+            // Prefer error message from Edge Function response body
+            const message = (data && typeof data.error === 'string') ? data.error : error.message;
+            if (message && message.includes('Failed to send a request to the Edge Function') && attempt < maxRetries) {
+              await new Promise((r) => setTimeout(r, 800));
+              continue;
+            }
+            throw new Error(message || 'Checkout request failed');
+          }
+
+          if (data && data.url) {
+            window.location.href = data.url;
+            return;
+          }
+          throw new Error('No checkout URL returned');
+        } catch (err) {
+          const isEdgeUnreachable = err.message && err.message.includes('Failed to send a request to the Edge Function');
+          if (isEdgeUnreachable && attempt < maxRetries) {
+            await new Promise((r) => setTimeout(r, 800));
+            continue;
+          }
+          console.error('Checkout error:', err);
+          const is401 = err.message?.includes('401') || String(err.message).toLowerCase().includes('unauthorized');
+          const description = is401
+            ? "Session expired or not signed in. Please sign in again and try checkout."
+            : isEdgeUnreachable
+              ? "Cannot reach the checkout service. Ensure the Supabase Edge Function 'create-checkout-session' is deployed and that STRIPE_SECRET_KEY and SITE_URL are set in Supabase (see DEPLOYMENT.md)."
+              : (err.message || "Failed to start checkout process");
+          toast({
+            title: "Checkout failed",
+            description,
+            variant: "destructive"
+          });
+          setLoading(false);
+          return;
+        }
       }
     };
 

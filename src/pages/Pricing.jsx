@@ -1,6 +1,6 @@
 
 import React, { useState } from "react";
-import { base44 } from "@/api/base44Client";
+import { api } from "@/api/api";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -32,30 +32,30 @@ export default function Pricing() {
 
   const { data: treatmentCatalog } = useQuery({
     queryKey: ['treatmentCatalog'],
-    queryFn: () => base44.entities.TreatmentCatalog.list('treatment_name'),
+    queryFn: () => api.entities.TreatmentCatalog.list('treatment_name'),
     initialData: [],
   });
 
   const { data: treatments } = useQuery({
     queryKey: ['treatments'],
-    queryFn: () => base44.entities.TreatmentEntry.list('-date'),
+    queryFn: () => api.entities.TreatmentEntry.list('-date'),
     initialData: [],
   });
 
   const { data: competitorPricing } = useQuery({
     queryKey: ['competitorPricing'],
-    queryFn: () => base44.entities.CompetitorPricing.list('-created_date'),
+    queryFn: () => api.entities.CompetitorPricing.list('-created_date'),
     initialData: [],
   });
 
   const { data: user } = useQuery({
     queryKey: ['currentUser'],
-    queryFn: () => base44.auth.me(),
+    queryFn: () => api.auth.me(),
     initialData: null,
   });
 
   const createCompetitorMutation = useMutation({
-    mutationFn: (data) => base44.entities.CompetitorPricing.create(data),
+    mutationFn: (data) => api.entities.CompetitorPricing.create(data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['competitorPricing'] });
       toast({
@@ -75,7 +75,7 @@ export default function Pricing() {
   });
 
   const deleteCompetitorMutation = useMutation({
-    mutationFn: (id) => base44.entities.CompetitorPricing.delete(id),
+    mutationFn: (id) => api.entities.CompetitorPricing.delete(id),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['competitorPricing'] });
       toast({
@@ -356,7 +356,7 @@ Please provide:
 Be specific, actionable, and focus on maximizing revenue while staying competitive.`;
 
     try {
-      const response = await base44.integrations.Core.InvokeLLM({
+      const response = await api.integrations.Core.InvokeLLM({
         prompt: prompt,
         add_context_from_internet: false
       });

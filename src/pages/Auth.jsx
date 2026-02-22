@@ -96,7 +96,7 @@ export default function Auth() {
         <div className="text-center mb-8">
           <div className="inline-flex items-center justify-center mb-4">
             <img
-              src="https://qtrypzzcjebvfcihiynt.supabase.co/storage/v1/object/public/base44-prod/public/690c8679071d7faff17b5647/380fb76f3_LogoMakr-9V1my7-300dpi1.png"
+              src="/logo.png"
               alt="OptiFinance Logo"
               className="w-20 h-20 object-contain"
               onError={(e) => {

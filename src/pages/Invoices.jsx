@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { base44 } from "@/api/base44Client";
+import { api } from "@/api/api";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -7,9 +7,10 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { FileText, Download, Trash2, Search, Mail, Loader2, Pencil } from "lucide-react";
+import { FileText, Download, Trash2, Search, Mail, Loader2, Pencil, MessageSquare, Send } from "lucide-react";
 import { format } from "date-fns";
 import { useToast } from "@/components/ui/use-toast";
+import { invoicesAPI } from "@/api/invoices";
 
 export default function Invoices() {
   const { toast } = useToast();
@@ -17,6 +18,8 @@ export default function Invoices() {
   const [searchTerm, setSearchTerm] = useState('');
   const [filterStatus, setFilterStatus] = useState('all');
   const [sendingEmail, setSendingEmail] = useState(null);
+  const [sendingReminder, setSendingReminder] = useState(null);
+  const [sendingInvoice, setSendingInvoice] = useState(null);
   const [editDialogOpen, setEditDialogOpen] = useState(false);
   const [editingInvoice, setEditingInvoice] = useState(null);
   const [editForm, setEditForm] = useState({});
@@ -25,18 +28,18 @@ export default function Invoices() {
 
   const { data: invoices, isLoading: loadingInvoices } = useQuery({
     queryKey: ['invoices'],
-    queryFn: () => base44.entities.Invoice.list('-created_date'),
+    queryFn: () => api.entities.Invoice.list('-created_date'),
     initialData: [],
   });
 
   const { data: user } = useQuery({
     queryKey: ['currentUser'],
-    queryFn: () => base44.auth.me(),
+    queryFn: () => api.auth.me(),
     initialData: null,
   });
 
   const updateInvoiceMutation = useMutation({
-    mutationFn: ({ id, data }) => base44.entities.Invoice.update(id, data),
+    mutationFn: ({ id, data }) => api.entities.Invoice.update(id, data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['invoices'] });
       toast({
@@ -49,7 +52,7 @@ export default function Invoices() {
   });
 
   const deleteInvoiceMutation = useMutation({
-    mutationFn: (id) => base44.entities.Invoice.delete(id),
+    mutationFn: (id) => api.entities.Invoice.delete(id),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['invoices'] });
       toast({
@@ -106,6 +109,73 @@ export default function Invoices() {
     });
   };
 
+  const sendPaymentReminder = async (invoice) => {
+    if (!invoice.patient_contact) {
+      toast({
+        title: "Cannot send reminder",
+        description: "Patient contact information not found",
+        className: "bg-red-50 border-red-200"
+      });
+      return;
+    }
+
+    setSendingReminder(invoice.id);
+    
+    try {
+      await invoicesAPI.sendPaymentReminder(invoice.id, false);
+      
+      toast({
+        title: "Reminder sent",
+        description: `Payment reminder sent to ${invoice.patient_name}`,
+        className: "bg-green-50 border-green-200"
+      });
+
+      queryClient.invalidateQueries({ queryKey: ['invoices'] });
+    } catch (error) {
+      console.error('Failed to send reminder:', error);
+      toast({
+        title: "Failed to send",
+        description: error.message || "Could not send payment reminder",
+        className: "bg-red-50 border-red-200"
+      });
+    }
+    
+    setSendingReminder(null);
+  };
+
+  const sendInvoice = async (invoice, sendVia = 'both') => {
+    setSendingInvoice(invoice.id);
+    
+    try {
+      // First generate PDF if not exists
+      if (!invoice.invoice_pdf_url) {
+        await invoicesAPI.generateInvoicePDF(invoice.id);
+        // Refresh invoice data
+        await queryClient.invalidateQueries({ queryKey: ['invoices'] });
+      }
+
+      // Then send invoice
+      await invoicesAPI.sendInvoice(invoice.id, sendVia);
+      
+      toast({
+        title: "Invoice sent",
+        description: `Invoice sent via ${sendVia === 'both' ? 'SMS and email' : sendVia}`,
+        className: "bg-green-50 border-green-200"
+      });
+
+      queryClient.invalidateQueries({ queryKey: ['invoices'] });
+    } catch (error) {
+      console.error('Failed to send invoice:', error);
+      toast({
+        title: "Failed to send",
+        description: error.message || "Could not send invoice",
+        className: "bg-red-50 border-red-200"
+      });
+    }
+    
+    setSendingInvoice(null);
+  };
+
   const sendInvoiceEmail = async (invoice) => {
     if (!invoice.patient_contact || !invoice.patient_contact.includes('@')) {
       toast({
@@ -121,7 +191,7 @@ export default function Invoices() {
     try {
       const clinicName = user?.clinic_name || 'OptiFinance Clinic';
       
-      await base44.integrations.Core.SendEmail({
+      await api.integrations.Core.SendEmail({
         from_name: clinicName,
         to: invoice.patient_contact,
         subject: `Invoice ${invoice.invoice_number} from ${clinicName}`,
@@ -297,15 +367,27 @@ ${clinicName}
                             </button>
                           )}
                           <button
-                            onClick={() => sendInvoiceEmail(invoice)}
-                            disabled={sendingEmail === invoice.id || !invoice.patient_contact?.includes('@')}
-                            className="p-2 hover:bg-[#fef9f0] rounded-lg text-gray-400 hover:text-[#1a2845] transition-colors disabled:opacity-50"
-                            title="Send via Email"
+                            onClick={() => sendPaymentReminder(invoice)}
+                            disabled={sendingReminder === invoice.id || !invoice.patient_contact}
+                            className="p-2 hover:bg-purple-50 rounded-lg text-gray-400 hover:text-purple-600 transition-colors disabled:opacity-50"
+                            title="Send Payment Reminder (SMS)"
                           >
-                            {sendingEmail === invoice.id ? (
+                            {sendingReminder === invoice.id ? (
                               <Loader2 className="w-4 h-4 animate-spin" />
                             ) : (
-                              <Mail className="w-4 h-4" />
+                              <MessageSquare className="w-4 h-4" />
+                            )}
+                          </button>
+                          <button
+                            onClick={() => sendInvoice(invoice, 'both')}
+                            disabled={sendingInvoice === invoice.id || !invoice.patient_contact}
+                            className="p-2 hover:bg-orange-50 rounded-lg text-gray-400 hover:text-orange-600 transition-colors disabled:opacity-50"
+                            title="Send Invoice (SMS & Email)"
+                          >
+                            {sendingInvoice === invoice.id ? (
+                              <Loader2 className="w-4 h-4 animate-spin" />
+                            ) : (
+                              <Send className="w-4 h-4" />
                             )}
                           </button>
                           <button

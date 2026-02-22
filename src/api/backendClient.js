@@ -7,8 +7,7 @@ function parseOrderBy(orderBy) {
   const isDescending = orderBy.startsWith('-');
   const column = isDescending ? orderBy.slice(1) : orderBy;
   
-  // Map Base44 field names to database column names if needed
-  // Base44 uses snake_case which matches our database schema
+  // Map API field names to database column names
   const columnMap = {
     'date': 'date',
     'created_date': 'created_at',
@@ -23,7 +22,7 @@ function parseOrderBy(orderBy) {
   };
 }
 
-// Entity class that mimics Base44 entity interface
+// Entity class for Supabase table access
 class Entity {
   constructor(tableName) {
     this.tableName = tableName;
@@ -116,7 +115,7 @@ class Entity {
   }
 }
 
-// Auth class that mimics Base44 auth interface
+// Auth helpers (Supabase Auth + profiles)
 class Auth {
   async me() {
     try {
@@ -198,7 +197,7 @@ class Auth {
   }
 }
 
-// Integrations class for Base44-like integrations
+// Integrations (file upload, email, LLM placeholders)
 class Integrations {
   constructor() {
     this.Core = {
@@ -213,12 +212,9 @@ class Integrations {
   }
 
   async InvokeLLM({ prompt, add_context_from_internet = false }) {
-    // For now, return a placeholder response
-    // You can integrate with OpenAI, Anthropic, or other LLM providers
-    console.warn('InvokeLLM called but not implemented. Please configure an LLM service.');
-    
-    // Placeholder response
-    return `AI Response: This is a placeholder. To enable AI features, please configure an LLM integration (OpenAI, Anthropic, etc.) in the backend. Original prompt: ${prompt.substring(0, 100)}...`;
+    // Optional: call openai-consultant Edge Function for one-off prompts
+    console.warn('InvokeLLM called; consider using the Consultant chat or wiring to openai-consultant.');
+    return `AI features for this action are not yet wired. Use the AI Consultant chat for advice. Original prompt: ${prompt.substring(0, 80)}...`;
   }
 
   async SendEmail({ from_name, to, subject, body }) {
@@ -310,24 +306,27 @@ class Integrations {
 // Functions class for custom functions
 class Functions {
   async invoke(functionName, payload) {
-    // Placeholder for custom functions
-    // You can implement these as Supabase Edge Functions or API routes
-    console.warn(`Function ${functionName} called but not implemented.`, payload);
-    
-    if (functionName === 'sendInvoiceSMS') {
-      // Placeholder for SMS sending
-      console.log('Would send SMS:', payload);
-      return { success: true, message: 'SMS sent (placeholder)' };
-    }
-    
     if (functionName === 'consultantChat') {
-      // Placeholder for consultant chat
-      // Expected format: { data: { message: string } }
-      return { 
-        data: { 
-          message: 'Consultant response (placeholder). To enable AI consultant features, please configure an LLM integration.' 
-        } 
-      };
+      const { data, error } = await supabase.functions.invoke('openai-consultant', {
+        body: payload,
+      });
+      if (error) throw error;
+      if (data?.error) throw new Error(data.error);
+      return { data: { message: data?.message ?? 'No response.' } };
+    }
+
+    if (functionName === 'sendInvoiceSMS') {
+      const invoiceId = payload?.invoiceId;
+      if (!invoiceId) {
+        console.warn('sendInvoiceSMS: invoiceId required for Twilio. Payload:', payload);
+        return { success: false, message: 'invoiceId required' };
+      }
+      const { data, error } = await supabase.functions.invoke('send-invoice', {
+        body: { invoiceId, sendVia: 'sms' },
+      });
+      if (error) throw error;
+      if (data?.error) throw new Error(data.error);
+      return { success: true, ...data };
     }
     
     if (functionName === 'verifySubscription') {
@@ -346,7 +345,7 @@ class Functions {
   }
 }
 
-// Main backend client that mimics Base44 SDK interface
+// App API client (Supabase-backed entities, auth, and functions)
 export const backend = {
   entities: {
     Patient: new Entity('patients'),

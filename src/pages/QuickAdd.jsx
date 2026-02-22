@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from "react";
-import { base44 } from "@/api/base44Client";
+import { api } from "@/api/api";
+import { invoicesAPI } from "@/api/invoices";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -36,7 +37,7 @@ export default function QuickAdd() {
 
   const { data: treatmentCatalog } = useQuery({
     queryKey: ['treatmentCatalog'],
-    queryFn: () => base44.entities.TreatmentCatalog.list('treatment_name'),
+    queryFn: () => api.entities.TreatmentCatalog.list('treatment_name'),
     initialData: [],
   });
 
@@ -82,19 +83,19 @@ export default function QuickAdd() {
 
   const { data: practitioners } = useQuery({
     queryKey: ['practitioners'],
-    queryFn: () => base44.entities.Practitioner.list('name'),
+    queryFn: () => api.entities.Practitioner.list('name'),
     initialData: [],
   });
 
   const { data: patients } = useQuery({
     queryKey: ['patients'],
-    queryFn: () => base44.entities.Patient.list('name'),
+    queryFn: () => api.entities.Patient.list('name'),
     initialData: [],
   });
 
   const { data: user } = useQuery({
     queryKey: ['currentUser'],
-    queryFn: () => base44.auth.me(),
+    queryFn: () => api.auth.me(),
     initialData: null,
   });
 
@@ -196,7 +197,7 @@ export default function QuickAdd() {
       let paymentResponse;
       try {
         console.log('🔄 Step 4.2: Calling createGoCardlessPayment...');
-        paymentResponse = await base44.functions.invoke('createGoCardlessPayment', gcPayload);
+        paymentResponse = await api.functions.invoke('createGoCardlessPayment', gcPayload);
         console.log('✅ Step 5: Got response:', paymentResponse);
         console.log('✅ Step 5.1: Response status:', paymentResponse?.status);
         console.log('✅ Step 5.2: Response data:', paymentResponse?.data);
@@ -219,8 +220,9 @@ export default function QuickAdd() {
 
       // Create invoice record with payment link
       console.log('📄 Step 9: Creating invoice record...');
+      let createdInvoice;
       try {
-        await base44.entities.Invoice.create({
+        createdInvoice = await api.entities.Invoice.create({
           invoice_number: invoiceNumber,
           treatment_entry_id: treatment.id,
           patient_name: treatment.patient_name || 'Patient',
@@ -240,19 +242,11 @@ export default function QuickAdd() {
         throw new Error(`Failed to create invoice: ${invoiceError.message}`);
       }
 
-      // Send SMS
-      console.log('📲 Step 9: Sending SMS to', patient.phone);
-      const smsPayload = {
-        patient_name: treatment.patient_name || 'Patient',
-        patient_phone: patient.phone,
-        treatment_name: treatment.treatment_name,
-        amount: treatment.price_paid,
-        payment_link: paymentLink,
-        payment_method: 'gocardless'
-      };
-      console.log('📲 Step 9.1: SMS payload:', JSON.stringify(smsPayload, null, 2));
-      
-      const smsResponse = await base44.functions.invoke('sendInvoiceSMS', smsPayload);
+      // Generate PDF then send SMS so the link is in the message
+      console.log('📄 Generating PDF...');
+      await invoicesAPI.generateInvoicePDF(createdInvoice.id);
+      console.log('📲 Sending SMS to', patient.phone);
+      await api.functions.invoke('sendInvoiceSMS', { invoiceId: createdInvoice.id });
       console.log('✅ Step 10: SMS sent! Response:', JSON.stringify(smsResponse?.data, null, 2));
 
       toast({
@@ -279,7 +273,7 @@ export default function QuickAdd() {
       let patientName = data.patient_name;
 
       if (newPatientName !== null && newPatientName !== '') {
-        const newPatient = await base44.entities.Patient.create({ name: newPatientName });
+        const newPatient = await api.entities.Patient.create({ name: newPatientName });
         patientId = newPatient.id;
         patientName = newPatient.name;
       }
@@ -288,7 +282,7 @@ export default function QuickAdd() {
       let practitionerName = data.practitioner_name;
 
       if (newPractitionerName !== null && newPractitionerName !== '') {
-        const newPractitioner = await base44.entities.Practitioner.create({ name: newPractitionerName });
+        const newPractitioner = await api.entities.Practitioner.create({ name: newPractitionerName });
         practitionerId = newPractitioner.id;
         practitionerName = newPractitioner.name;
       } else if (data.practitioner_id) {
@@ -305,7 +299,7 @@ export default function QuickAdd() {
         : (data.payment_status === 'paid' ? pricePaid : 0);
       const profit = amountPaid - productCost;
 
-      const createdTreatment = await base44.entities.TreatmentEntry.create({
+      const createdTreatment = await api.entities.TreatmentEntry.create({
         date: data.date,
         patient_id: patientId,
         patient_name: patientName,
@@ -357,7 +351,7 @@ export default function QuickAdd() {
   });
 
   const createExpenseMutation = useMutation({
-    mutationFn: (data) => base44.entities.Expense.create({
+    mutationFn: (data) => api.entities.Expense.create({
       date: data.date,
       category: data.category,
       amount: parseFloat(data.amount),
@@ -388,7 +382,7 @@ export default function QuickAdd() {
     setUploadingStatement(true);
 
     try {
-      const { file_url } = await base44.integrations.Core.UploadFile({ file });
+      const { file_url } = await api.integrations.Core.UploadFile({ file });
 
       const currentDate = format(new Date(), 'yyyy-MM-dd');
       const currentYear = format(new Date(), 'yyyy');
@@ -425,7 +419,7 @@ export default function QuickAdd() {
     ]
     }`;
 
-      const extractionResult = await base44.integrations.Core.InvokeLLM({
+      const extractionResult = await api.integrations.Core.InvokeLLM({
         prompt: prompt,
         file_urls: [file_url],
         response_json_schema: {
@@ -606,7 +600,7 @@ Be smart about matching treatment names to the available list even if wording is
 Return an array of treatment objects, even if there's only one treatment.`;
 
     try {
-      const response = await base44.integrations.Core.InvokeLLM({
+      const response = await api.integrations.Core.InvokeLLM({
         prompt: prompt,
         add_context_from_internet: false,
         response_json_schema: {

@@ -174,6 +174,18 @@ CREATE TABLE IF NOT EXISTS subscriptions (
   updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 
+-- Payment Reminders table
+CREATE TABLE IF NOT EXISTS payment_reminders (
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  user_id UUID REFERENCES auth.users(id) ON DELETE CASCADE,
+  invoice_id UUID REFERENCES invoices(id) ON DELETE CASCADE,
+  patient_phone TEXT NOT NULL,
+  reminder_type TEXT NOT NULL, -- 'initial', 'followup'
+  message_sent TEXT,
+  sent_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
 -- Row Level Security (RLS) Policies
 ALTER TABLE profiles ENABLE ROW LEVEL SECURITY;
 ALTER TABLE patients ENABLE ROW LEVEL SECURITY;
@@ -187,6 +199,7 @@ ALTER TABLE competitor_pricing ENABLE ROW LEVEL SECURITY;
 ALTER TABLE tax_settings ENABLE ROW LEVEL SECURITY;
 ALTER TABLE chat_history ENABLE ROW LEVEL SECURITY;
 ALTER TABLE subscriptions ENABLE ROW LEVEL SECURITY;
+ALTER TABLE payment_reminders ENABLE ROW LEVEL SECURITY;
 
 -- RLS Policies: Users can only access their own data
 CREATE POLICY "Users can view own profile" ON profiles FOR SELECT USING (auth.uid() = id);
@@ -204,6 +217,7 @@ CREATE POLICY "Users can manage own competitor_pricing" ON competitor_pricing FO
 CREATE POLICY "Users can manage own tax_settings" ON tax_settings FOR ALL USING (auth.uid() = user_id);
 CREATE POLICY "Users can manage own chat_history" ON chat_history FOR ALL USING (auth.uid() = user_id);
 CREATE POLICY "Users can manage own subscriptions" ON subscriptions FOR ALL USING (auth.uid() = user_id);
+CREATE POLICY "Users can manage own payment_reminders" ON payment_reminders FOR ALL USING (auth.uid() = user_id);
 
 -- Functions to automatically set user_id
 CREATE OR REPLACE FUNCTION set_user_id()
@@ -226,6 +240,7 @@ CREATE TRIGGER set_competitor_pricing_user_id BEFORE INSERT ON competitor_pricin
 CREATE TRIGGER set_tax_settings_user_id BEFORE INSERT ON tax_settings FOR EACH ROW EXECUTE FUNCTION set_user_id();
 CREATE TRIGGER set_chat_history_user_id BEFORE INSERT ON chat_history FOR EACH ROW EXECUTE FUNCTION set_user_id();
 CREATE TRIGGER set_subscriptions_user_id BEFORE INSERT ON subscriptions FOR EACH ROW EXECUTE FUNCTION set_user_id();
+CREATE TRIGGER set_payment_reminders_user_id BEFORE INSERT ON payment_reminders FOR EACH ROW EXECUTE FUNCTION set_user_id();
 
 -- Function to update updated_at timestamp
 CREATE OR REPLACE FUNCTION update_updated_at_column()

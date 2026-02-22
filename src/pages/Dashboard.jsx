@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from "react";
-import { base44 } from "@/api/base44Client";
+import { api } from "@/api/api";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -27,7 +27,7 @@ export default function Dashboard() {
   useEffect(() => {
     const fetchUser = async () => {
       try {
-        const user = await base44.auth.me();
+        const user = await api.auth.me();
         if (user?.clinic_name) {
           setClinicName(user.clinic_name);
         }
@@ -40,25 +40,25 @@ export default function Dashboard() {
 
   const { data: treatments, isLoading: loadingTreatments } = useQuery({
     queryKey: ['treatments'],
-    queryFn: () => base44.entities.TreatmentEntry.list('-date'),
+    queryFn: () => api.entities.TreatmentEntry.list('-date'),
     initialData: [],
   });
 
   const { data: expenses, isLoading: loadingExpenses } = useQuery({
     queryKey: ['expenses'],
-    queryFn: () => base44.entities.Expense.list('-date'),
+    queryFn: () => api.entities.Expense.list('-date'),
     initialData: [],
   });
 
   const { data: recurringExpenses } = useQuery({
     queryKey: ['recurringExpenses'],
-    queryFn: () => base44.entities.Expense.filter({ is_recurring: true, is_active: true }, '-created_date'),
+    queryFn: () => api.entities.Expense.filter({ is_recurring: true, is_active: true }, '-created_date'),
     initialData: [],
   });
 
   const { data: treatmentCatalog } = useQuery({
     queryKey: ['treatmentCatalog'],
-    queryFn: () => base44.entities.TreatmentCatalog.list(),
+    queryFn: () => api.entities.TreatmentCatalog.list(),
     initialData: [],
   });
 
@@ -93,7 +93,7 @@ export default function Dashboard() {
           }
           
           if (shouldGenerate) {
-            await base44.entities.Expense.create({
+            await api.entities.Expense.create({
               date: newDate,
               category: recurring.category,
               amount: recurring.amount,
@@ -102,7 +102,7 @@ export default function Dashboard() {
               is_auto_generated: true
             });
             
-            await base44.entities.Expense.update(recurring.id, {
+            await api.entities.Expense.update(recurring.id, {
               ...recurring,
               last_generated_date: newDate
             });

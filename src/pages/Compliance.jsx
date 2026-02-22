@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { base44 } from "@/api/base44Client";
+import { api } from "@/api/api";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -29,20 +29,20 @@ export default function Compliance() {
 
   const { data: treatments } = useQuery({
     queryKey: ['treatments'],
-    queryFn: () => base44.entities.TreatmentEntry.list('-date'),
+    queryFn: () => api.entities.TreatmentEntry.list('-date'),
     initialData: [],
   });
 
   const { data: expenses } = useQuery({
     queryKey: ['expenses'],
-    queryFn: () => base44.entities.Expense.list('-date'),
+    queryFn: () => api.entities.Expense.list('-date'),
     initialData: [],
   });
 
   const { data: taxSettings } = useQuery({
     queryKey: ['taxSettings'],
     queryFn: async () => {
-      const settings = await base44.entities.TaxSettings.list();
+      const settings = await api.entities.TaxSettings.list();
       return settings[0] || null;
     },
     initialData: null,
@@ -50,12 +50,12 @@ export default function Compliance() {
 
   const { data: user } = useQuery({
     queryKey: ['currentUser'],
-    queryFn: () => base44.auth.me(),
+    queryFn: () => api.auth.me(),
     initialData: null,
   });
 
   const createTaxSettingsMutation = useMutation({
-    mutationFn: (data) => base44.entities.TaxSettings.create(data),
+    mutationFn: (data) => api.entities.TaxSettings.create(data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['taxSettings'] });
       toast({
@@ -67,7 +67,7 @@ export default function Compliance() {
   });
 
   const updateTaxSettingsMutation = useMutation({
-    mutationFn: ({ id, data }) => base44.entities.TaxSettings.update(id, data),
+    mutationFn: ({ id, data }) => api.entities.TaxSettings.update(id, data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['taxSettings'] });
       toast({

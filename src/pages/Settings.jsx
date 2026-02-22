@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from "react";
-import { base44 } from "@/api/base44Client";
+import { api } from "@/api/api";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -19,7 +19,7 @@ export default function Settings() {
   useEffect(() => {
     const fetchUser = async () => {
       setIsLoading(true);
-      const userData = await base44.auth.me();
+      const userData = await api.auth.me();
       setUser(userData);
       setClinicName(userData.clinic_name || "OptiFinance");
       setBankName(userData.bank_name || "");
@@ -34,7 +34,7 @@ export default function Settings() {
     e.preventDefault();
     setIsSaving(true);
     
-    await base44.auth.updateMe({ 
+    await api.auth.updateMe({ 
       clinic_name: clinicName,
       bank_name: bankName,
       account_number: accountNumber,

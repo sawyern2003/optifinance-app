@@ -1,0 +1,199 @@
+import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { PDFDocument, StandardFonts } from "https://esm.sh/pdf-lib@1.17.1";
+
+const corsHeaders = {
+  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Headers":
+    "authorization, x-client-info, apikey, content-type",
+};
+
+function drawText(
+  page: { drawText: (text: string, opts: { x: number; y: number; font: any; size: number }) => void },
+  text: string,
+  x: number,
+  y: number,
+  font: any,
+  size: number
+) {
+  page.drawText(text, { x, y, font, size });
+}
+
+serve(async (req) => {
+  if (req.method === "OPTIONS") {
+    return new Response("ok", { headers: corsHeaders });
+  }
+
+  try {
+    const { invoiceId } = await req.json();
+
+    if (!invoiceId) {
+      throw new Error("Invoice ID is required");
+    }
+
+    const authHeader = req.headers.get("Authorization");
+    if (!authHeader) {
+      throw new Error("No authorization header");
+    }
+
+    const supabaseClient = createClient(
+      Deno.env.get("SUPABASE_URL") ?? "",
+      Deno.env.get("SUPABASE_ANON_KEY") ?? "",
+      {
+        global: {
+          headers: { Authorization: authHeader },
+        },
+      }
+    );
+
+    const {
+      data: { user },
+    } = await supabaseClient.auth.getUser();
+
+    if (!user) {
+      throw new Error("User not authenticated");
+    }
+
+    const { data: invoice, error: invoiceError } = await supabaseClient
+      .from("invoices")
+      .select("*")
+      .eq("id", invoiceId)
+      .eq("user_id", user.id)
+      .single();
+
+    if (invoiceError || !invoice) {
+      throw new Error("Invoice not found");
+    }
+
+    const { data: profile } = await supabaseClient
+      .from("profiles")
+      .select("clinic_name, bank_name, account_number, sort_code")
+      .eq("id", user.id)
+      .single();
+
+    const clinicName = profile?.clinic_name || "Our Clinic";
+    const bankDetails =
+      profile?.account_number && profile?.sort_code
+        ? `${profile.bank_name || ""} ${profile.sort_code} ${profile.account_number}`.trim()
+        : null;
+
+    const invoiceDate = new Date(invoice.issue_date).toLocaleDateString("en-GB");
+    const treatmentDate = invoice.treatment_date
+      ? new Date(invoice.treatment_date).toLocaleDateString("en-GB")
+      : "";
+    const amountStr = `£${Number(invoice.amount).toFixed(2)}`;
+
+    // Create real PDF with pdf-lib
+    const pdfDoc = await PDFDocument.create();
+    const page = pdfDoc.addPage([595, 842]); // A4
+    const font = await pdfDoc.embedFont(StandardFonts.Helvetica);
+    const fontBold = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
+
+    const margin = 50;
+    let y = page.getHeight() - margin;
+    const lineHeight = 16;
+    const smallLine = 12;
+
+    const next = (dy: number = lineHeight) => {
+      y -= dy;
+      return y;
+    };
+
+    // Header
+    page.drawText(clinicName, { x: margin, y, font: fontBold, size: 22 });
+    next(28);
+    page.drawText("INVOICE", { x: margin, y, font: fontBold, size: 18 });
+    next(24);
+
+    // Details
+    drawText(page, `Invoice Number: ${invoice.invoice_number}`, margin, y, font, smallLine);
+    next();
+    drawText(page, `Issue Date: ${invoiceDate}`, margin, y, font, smallLine);
+    next();
+    drawText(page, `Patient: ${invoice.patient_name}`, margin, y, font, smallLine);
+    next();
+    if (invoice.patient_contact) {
+      drawText(page, `Contact: ${invoice.patient_contact}`, margin, y, font, smallLine);
+      next();
+    }
+    next(12);
+
+    // Table header
+    drawText(page, "Description", margin, y, fontBold, smallLine);
+    drawText(page, "Date", 320, y, fontBold, smallLine);
+    drawText(page, "Amount", 480, y, fontBold, smallLine);
+    next(14);
+    page.drawLine({ start: { x: margin, y }, end: { x: page.getWidth() - margin, y } });
+    next(8);
+
+    // Table row
+    drawText(page, invoice.treatment_name || "Treatment", margin, y, font, smallLine);
+    drawText(page, treatmentDate, 320, y, font, smallLine);
+    drawText(page, amountStr, 480, y, font, smallLine);
+    next(20);
+
+    // Total
+    drawText(page, "Total", margin, y, fontBold, 14);
+    drawText(page, amountStr, 480, y, fontBold, 14);
+    next(24);
+
+    if (bankDetails) {
+      page.drawText("Bank transfer details:", { x: margin, y, font: fontBold, size: smallLine });
+      next();
+      page.drawText(bankDetails, { x: margin, y, font, size: smallLine });
+      next(20);
+    }
+
+    if (invoice.notes) {
+      page.drawText("Notes:", { x: margin, y, font: fontBold, size: smallLine });
+      next();
+      const notesLines = (invoice.notes as string).split("\n").slice(0, 5);
+      for (const line of notesLines) {
+        page.drawText(line.substring(0, 80), { x: margin, y, font, size: smallLine });
+        next();
+      }
+    }
+
+    const pdfBytes = await pdfDoc.save();
+
+    // Upload PDF to Storage
+    const fileName = `invoices/${invoiceId}-${String(invoice.invoice_number).replace(/\//g, "-")}.pdf`;
+    const { error: uploadError } = await supabaseClient.storage
+      .from("files")
+      .upload(fileName, pdfBytes, {
+        contentType: "application/pdf",
+        upsert: true,
+      });
+
+    if (uploadError) {
+      throw new Error(`Failed to upload PDF: ${uploadError.message}`);
+    }
+
+    const { data: urlData } = supabaseClient.storage
+      .from("files")
+      .getPublicUrl(fileName);
+
+    const pdfUrl = urlData.publicUrl;
+
+    await supabaseClient
+      .from("invoices")
+      .update({ invoice_pdf_url: pdfUrl })
+      .eq("id", invoiceId);
+
+    return new Response(
+      JSON.stringify({ success: true, pdfUrl }),
+      {
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+        status: 200,
+      }
+    );
+  } catch (error) {
+    return new Response(
+      JSON.stringify({ error: error instanceof Error ? error.message : String(error) }),
+      {
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+        status: 400,
+      }
+    );
+  }
+});

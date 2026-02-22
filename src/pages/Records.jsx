@@ -1,5 +1,6 @@
 import React, { useState } from "react";
-import { base44 } from "@/api/base44Client";
+import { api } from "@/api/api";
+import { invoicesAPI } from "@/api/invoices";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -38,42 +39,42 @@ export default function Records() {
 
   const { data: treatments, isLoading: loadingTreatments } = useQuery({
     queryKey: ['treatments'],
-    queryFn: () => base44.entities.TreatmentEntry.list('-date'),
+    queryFn: () => api.entities.TreatmentEntry.list('-date'),
     initialData: [],
   });
 
   const { data: expenses, isLoading: loadingExpenses } = useQuery({
     queryKey: ['expenses'],
-    queryFn: () => base44.entities.Expense.list('-date'),
+    queryFn: () => api.entities.Expense.list('-date'),
     initialData: [],
   });
 
   const { data: treatmentCatalog } = useQuery({
     queryKey: ['treatmentCatalog'],
-    queryFn: () => base44.entities.TreatmentCatalog.list('treatment_name'),
+    queryFn: () => api.entities.TreatmentCatalog.list('treatment_name'),
     initialData: [],
   });
 
   const { data: practitioners } = useQuery({
     queryKey: ['practitioners'],
-    queryFn: () => base44.entities.Practitioner.list('name'),
+    queryFn: () => api.entities.Practitioner.list('name'),
     initialData: [],
   });
 
   const { data: patients } = useQuery({
     queryKey: ['patients'],
-    queryFn: () => base44.entities.Patient.list('name'),
+    queryFn: () => api.entities.Patient.list('name'),
     initialData: [],
   });
 
   const { data: user } = useQuery({
     queryKey: ['currentUser'],
-    queryFn: () => base44.auth.me(),
+    queryFn: () => api.auth.me(),
     initialData: null,
   });
 
   const deleteTreatmentMutation = useMutation({
-    mutationFn: (id) => base44.entities.TreatmentEntry.delete(id),
+    mutationFn: (id) => api.entities.TreatmentEntry.delete(id),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['treatments'] });
       setDeleteConfirmOpen(false);
@@ -83,7 +84,7 @@ export default function Records() {
   });
 
   const deleteExpenseMutation = useMutation({
-    mutationFn: (id) => base44.entities.Expense.delete(id),
+    mutationFn: (id) => api.entities.Expense.delete(id),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['expenses'] });
       setDeleteConfirmOpen(false);
@@ -158,7 +159,7 @@ export default function Records() {
   };
 
   const updateTreatmentMutation = useMutation({
-    mutationFn: ({ id, data }) => base44.entities.TreatmentEntry.update(id, data),
+    mutationFn: ({ id, data }) => api.entities.TreatmentEntry.update(id, data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['treatments'] });
       queryClient.invalidateQueries({ queryKey: ['practitioners'] });
@@ -170,7 +171,7 @@ export default function Records() {
   });
 
   const updateExpenseMutation = useMutation({
-    mutationFn: ({ id, data }) => base44.entities.Expense.update(id, data),
+    mutationFn: ({ id, data }) => api.entities.Expense.update(id, data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['expenses'] });
       setEditDialogOpen(false);
@@ -202,7 +203,7 @@ export default function Records() {
         console.log('📝 Invoice number:', invoiceNumber);
 
         console.log('📄 Creating invoice...');
-        await base44.entities.Invoice.create({
+        const createdInvoice = await api.entities.Invoice.create({
           invoice_number: invoiceNumber,
           treatment_entry_id: treatment.id,
           patient_name: treatment.patient_name || 'Patient',
@@ -217,18 +218,10 @@ export default function Records() {
         });
         console.log('✅ Invoice created');
 
-        console.log('📲 Sending SMS...');
-        
-        const smsPayload = {
-          patient_name: treatment.patient_name || 'Patient',
-          patient_phone: patient.phone,
-          treatment_name: treatment.treatment_name,
-          amount: treatment.price_paid
-        };
-        
-        console.log('📦 SMS Payload being sent:', JSON.stringify(smsPayload, null, 2));
-        
-        const smsResponse = await base44.functions.invoke('sendInvoiceSMS', smsPayload);
+        console.log('📄 Generating PDF...');
+        await invoicesAPI.generateInvoicePDF(createdInvoice.id);
+        console.log('📲 Sending SMS via Twilio...');
+        await api.functions.invoke('sendInvoiceSMS', { invoiceId: createdInvoice.id });
         
         console.log('✅ SMS Response:', smsResponse);
         console.log('✅ SMS sent successfully');
@@ -407,7 +400,7 @@ export default function Records() {
       
       if (newPractitionerName !== null && newPractitionerName.trim() !== '') {
         try {
-          const newPractitioner = await base44.entities.Practitioner.create({ name: newPractitionerName });
+          const newPractitioner = await api.entities.Practitioner.create({ name: newPractitionerName });
           finalPractitionerId = newPractitioner.id;
           finalPractitionerName = newPractitioner.name;
           queryClient.invalidateQueries({ queryKey: ['practitioners'] });
@@ -746,10 +739,10 @@ export default function Records() {
       const blob = new Blob([htmlContent], { type: 'text/html' });
       const file = new File([blob], `${invoiceNumber}.html`, { type: 'text/html' });
       
-      const { file_url } = await base44.integrations.Core.UploadFile({ file });
+      const { file_url } = await api.integrations.Core.UploadFile({ file });
       
       // Create invoice record
-      await base44.entities.Invoice.create({
+      await api.entities.Invoice.create({
         invoice_number: invoiceNumber,
         treatment_entry_id: treatment.id,
         patient_name: treatment.patient_name || 'Patient',

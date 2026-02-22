@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from "react";
-import { base44 } from "@/api/base44Client";
+import { api } from "@/api/api";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
@@ -17,50 +17,50 @@ export default function Consultant() {
 
   const { data: treatments } = useQuery({
     queryKey: ['treatments'],
-    queryFn: () => base44.entities.TreatmentEntry.list('-date'),
+    queryFn: () => api.entities.TreatmentEntry.list('-date'),
     initialData: [],
   });
 
   const { data: expenses } = useQuery({
     queryKey: ['expenses'],
-    queryFn: () => base44.entities.Expense.list('-date'),
+    queryFn: () => api.entities.Expense.list('-date'),
     initialData: [],
   });
 
   const { data: treatmentCatalog } = useQuery({
     queryKey: ['treatmentCatalog'],
-    queryFn: () => base44.entities.TreatmentCatalog.list(),
+    queryFn: () => api.entities.TreatmentCatalog.list(),
     initialData: [],
   });
 
   const { data: patients } = useQuery({
     queryKey: ['patients'],
-    queryFn: () => base44.entities.Patient.list('name'),
+    queryFn: () => api.entities.Patient.list('name'),
     initialData: [],
   });
 
   const { data: chatHistory } = useQuery({
     queryKey: ['chatHistory'],
-    queryFn: () => base44.entities.ChatHistory.list('-updated_date'),
+    queryFn: () => api.entities.ChatHistory.list('-updated_date'),
     initialData: [],
   });
 
   const createChatMutation = useMutation({
-    mutationFn: (data) => base44.entities.ChatHistory.create(data),
+    mutationFn: (data) => api.entities.ChatHistory.create(data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['chatHistory'] });
     },
   });
 
   const updateChatMutation = useMutation({
-    mutationFn: ({ id, data }) => base44.entities.ChatHistory.update(id, data),
+    mutationFn: ({ id, data }) => api.entities.ChatHistory.update(id, data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['chatHistory'] });
     },
   });
 
   const deleteChatMutation = useMutation({
-    mutationFn: (id) => base44.entities.ChatHistory.delete(id),
+    mutationFn: (id) => api.entities.ChatHistory.delete(id),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['chatHistory'] });
     },
@@ -135,7 +135,7 @@ export default function Consultant() {
         categoryMap[category].count += 1;
       });
 
-      const { data: user } = await base44.auth.me();
+      const { data: user } = await api.auth.me();
 
       const clinicContext = {
         clinicLocation: "United Kingdom",
@@ -176,7 +176,7 @@ USER QUESTION: ${userMessage}
 
 Provide a professional, helpful, and actionable response. Use the actual data to support your insights. Be specific with numbers when relevant. If asked about recommendations, provide concrete, implementable strategies. Keep the tone friendly yet professional.`;
 
-      const response = await base44.functions.invoke('consultantChat', {
+      const response = await api.functions.invoke('consultantChat', {
         clinicContext: clinicContext,
         userMessage: userMessage
       });

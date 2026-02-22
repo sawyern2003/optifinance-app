@@ -3,7 +3,7 @@ import React, { useState, useEffect } from "react";
 import { Link, useLocation } from "react-router-dom";
 import { createPageUrl } from "@/utils";
 import { LayoutDashboard, Plus, FileText, BarChart3, Settings, LogOut, TrendingUp, FileCheck, MessageSquare, CircleDot } from "lucide-react";
-import { base44 } from "@/api/base44Client";
+import { api } from "@/api/api";
 
 const navigationItems = [
   {
@@ -60,7 +60,7 @@ export default function Layout({ children, currentPageName }) {
   useEffect(() => {
     const fetchUser = async () => {
       try {
-        const user = await base44.auth.me();
+        const user = await api.auth.me();
         if (user?.clinic_name) {
           setClinicName(user.clinic_name);
         }
@@ -72,7 +72,7 @@ export default function Layout({ children, currentPageName }) {
   }, []);
 
   const handleLogout = () => {
-    base44.auth.logout();
+    api.auth.logout();
   };
 
   return (
@@ -172,8 +172,8 @@ export default function Layout({ children, currentPageName }) {
         <div className="hidden md:flex md:w-64 md:flex-col fixed inset-y-0 z-50 bg-white/95 backdrop-blur-xl border-r border-[#f0e9d8]/50">
           <div className="flex flex-col items-center px-6 py-6 border-b border-[#f0e9d8]/50">
             <img
-              src="https://qtrypzzcjebvfcihiynt.supabase.co/storage/v1/object/public/base44-prod/public/690c8679071d7faff17b5647/380fb76f3_LogoMakr-9V1my7-300dpi1.png"
-              alt="Optimedix AI Logo"
+              src="/logo.png"
+              alt="OptiFinance Logo"
               className="w-24 h-24 object-contain mb-0.5"
             />
             <p className="text-[10px] text-[#d4a740] font-light text-center">{clinicName || "Your Clinic"}</p>
@@ -223,8 +223,8 @@ export default function Layout({ children, currentPageName }) {
           <header className="md:hidden bg-white/95 backdrop-blur-xl border-b border-[#f0e9d8]/50 px-4 py-4 flex items-center justify-between sticky top-0 z-40">
             <div className="flex items-center gap-2">
               <img
-                src="https://qtrypzzcjebvfcihiynt.supabase.co/storage/v1/object/public/base44-prod/public/690c8679071d7faff17b5647/380fb76f3_LogoMakr-9V1my7-300dpi1.png"
-                alt="Optimedix AI Logo"
+                src="/logo.png"
+                alt="OptiFinance Logo"
                 className="w-16 h-16 object-contain"
               />
               {clinicName && <p className="text-[10px] text-[#d4a740] font-light">{clinicName}</p>}
