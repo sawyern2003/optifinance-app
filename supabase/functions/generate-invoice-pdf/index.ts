@@ -19,24 +19,36 @@ function drawText(
   page.drawText(text, { x, y, font, size });
 }
 
+const json = (body: object, status: number) =>
+  new Response(JSON.stringify(body), {
+    status,
+    headers: { ...corsHeaders, "Content-Type": "application/json" },
+  });
+
 serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { status: 204, headers: { ...corsHeaders } });
   }
 
+  if (req.method !== "POST") {
+    return json({ error: "Method not allowed" }, 405);
+  }
+
   try {
     const authHeader = req.headers.get("Authorization");
     if (!authHeader) {
-      return new Response(
-        JSON.stringify({ error: "No authorization header" }),
-        { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
+      return json({ error: "No authorization header" }, 401);
     }
 
-    const { invoiceId } = await req.json();
-
+    let body: { invoiceId?: string };
+    try {
+      body = await req.json();
+    } catch {
+      return json({ error: "Invalid JSON body" }, 400);
+    }
+    const invoiceId = body?.invoiceId;
     if (!invoiceId) {
-      throw new Error("Invoice ID is required");
+      return json({ error: "Invoice ID is required" }, 400);
     }
 
     const supabaseClient = createClient(
@@ -54,10 +66,7 @@ serve(async (req) => {
     } = await supabaseClient.auth.getUser();
 
     if (!user) {
-      return new Response(
-        JSON.stringify({ error: "User not authenticated" }),
-        { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
+      return json({ error: "User not authenticated" }, 401);
     }
 
     const { data: invoice, error: invoiceError } = await supabaseClient
@@ -232,20 +241,11 @@ serve(async (req) => {
       .update({ invoice_pdf_url: pdfUrl })
       .eq("id", invoiceId);
 
-    return new Response(
-      JSON.stringify({ success: true, pdfUrl }),
-      {
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-        status: 200,
-      }
-    );
+    return json({ success: true, pdfUrl }, 200);
   } catch (error) {
-    return new Response(
-      JSON.stringify({ error: error instanceof Error ? error.message : String(error) }),
-      {
-        status: 400,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      }
+    return json(
+      { error: error instanceof Error ? error.message : String(error) },
+      400
     );
   }
 });
