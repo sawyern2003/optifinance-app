@@ -301,19 +301,19 @@ export default function QuickAdd() {
 
       const createdTreatment = await api.entities.TreatmentEntry.create({
         date: data.date,
-        patient_id: patientId,
-        patient_name: patientName,
-        treatment_id: data.treatment_id,
-        treatment_name: treatment?.treatment_name,
+        patient_id: patientId && patientId !== '' ? patientId : undefined,
+        patient_name: patientName ?? undefined,
+        treatment_id: data.treatment_id && data.treatment_id !== '' ? data.treatment_id : undefined,
+        treatment_name: treatment?.treatment_name ?? undefined,
         duration_minutes: data.duration_minutes ? parseFloat(data.duration_minutes) : undefined,
         price_paid: pricePaid,
         payment_status: data.payment_status,
         amount_paid: amountPaid,
         product_cost: productCost,
         profit: profit,
-        practitioner_id: practitionerId,
-        practitioner_name: practitionerName,
-        notes: data.notes
+        practitioner_id: practitionerId && practitionerId !== '' ? practitionerId : undefined,
+        practitioner_name: practitionerName ?? undefined,
+        notes: data.notes && data.notes !== '' ? data.notes : undefined
       });
 
       // If sendInvoiceSMS is checked AND payment is pending, send it NOW
