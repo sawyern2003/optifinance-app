@@ -88,8 +88,24 @@ Use your real Vercel URL if different (e.g. `https://your-project.vercel.app`). 
 
 ---
 
+## 7. 401 / CORS on Invoices & PDF (generate-invoice-pdf, send-invoice, send-payment-reminder)
+
+If you see **401**, **CORS**, or **"Edge Function returned a non-2xx status code"** when generating invoice PDFs, sending invoices (SMS/email), or sending payment reminders:
+
+1. **Sign in again** – The app now refreshes your session before calling these functions; an expired session will show "Session expired. Please sign in again."
+2. **Vercel env** – Same as step 1: **VITE_SUPABASE_URL** and **VITE_SUPABASE_ANON_KEY** must be set for project **xfkitnutpzhaamuaaelp**, then redeploy.
+3. **If 401 persists** – Deploy the invoice/reminder functions with JWT verification disabled at the gateway (auth is still enforced inside each function):
+   ```bash
+   cd optifinance-app  # or your app root
+   supabase functions deploy generate-invoice-pdf --no-verify-jwt
+   supabase functions deploy send-invoice --no-verify-jwt
+   supabase functions deploy send-payment-reminder --no-verify-jwt
+   ```
+
+---
+
 ## Summary
 
 - **401** = Supabase rejected the request: wrong/missing **VITE_SUPABASE_URL** or **VITE_SUPABASE_ANON_KEY** on Vercel, or not signed in / expired session.
-- If everything is correct and you still get 401 with no function log, deploy with **`--no-verify-jwt`** (see step 5); the function still enforces auth.
-- Fix: set both env vars in Vercel to the **xfkitnutpzhaamuaaelp** project, set Root Directory if needed, redeploy, then sign in and try checkout again.
+- If everything is correct and you still get 401 with no function log, deploy with **`--no-verify-jwt`** (see step 5 for checkout; step 7 for invoice/PDF/reminder); the functions still enforce auth.
+- Fix: set both env vars in Vercel to the **xfkitnutpzhaamuaaelp** project, set Root Directory if needed, redeploy, then sign in and try again.
