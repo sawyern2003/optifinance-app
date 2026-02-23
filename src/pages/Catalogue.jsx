@@ -58,6 +58,14 @@ export default function Catalogue() {
     initialData: [],
   });
 
+  const showError = (title, err) => {
+    toast({
+      title: title || "Error",
+      description: err?.message || String(err),
+      variant: "destructive",
+    });
+  };
+
   // Treatment Mutations
   const createTreatmentMutation = useMutation({
     mutationFn: (data) => api.entities.TreatmentCatalog.create(data),
@@ -70,6 +78,7 @@ export default function Catalogue() {
       });
       resetForm();
     },
+    onError: (err) => showError("Could not add treatment", err),
   });
 
   const updateTreatmentMutation = useMutation({
@@ -82,6 +91,7 @@ export default function Catalogue() {
       });
       resetForm();
     },
+    onError: (err) => showError("Could not update treatment", err),
   });
 
   const deleteTreatmentMutation = useMutation({
@@ -95,6 +105,7 @@ export default function Catalogue() {
       setDeleteConfirmOpen(false);
       setItemToDelete(null);
     },
+    onError: (err) => showError("Could not delete treatment", err),
   });
 
   // Practitioner Mutations
@@ -108,6 +119,7 @@ export default function Catalogue() {
       });
       resetForm();
     },
+    onError: (err) => showError("Could not add practitioner", err),
   });
 
   const updatePractitionerMutation = useMutation({
@@ -120,6 +132,7 @@ export default function Catalogue() {
       });
       resetForm();
     },
+    onError: (err) => showError("Could not update practitioner", err),
   });
 
   const deletePractitionerMutation = useMutation({
@@ -133,6 +146,7 @@ export default function Catalogue() {
       setDeleteConfirmOpen(false);
       setItemToDelete(null);
     },
+    onError: (err) => showError("Could not delete practitioner", err),
   });
 
   // Patient Mutations
@@ -146,6 +160,7 @@ export default function Catalogue() {
       });
       resetForm();
     },
+    onError: (err) => showError("Could not add patient", err),
   });
 
   const updatePatientMutation = useMutation({
@@ -158,6 +173,7 @@ export default function Catalogue() {
       });
       resetForm();
     },
+    onError: (err) => showError("Could not update patient", err),
   });
 
   const deletePatientMutation = useMutation({
@@ -171,6 +187,7 @@ export default function Catalogue() {
       setDeleteConfirmOpen(false);
       setItemToDelete(null);
     },
+    onError: (err) => showError("Could not delete patient", err),
   });
 
   const updateRecurringExpenseMutation = useMutation({
@@ -184,6 +201,7 @@ export default function Catalogue() {
       });
       resetForm();
     },
+    onError: (err) => showError("Could not update recurring expense", err),
   });
 
   const deleteRecurringExpenseMutation = useMutation({
@@ -198,6 +216,7 @@ export default function Catalogue() {
       setDeleteConfirmOpen(false);
       setItemToDelete(null);
     },
+    onError: (err) => showError("Could not delete recurring expense", err),
   });
 
   const handleDeleteClick = (item, type) => {
@@ -259,7 +278,7 @@ export default function Catalogue() {
         category: formData.category,
         default_price: parseFloat(formData.default_price),
         typical_product_cost: parseFloat(formData.typical_product_cost || 0),
-        duration_minutes: formData.duration_minutes ? parseFloat(formData.duration_minutes) : undefined
+        default_duration_minutes: formData.duration_minutes ? parseInt(formData.duration_minutes, 10) : undefined
       };
       if (editingItem) {
         updateTreatmentMutation.mutate({ id: editingItem.id, data });
@@ -324,8 +343,8 @@ export default function Catalogue() {
           treatment_name: item.treatment_name,
           category: item.category,
           default_price: item.default_price,
-          typical_product_cost: item.typical_product_cost || '',
-          duration_minutes: item.duration_minutes || '',
+          typical_product_cost: item.typical_product_cost ?? '',
+          duration_minutes: item.duration_minutes ?? item.default_duration_minutes ?? '',
           practitioner_name: '',
           patient_name: '',
           patient_phone: '', // Added for consistency
@@ -394,8 +413,8 @@ export default function Catalogue() {
       treatment_name: `${treatment.treatment_name} (Copy)`,
       category: treatment.category,
       default_price: treatment.default_price,
-      typical_product_cost: treatment.typical_product_cost || '',
-      duration_minutes: treatment.duration_minutes || '',
+      typical_product_cost: treatment.typical_product_cost ?? '',
+      duration_minutes: treatment.duration_minutes ?? treatment.default_duration_minutes ?? '',
       practitioner_name: '',
       patient_name: '',
       patient_phone: '', // Added for consistency
@@ -519,10 +538,10 @@ export default function Catalogue() {
                           {calculateMargin(treatment.default_price, treatment.typical_product_cost || 0)}%
                         </span>
                       </div>
-                      {treatment.duration_minutes && (
+                      {(treatment.duration_minutes ?? treatment.default_duration_minutes) && (
                         <div className="flex justify-between items-center">
                           <span className="text-sm text-gray-600">Duration</span>
-                          <span className="text-sm font-semibold text-gray-900">{treatment.duration_minutes} min</span>
+                          <span className="text-sm font-semibold text-gray-900">{treatment.duration_minutes ?? treatment.default_duration_minutes} min</span>
                         </div>
                       )}
                     </div>
