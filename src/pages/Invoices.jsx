@@ -164,25 +164,21 @@ export default function Invoices() {
     setGeneratingPdf(null);
   };
 
-  const sendInvoice = async (invoice, sendVia = 'both') => {
+  const sendInvoice = async (invoice, sendVia) => {
     setSendingInvoice(invoice.id);
-    
     try {
-      // First generate PDF if not exists
+      // Ensure PDF exists before sending (SMS sends link; email attaches PDF)
       if (!invoice.invoice_pdf_url) {
         await invoicesAPI.generateInvoicePDF(invoice.id);
         await queryClient.invalidateQueries({ queryKey: ['invoices'] });
       }
-
-      // Then send invoice (friendly message + PDF attached to email)
       await invoicesAPI.sendInvoice(invoice.id, sendVia);
-      
+      const sentHow = sendVia === 'sms' ? 'Text message with link to PDF sent.' : 'Email with PDF attached sent.';
       toast({
         title: "Invoice sent",
-        description: sendVia === 'both' ? 'Sent via SMS and email (thanks for visiting, find your invoice attached).' : `Sent via ${sendVia}.`,
+        description: sentHow,
         className: "bg-green-50 border-green-200"
       });
-
       queryClient.invalidateQueries({ queryKey: ['invoices'] });
     } catch (error) {
       console.error('Failed to send invoice:', error);
@@ -192,9 +188,11 @@ export default function Invoices() {
         variant: "destructive"
       });
     }
-    
     setSendingInvoice(null);
   };
+
+  const canSendSms = (inv) => inv.patient_contact && !inv.patient_contact.includes('@');
+  const canSendEmail = (inv) => inv.patient_contact?.includes('@');
 
   const sendInvoiceEmail = async (invoice) => {
     if (!invoice.patient_contact || !invoice.patient_contact.includes('@')) {
@@ -292,7 +290,7 @@ ${clinicName}
         <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-8 gap-4">
           <div>
             <h1 className="text-3xl font-light tracking-tight text-[#1a2845] mb-2">Invoices</h1>
-            <p className="text-sm text-gray-500 font-light">View and manage generated invoices</p>
+            <p className="text-sm text-gray-500 font-light">View and manage invoices. Message or email the PDF: set patient phone or email in Edit, then use the send buttons (SMS link or email with PDF attached).</p>
           </div>
         </div>
 
@@ -412,15 +410,27 @@ ${clinicName}
                             )}
                           </button>
                           <button
-                            onClick={() => sendInvoice(invoice, 'both')}
-                            disabled={sendingInvoice === invoice.id || !invoice.patient_contact}
-                            className="p-2 hover:bg-orange-50 rounded-lg text-gray-400 hover:text-orange-600 transition-colors disabled:opacity-50"
-                            title="Send Invoice (SMS & Email)"
+                            onClick={() => sendInvoice(invoice, 'sms')}
+                            disabled={sendingInvoice === invoice.id || !canSendSms(invoice)}
+                            className="p-2 hover:bg-sky-50 rounded-lg text-gray-400 hover:text-sky-600 transition-colors disabled:opacity-50"
+                            title={canSendSms(invoice) ? "Message patient (SMS with link to PDF)" : "Add patient phone in Edit to send by text"}
                           >
                             {sendingInvoice === invoice.id ? (
                               <Loader2 className="w-4 h-4 animate-spin" />
                             ) : (
                               <Send className="w-4 h-4" />
+                            )}
+                          </button>
+                          <button
+                            onClick={() => sendInvoice(invoice, 'email')}
+                            disabled={sendingInvoice === invoice.id || !canSendEmail(invoice)}
+                            className="p-2 hover:bg-orange-50 rounded-lg text-gray-400 hover:text-orange-600 transition-colors disabled:opacity-50"
+                            title={canSendEmail(invoice) ? "Email patient (PDF attached)" : "Add patient email in Edit to send PDF by email"}
+                          >
+                            {sendingInvoice === invoice.id ? (
+                              <Loader2 className="w-4 h-4 animate-spin" />
+                            ) : (
+                              <Mail className="w-4 h-4" />
                             )}
                           </button>
                           <button
@@ -473,9 +483,10 @@ ${clinicName}
                 </div>
 
                 <div className="space-y-2">
-                  <Label htmlFor="patient_contact" className="text-sm font-medium text-gray-700">Patient Contact</Label>
+                  <Label htmlFor="patient_contact" className="text-sm font-medium text-gray-700">Phone or email (for messaging/emailing PDF)</Label>
                   <Input
                     id="patient_contact"
+                    placeholder="e.g. +44… or patient@email.com"
                     value={editForm.patient_contact}
                     onChange={(e) => setEditForm({...editForm, patient_contact: e.target.value})}
                     placeholder="Email or phone"
