@@ -17,6 +17,7 @@ CREATE TABLE IF NOT EXISTS profiles (
   bank_name TEXT,
   account_number TEXT,
   sort_code TEXT,
+  logo_url TEXT,
   created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
   updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );

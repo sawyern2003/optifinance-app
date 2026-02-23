@@ -67,7 +67,7 @@ serve(async (req) => {
 
     const { data: profile } = await supabaseClient
       .from("profiles")
-      .select("clinic_name, bank_name, account_number, sort_code")
+      .select("clinic_name, bank_name, account_number, sort_code, logo_url")
       .eq("id", user.id)
       .single();
 
@@ -76,6 +76,7 @@ serve(async (req) => {
       profile?.account_number && profile?.sort_code
         ? `${profile.bank_name || ""} ${profile.sort_code} ${profile.account_number}`.trim()
         : null;
+    const logoUrl = (profile as { logo_url?: string })?.logo_url;
 
     const invoiceDate = new Date(invoice.issue_date).toLocaleDateString("en-GB");
     const treatmentDate = invoice.treatment_date
@@ -90,6 +91,7 @@ serve(async (req) => {
     const fontBold = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
 
     const margin = 50;
+    const pageWidth = page.getWidth();
     let y = page.getHeight() - margin;
     const lineHeight = 16;
     const smallLine = 12;
@@ -99,7 +101,32 @@ serve(async (req) => {
       return y;
     };
 
-    // Header
+    // Optional logo (top-left, max height 48pt)
+    let headerStartY = y;
+    if (logoUrl && logoUrl.startsWith("http")) {
+      try {
+        const logoRes = await fetch(logoUrl);
+        if (logoRes.ok) {
+          const logoBuf = new Uint8Array(await logoRes.arrayBuffer());
+          const contentType = (logoRes.headers.get("content-type") || "").toLowerCase();
+          const isPng = contentType.includes("png") || (logoBuf[0] === 0x89 && logoBuf[1] === 0x50);
+          const image = isPng
+            ? await pdfDoc.embedPng(logoBuf)
+            : await pdfDoc.embedJpg(logoBuf);
+          const maxH = 48;
+          const scale = Math.min(maxH / image.height, 200 / image.width);
+          const w = image.width * scale;
+          const h = image.height * scale;
+          page.drawImage(image, { x: margin, y: y - h, width: w, height: h });
+          headerStartY = y - h - 8;
+        }
+      } catch (_) {
+        // Skip logo on fetch/embed error
+      }
+    }
+    y = headerStartY;
+
+    // Header: clinic name and INVOICE
     page.drawText(clinicName, { x: margin, y, font: fontBold, size: 22 });
     next(28);
     page.drawText("INVOICE", { x: margin, y, font: fontBold, size: 18 });
@@ -114,6 +141,10 @@ serve(async (req) => {
     next();
     if (invoice.patient_contact) {
       drawText(page, `Contact: ${invoice.patient_contact}`, margin, y, font, smallLine);
+      next();
+    }
+    if (invoice.practitioner_name) {
+      drawText(page, `Practitioner: ${invoice.practitioner_name}`, margin, y, font, smallLine);
       next();
     }
     next(12);
@@ -153,6 +184,21 @@ serve(async (req) => {
         next();
       }
     }
+
+    // Footer at bottom of page
+    const footerY = 50;
+    page.drawText("Thank you for your business.", {
+      x: margin,
+      y: footerY,
+      font: font,
+      size: smallLine,
+    });
+    page.drawText(clinicName, {
+      x: margin,
+      y: footerY - lineHeight,
+      font: font,
+      size: 11,
+    });
 
     const pdfBytes = await pdfDoc.save();
 

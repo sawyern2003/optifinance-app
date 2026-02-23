@@ -4,7 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useToast } from "@/components/ui/use-toast";
-import { Loader2, Building2, User, Mail, Landmark } from "lucide-react";
+import { Loader2, Building2, User, Mail, Landmark, Image } from "lucide-react";
 
 export default function Settings() {
   const { toast } = useToast();
@@ -15,6 +15,7 @@ export default function Settings() {
   const [bankName, setBankName] = useState("");
   const [accountNumber, setAccountNumber] = useState("");
   const [sortCode, setSortCode] = useState("");
+  const [logoUrl, setLogoUrl] = useState("");
 
   useEffect(() => {
     const fetchUser = async () => {
@@ -25,6 +26,7 @@ export default function Settings() {
       setBankName(userData.bank_name || "");
       setAccountNumber(userData.account_number || "");
       setSortCode(userData.sort_code || "");
+      setLogoUrl(userData.logo_url || "");
       setIsLoading(false);
     };
     fetchUser();
@@ -38,7 +40,8 @@ export default function Settings() {
       clinic_name: clinicName,
       bank_name: bankName,
       account_number: accountNumber,
-      sort_code: sortCode
+      sort_code: sortCode,
+      logo_url: logoUrl || null
     });
     
     toast({
@@ -107,6 +110,23 @@ export default function Settings() {
                   />
                   <p className="text-xs text-gray-500">
                     This name will appear in the sidebar and throughout the app
+                  </p>
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="logo-url" className="text-sm font-medium text-gray-700 flex items-center gap-2">
+                    <Image className="w-4 h-4" />
+                    Logo URL (for invoice PDFs)
+                  </Label>
+                  <Input
+                    id="logo-url"
+                    type="url"
+                    value={logoUrl}
+                    onChange={(e) => setLogoUrl(e.target.value)}
+                    placeholder="https://… (PNG or JPG, public URL)"
+                    className="rounded-xl border-gray-300 h-11"
+                  />
+                  <p className="text-xs text-gray-500">
+                    Optional. A public image URL (e.g. from Supabase Storage) — appears on generated invoice PDFs.
                   </p>
                 </div>
               </div>

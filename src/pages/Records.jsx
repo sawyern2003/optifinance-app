@@ -8,7 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { Trash2, Search, Sparkles, CreditCard, Pencil, FileText, Loader2 } from "lucide-react";
+import { Trash2, Search, Sparkles, CreditCard, Pencil, FileText, Loader2, Download } from "lucide-react";
 import { format, startOfMonth, endOfMonth, subMonths, startOfYear } from "date-fns";
 import { useToast } from "@/components/ui/use-toast";
 
@@ -58,6 +58,12 @@ export default function Records() {
   const { data: practitioners } = useQuery({
     queryKey: ['practitioners'],
     queryFn: () => api.entities.Practitioner.list('name'),
+    initialData: [],
+  });
+
+  const { data: invoices } = useQuery({
+    queryKey: ['invoices'],
+    queryFn: () => api.entities.Invoice.list('-created_date'),
     initialData: [],
   });
 
@@ -473,276 +479,12 @@ export default function Records() {
 
   const generateInvoice = async (treatment) => {
     setGeneratingInvoice(treatment.id);
-    
-    const clinicName = user?.clinic_name || 'OptiFinance Clinic';
     const invoiceNumber = generateInvoiceNumber();
-    const patient = patients.find(p => p.id === treatment.patient_id);
-    
-    const htmlContent = `
-      <!DOCTYPE html>
-      <html>
-      <head>
-        <title>Invoice ${invoiceNumber}</title>
-        <style>
-          @media print {
-            body { margin: 0; }
-            .no-print { display: none; }
-          }
-          body {
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Arial, sans-serif;
-            padding: 60px;
-            color: #1e293b;
-            line-height: 1.6;
-            max-width: 800px;
-            margin: 0 auto;
-          }
-          .header {
-            display: flex;
-            justify-content: space-between;
-            align-items: start;
-            margin-bottom: 50px;
-            padding-bottom: 30px;
-            border-bottom: 3px solid #2C3E50;
-          }
-          .company-info h1 {
-            color: #2C3E50;
-            font-size: 28px;
-            margin: 0 0 10px 0;
-          }
-          .company-info p {
-            color: #64748b;
-            margin: 4px 0;
-          }
-          .invoice-details {
-            text-align: right;
-          }
-          .invoice-number {
-            font-size: 24px;
-            font-weight: 700;
-            color: #2C3E50;
-            margin: 0 0 10px 0;
-          }
-          .invoice-details p {
-            margin: 4px 0;
-            color: #64748b;
-          }
-          .billing-section {
-            display: flex;
-            justify-content: space-between;
-            margin: 40px 0;
-          }
-          .billing-box {
-            flex: 1;
-          }
-          .billing-box h3 {
-            font-size: 12px;
-            text-transform: uppercase;
-            color: #64748b;
-            margin: 0 0 15px 0;
-            font-weight: 600;
-            letter-spacing: 0.5px;
-          }
-          .billing-box p {
-            margin: 4px 0;
-            color: #1e293b;
-          }
-          .invoice-table {
-            width: 100%;
-            border-collapse: collapse;
-            margin: 40px 0;
-          }
-          .invoice-table th {
-            background: #f8fafc;
-            padding: 15px;
-            text-align: left;
-            font-weight: 600;
-            font-size: 12px;
-            text-transform: uppercase;
-            color: #64748b;
-            border-bottom: 2px solid #e2e8f0;
-          }
-          .invoice-table td {
-            padding: 15px;
-            border-bottom: 1px solid #e2e8f0;
-          }
-          .total-section {
-            margin-top: 40px;
-            display: flex;
-            justify-content: flex-end;
-          }
-          .total-box {
-            width: 300px;
-            background: #f8fafc;
-            padding: 20px;
-            border-radius: 8px;
-          }
-          .total-row {
-            display: flex;
-            justify-content: space-between;
-            margin: 10px 0;
-          }
-          .total-row.final {
-            font-size: 20px;
-            font-weight: 700;
-            color: #2C3E50;
-            padding-top: 15px;
-            border-top: 2px solid #e2e8f0;
-            margin-top: 15px;
-          }
-          .notes {
-            margin-top: 40px;
-            padding: 20px;
-            background: #f8fafc;
-            border-radius: 8px;
-          }
-          .notes h3 {
-            font-size: 14px;
-            font-weight: 600;
-            color: #1e293b;
-            margin: 0 0 10px 0;
-          }
-          .notes p {
-            margin: 0;
-            color: #64748b;
-            font-size: 14px;
-          }
-          .footer {
-            margin-top: 60px;
-            padding-top: 30px;
-            border-top: 1px solid #e2e8f0;
-            text-align: center;
-            color: #64748b;
-            font-size: 12px;
-          }
-          .print-button {
-            position: fixed;
-            top: 20px;
-            right: 20px;
-            padding: 12px 24px;
-            background: #2C3E50;
-            color: white;
-            border: none;
-            border-radius: 8px;
-            cursor: pointer;
-            font-size: 14px;
-            font-weight: 600;
-            box-shadow: 0 2px 8px rgba(0,0,0,0.15);
-            z-index: 1000;
-          }
-          .print-button:hover {
-            background: #34495E;
-          }
-        </style>
-      </head>
-      <body>
-        <button class="print-button no-print" onclick="window.print()">Print / Save as PDF</button>
-        
-        <div class="header">
-          <div class="company-info">
-            <h1>${clinicName}</h1>
-            <p>Beauty & Aesthetic Clinic</p>
-          </div>
-          <div class="invoice-details">
-            <div class="invoice-number">${invoiceNumber}</div>
-            <p><strong>Issue Date:</strong> ${format(new Date(), 'dd MMM yyyy')}</p>
-            <p><strong>Treatment Date:</strong> ${format(new Date(treatment.date), 'dd MMM yyyy')}</p>
-          </div>
-        </div>
+    const patient = patients.find((p) => p.id === treatment.patient_id);
 
-        <div class="billing-section">
-          <div class="billing-box">
-            <h3>Bill To</h3>
-            <p><strong>${treatment.patient_name || 'Patient'}</strong></p>
-            ${patient?.contact ? `<p>${patient.contact}</p>` : ''}
-          </div>
-          ${treatment.practitioner_name ? `
-          <div class="billing-box">
-            <h3>Practitioner</h3>
-            <p><strong>${treatment.practitioner_name}</strong></p>
-          </div>
-          ` : ''}
-        </div>
-
-        <table class="invoice-table">
-          <thead>
-            <tr>
-              <th>Description</th>
-              <th style="text-align: center;">Date</th>
-              <th style="text-align: right;">Amount</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr>
-              <td>
-                <strong>${treatment.treatment_name}</strong>
-                ${treatment.notes ? `<br><span style="color: #64748b; font-size: 13px;">${treatment.notes}</span>` : ''}
-              </td>
-              <td style="text-align: center;">${format(new Date(treatment.date), 'dd MMM yyyy')}</td>
-              <td style="text-align: right;">£${treatment.price_paid.toFixed(2)}</td>
-            </tr>
-          </tbody>
-        </table>
-
-        <div class="total-section">
-          <div class="total-box">
-            <div class="total-row">
-              <span>Subtotal</span>
-              <span>£${treatment.price_paid.toFixed(2)}</span>
-            </div>
-            <div class="total-row final">
-              <span>Total Due</span>
-              <span>£${treatment.price_paid.toFixed(2)}</span>
-            </div>
-          </div>
-        </div>
-
-        ${treatment.payment_status === 'paid' ? `
-          <div class="notes" style="background: #dcfce7; border: 1px solid #86efac;">
-            <h3 style="color: #166534;">Payment Status</h3>
-            <p style="color: #166534;">This invoice has been paid in full. Thank you!</p>
-          </div>
-        ` : treatment.payment_status === 'partially_paid' ? `
-          <div class="notes" style="background: #fef3c7; border: 1px solid #fde047;">
-            <h3 style="color: #854d0e;">Payment Status</h3>
-            <p style="color: #854d0e;">Partial payment received: £${treatment.amount_paid.toFixed(2)}. Outstanding: £${(treatment.price_paid - treatment.amount_paid).toFixed(2)}</p>
-          </div>
-        ` : `
-          <div class="notes" style="background: #dbeafe; border: 1px solid #93c5fd;">
-            <h3 style="color: #1e40af;">Payment Status</h3>
-            <p style="color: #1e40af;">Payment pending. Please settle this invoice at your earliest convenience.</p>
-          </div>
-        `}
-
-        <div class="footer">
-          <p>Thank you for your business!</p>
-          <p>${clinicName}</p>
-        </div>
-
-        <script>
-          window.onload = function() {
-            setTimeout(function() {
-              window.print();
-            }, 500);
-          };
-        </script>
-      </body>
-      </html>
-    `;
-
-    // Open in new window
-    const printWindow = window.open('', '_blank');
-    printWindow.document.write(htmlContent);
-    printWindow.document.close();
-
-    // Upload HTML file and create invoice record
     try {
-      const blob = new Blob([htmlContent], { type: 'text/html' });
-      const file = new File([blob], `${invoiceNumber}.html`, { type: 'text/html' });
-      
-      const { file_url } = await api.integrations.Core.UploadFile({ file });
-      
-      // Create invoice record
-      await api.entities.Invoice.create({
+      // Create invoice record first (no PDF yet)
+      const createdInvoice = await api.entities.Invoice.create({
         invoice_number: invoiceNumber,
         treatment_entry_id: treatment.id,
         patient_name: treatment.patient_name || 'Patient',
@@ -754,14 +496,28 @@ export default function Records() {
         issue_date: format(new Date(), 'yyyy-MM-dd'),
         status: treatment.payment_status === 'paid' ? 'paid' : 'draft',
         notes: treatment.notes || '',
-        invoice_pdf_url: file_url
       });
-      
-      queryClient.invalidateQueries({ queryKey: ['invoices'] });
+
+      // Generate real PDF (clinic name, patient, price, bank details) via Edge Function and upload to Storage
+      const result = await invoicesAPI.generateInvoicePDF(createdInvoice.id);
+      await queryClient.invalidateQueries({ queryKey: ['invoices'] });
+
+      if (result?.pdfUrl) {
+        window.open(result.pdfUrl, '_blank');
+      }
+      toast({
+        title: 'Invoice PDF ready',
+        description: 'A proper PDF with your clinic name, patient, amount and bank details has been generated.',
+        className: 'bg-green-50 border-green-200',
+      });
     } catch (error) {
-      console.error('Failed to save invoice:', error);
+      console.error('Failed to generate invoice PDF:', error);
+      toast({
+        title: 'Failed to generate invoice',
+        description: error?.message || 'Could not create PDF. Please try again.',
+        variant: 'destructive',
+      });
     }
-    
     setGeneratingInvoice(null);
   };
 
@@ -1086,6 +842,21 @@ export default function Records() {
                       </td>
                       <td className="px-6 py-4">
                        <div className="flex gap-2">
+                         {(() => {
+                           const inv = invoices?.find((i) => i.treatment_entry_id === treatment.id);
+                           const pdfUrl = inv?.invoice_pdf_url;
+                           return pdfUrl ? (
+                             <a
+                               href={pdfUrl}
+                               target="_blank"
+                               rel="noopener noreferrer"
+                               className="p-2 hover:bg-green-50 rounded-lg text-gray-400 hover:text-green-600 transition-colors"
+                               title="Download PDF"
+                             >
+                               <Download className="w-4 h-4" />
+                             </a>
+                           ) : null;
+                         })()}
                          <button
                            type="button"
                            onClick={() => generateInvoice(treatment)}
