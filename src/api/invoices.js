@@ -56,6 +56,23 @@ export class InvoicesAPI {
     if (error) throw error;
     return data;
   }
+
+  /**
+   * Get a signed URL to download the invoice PDF (works with private Storage bucket).
+   * Use this instead of opening invoice_pdf_url directly to avoid 401 on download.
+   * @param {{ id: string, invoice_number: string }} invoice - invoice with id and invoice_number
+   * @param {number} expiresIn - seconds (default 1 hour)
+   * @returns {Promise<string>} signed URL to open in a new tab
+   */
+  async getInvoicePdfDownloadUrl(invoice, expiresIn = 3600) {
+    const path = `invoices/${invoice.id}-${String(invoice.invoice_number ?? '').replace(/\//g, '-')}.pdf`;
+    const { data, error } = await supabase.storage
+      .from('files')
+      .createSignedUrl(path, expiresIn);
+    if (error) throw new Error(error.message || 'Could not get download link');
+    if (!data?.signedUrl) throw new Error('No download link available');
+    return data.signedUrl;
+  }
 }
 
 export const invoicesAPI = new InvoicesAPI();

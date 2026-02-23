@@ -26,6 +26,7 @@ export default function Invoices() {
   const [editForm, setEditForm] = useState({});
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
   const [invoiceToDelete, setInvoiceToDelete] = useState(null);
+  const [downloadingPdf, setDownloadingPdf] = useState(null);
 
   const { data: invoices, isLoading: loadingInvoices } = useQuery({
     queryKey: ['invoices'],
@@ -193,6 +194,22 @@ export default function Invoices() {
 
   const canSendSms = (inv) => inv.patient_contact && !inv.patient_contact.includes('@');
   const canSendEmail = (inv) => inv.patient_contact?.includes('@');
+
+  const openPdfDownload = async (invoice) => {
+    if (!invoice?.invoice_pdf_url) return;
+    setDownloadingPdf(invoice.id);
+    try {
+      const url = await invoicesAPI.getInvoicePdfDownloadUrl(invoice);
+      window.open(url, '_blank');
+    } catch (err) {
+      toast({
+        title: 'Download failed',
+        description: err?.message || 'Could not open PDF',
+        variant: 'destructive',
+      });
+    }
+    setDownloadingPdf(null);
+  };
 
   const sendInvoiceEmail = async (invoice) => {
     if (!invoice.patient_contact || !invoice.patient_contact.includes('@')) {
@@ -390,11 +407,16 @@ ${clinicName}
                             </button>
                           ) : (
                             <button
-                              onClick={() => window.open(invoice.invoice_pdf_url, '_blank')}
-                              className="p-2 hover:bg-green-50 rounded-lg text-gray-400 hover:text-green-600 transition-colors"
+                              onClick={() => openPdfDownload(invoice)}
+                              disabled={downloadingPdf === invoice.id}
+                              className="p-2 hover:bg-green-50 rounded-lg text-gray-400 hover:text-green-600 transition-colors disabled:opacity-50"
                               title="View/Download PDF"
                             >
-                              <Download className="w-4 h-4" />
+                              {downloadingPdf === invoice.id ? (
+                                <Loader2 className="w-4 h-4 animate-spin" />
+                              ) : (
+                                <Download className="w-4 h-4" />
+                              )}
                             </button>
                           )}
                           <button

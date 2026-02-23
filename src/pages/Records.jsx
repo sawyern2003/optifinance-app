@@ -34,6 +34,7 @@ export default function Records() {
   const [partialPaymentAmount, setPartialPaymentAmount] = useState('');
   const [selectedTreatments, setSelectedTreatments] = useState([]);
   const [selectedExpenses, setSelectedExpenses] = useState([]);
+  const [downloadingPdfId, setDownloadingPdfId] = useState(null);
 
 
 
@@ -521,6 +522,22 @@ export default function Records() {
     setGeneratingInvoice(null);
   };
 
+  const openPdfDownload = async (invoice) => {
+    if (!invoice?.id) return;
+    setDownloadingPdfId(invoice.id);
+    try {
+      const url = await invoicesAPI.getInvoicePdfDownloadUrl(invoice);
+      window.open(url, '_blank');
+    } catch (err) {
+      toast({
+        title: 'Download failed',
+        description: err?.message || 'Could not open PDF',
+        variant: 'destructive',
+      });
+    }
+    setDownloadingPdfId(null);
+  };
+
   const getDateRange = () => {
     const now = new Date();
     switch(dateRangePreset) {
@@ -844,17 +861,21 @@ export default function Records() {
                        <div className="flex gap-2">
                          {(() => {
                            const inv = invoices?.find((i) => i.treatment_entry_id === treatment.id);
-                           const pdfUrl = inv?.invoice_pdf_url;
-                           return pdfUrl ? (
-                             <a
-                               href={pdfUrl}
-                               target="_blank"
-                               rel="noopener noreferrer"
-                               className="p-2 hover:bg-green-50 rounded-lg text-gray-400 hover:text-green-600 transition-colors"
+                           const hasPdf = inv?.invoice_pdf_url;
+                           return hasPdf ? (
+                             <button
+                               type="button"
+                               onClick={() => openPdfDownload(inv)}
+                               disabled={downloadingPdfId === inv.id}
+                               className="p-2 hover:bg-green-50 rounded-lg text-gray-400 hover:text-green-600 transition-colors disabled:opacity-50"
                                title="Download PDF"
                              >
-                               <Download className="w-4 h-4" />
-                             </a>
+                               {downloadingPdfId === inv.id ? (
+                                 <Loader2 className="w-4 h-4 animate-spin" />
+                               ) : (
+                                 <Download className="w-4 h-4" />
+                               )}
+                             </button>
                            ) : null;
                          })()}
                          <button
