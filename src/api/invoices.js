@@ -39,7 +39,16 @@ export class InvoicesAPI {
       body: { invoiceId }
     });
 
-    if (error) throw error;
+    if (error) {
+      let msg = error.message;
+      if (error.context && typeof error.context.json === 'function') {
+        try {
+          const body = await error.context.json();
+          if (body?.error) msg = body.error;
+        } catch (_) {}
+      }
+      throw new Error(msg);
+    }
     return data;
   }
 

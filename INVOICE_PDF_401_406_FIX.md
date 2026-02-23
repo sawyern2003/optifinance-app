@@ -1,6 +1,6 @@
-# Fix "Could not generate PDF" / 401 / 406
+# Fix "Could not generate PDF" / 400 / 401 / 406
 
-If you see **"Could not generate PDF"** or **"Failed to generate invoice"** with **"Edge Function returned a non-2xx status code"**, or browser errors **401** / **406** for `generate-invoice-pdf`:
+If you see **"Could not generate PDF"** or **"Failed to generate invoice"** with **"Edge Function returned a non-2xx status code"**, or browser errors **400** / **401** / **406** for `generate-invoice-pdf`:
 
 ---
 
@@ -32,6 +32,12 @@ supabase functions deploy send-payment-reminder --no-verify-jwt
 ```
 
 Then try **Generate invoice** / **Generate PDF** again (and sign in again if your session might be expired).
+
+---
+
+## If you get 400: run the Storage policies (required for upload)
+
+A **400** often means the function ran but **upload to Storage failed** because the `files` bucket has no INSERT/UPDATE policy. In **Supabase → SQL Editor**, run the contents of **`database/storage-files-invoices-policy.sql`** (it adds SELECT, INSERT, and UPDATE for the `files` bucket so the function can save PDFs and you can download them). Create the bucket **files** in Storage first if it doesn’t exist.
 
 ---
 
