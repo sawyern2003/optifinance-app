@@ -81,10 +81,13 @@ serve(async (req) => {
         throw new Error("Twilio credentials not configured");
       }
 
-      let smsMessage = `Invoice ${invoice.invoice_number} from ${clinicName}\n`;
-      smsMessage += `Amount: £${invoice.amount.toFixed(2)}\n`;
+      const treatmentName = invoice.treatment_name || "your treatment";
+      let smsMessage = `Thanks for visiting and having ${treatmentName}. `;
+      smsMessage += `Please find your invoice below. We hope to see you soon!\n\n`;
+      smsMessage += `Invoice ${invoice.invoice_number} from ${clinicName}\n`;
+      smsMessage += `Amount: £${Number(invoice.amount).toFixed(2)}\n`;
       if (invoice.invoice_pdf_url) {
-        smsMessage += `View invoice: ${invoice.invoice_pdf_url}`;
+        smsMessage += `View & download: ${invoice.invoice_pdf_url}`;
       }
 
       const twilioUrl = `https://api.twilio.com/2010-04-01/Accounts/${twilioAccountSid}/Messages.json`;
@@ -123,30 +126,56 @@ serve(async (req) => {
       const resendApiKey = Deno.env.get("RESEND_API_KEY");
       const fromEmail = Deno.env.get("FROM_EMAIL") || "invoices@resend.dev"; // Resend onboarding domain
 
+      const treatmentName = invoice.treatment_name || "your treatment";
       const emailHtml = `
 <p>Dear ${invoice.patient_name},</p>
-<p>Please find your invoice below.</p>
+<p>Thanks for visiting and having <strong>${treatmentName}</strong>. Please find your invoice attached.</p>
+<p>We hope to see you soon!</p>
 <p><strong>Invoice Number:</strong> ${invoice.invoice_number}<br/>
-<strong>Amount:</strong> £${Number(invoice.amount).toFixed(2)}<br/>
-<strong>Treatment:</strong> ${invoice.treatment_name || "N/A"}</p>
+<strong>Amount:</strong> £${Number(invoice.amount).toFixed(2)}</p>
 ${invoice.invoice_pdf_url ? `<p><a href="${invoice.invoice_pdf_url}">View and download your PDF invoice</a></p>` : ""}
-<p>Thank you for your business!</p>
 <p>Best regards,<br/>${clinicName}</p>
       `.trim();
 
+      const attachments: { filename: string; content: string }[] = [];
+      if (invoice.invoice_pdf_url) {
+        try {
+          const pdfRes = await fetch(invoice.invoice_pdf_url);
+          if (pdfRes.ok) {
+            const pdfBuf = await pdfRes.arrayBuffer();
+            const bytes = new Uint8Array(pdfBuf);
+            let binary = "";
+            const chunk = 8192;
+            for (let i = 0; i < bytes.length; i += chunk) {
+              const slice = bytes.subarray(i, i + chunk);
+              binary += String.fromCharCode.apply(null, Array.from(slice));
+            }
+            attachments.push({
+              filename: `Invoice-${String(invoice.invoice_number).replace(/\//g, "-")}.pdf`,
+              content: btoa(binary),
+            });
+          }
+        } catch (_) {
+          // Continue without attachment if fetch fails
+        }
+      }
+
       if (resendApiKey) {
+        const payload: Record<string, unknown> = {
+          from: fromEmail,
+          to: patientEmail,
+          subject: `Your invoice from ${clinicName} – ${invoice.invoice_number}`,
+          html: emailHtml,
+        };
+        if (attachments.length > 0) payload.attachments = attachments;
+
         const resendRes = await fetch("https://api.resend.com/emails", {
           method: "POST",
           headers: {
             "Authorization": `Bearer ${resendApiKey}`,
             "Content-Type": "application/json",
           },
-          body: JSON.stringify({
-            from: fromEmail,
-            to: patientEmail,
-            subject: `Invoice ${invoice.invoice_number} from ${clinicName}`,
-            html: emailHtml,
-          }),
+          body: JSON.stringify(payload),
         });
         if (!resendRes.ok) {
           const errText = await resendRes.text();

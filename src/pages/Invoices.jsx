@@ -20,6 +20,7 @@ export default function Invoices() {
   const [sendingEmail, setSendingEmail] = useState(null);
   const [sendingReminder, setSendingReminder] = useState(null);
   const [sendingInvoice, setSendingInvoice] = useState(null);
+  const [generatingPdf, setGeneratingPdf] = useState(null);
   const [editDialogOpen, setEditDialogOpen] = useState(false);
   const [editingInvoice, setEditingInvoice] = useState(null);
   const [editForm, setEditForm] = useState({});
@@ -143,6 +144,26 @@ export default function Invoices() {
     setSendingReminder(null);
   };
 
+  const generatePdf = async (invoice) => {
+    setGeneratingPdf(invoice.id);
+    try {
+      await invoicesAPI.generateInvoicePDF(invoice.id);
+      await queryClient.invalidateQueries({ queryKey: ['invoices'] });
+      toast({
+        title: "PDF ready",
+        description: "Invoice PDF generated. You can download or send it.",
+        className: "bg-green-50 border-green-200"
+      });
+    } catch (error) {
+      toast({
+        title: "Could not generate PDF",
+        description: error?.message || String(error),
+        variant: "destructive"
+      });
+    }
+    setGeneratingPdf(null);
+  };
+
   const sendInvoice = async (invoice, sendVia = 'both') => {
     setSendingInvoice(invoice.id);
     
@@ -150,16 +171,15 @@ export default function Invoices() {
       // First generate PDF if not exists
       if (!invoice.invoice_pdf_url) {
         await invoicesAPI.generateInvoicePDF(invoice.id);
-        // Refresh invoice data
         await queryClient.invalidateQueries({ queryKey: ['invoices'] });
       }
 
-      // Then send invoice
+      // Then send invoice (friendly message + PDF attached to email)
       await invoicesAPI.sendInvoice(invoice.id, sendVia);
       
       toast({
         title: "Invoice sent",
-        description: `Invoice sent via ${sendVia === 'both' ? 'SMS and email' : sendVia}`,
+        description: sendVia === 'both' ? 'Sent via SMS and email (thanks for visiting, find your invoice attached).' : `Sent via ${sendVia}.`,
         className: "bg-green-50 border-green-200"
       });
 
@@ -169,7 +189,7 @@ export default function Invoices() {
       toast({
         title: "Failed to send",
         description: error.message || "Could not send invoice",
-        className: "bg-red-50 border-red-200"
+        variant: "destructive"
       });
     }
     
@@ -357,7 +377,20 @@ ${clinicName}
                           >
                             <Pencil className="w-4 h-4" />
                           </button>
-                          {invoice.invoice_pdf_url && (
+                          {!invoice.invoice_pdf_url ? (
+                            <button
+                              onClick={() => generatePdf(invoice)}
+                              disabled={generatingPdf === invoice.id}
+                              className="p-2 hover:bg-amber-50 rounded-lg text-gray-400 hover:text-amber-600 transition-colors disabled:opacity-50"
+                              title="Generate PDF"
+                            >
+                              {generatingPdf === invoice.id ? (
+                                <Loader2 className="w-4 h-4 animate-spin" />
+                              ) : (
+                                <FileText className="w-4 h-4" />
+                              )}
+                            </button>
+                          ) : (
                             <button
                               onClick={() => window.open(invoice.invoice_pdf_url, '_blank')}
                               className="p-2 hover:bg-green-50 rounded-lg text-gray-400 hover:text-green-600 transition-colors"
