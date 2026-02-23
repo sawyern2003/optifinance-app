@@ -327,7 +327,7 @@ export default function QuickAdd() {
 
       return createdTreatment;
     },
-    onSuccess: () => {
+    onSuccess: (_data, variables) => {
       queryClient.invalidateQueries({ queryKey: ['treatments'] });
       queryClient.invalidateQueries({ queryKey: ['patients'] });
       queryClient.invalidateQueries({ queryKey: ['practitioners'] });
@@ -347,6 +347,22 @@ export default function QuickAdd() {
       setNewPatientName(null);
       setNewPractitionerName(null);
       setSendInvoiceSMS(false);
+
+      if (variables?.addAnother !== true) {
+        toast({
+          title: "Treatment saved",
+          description: "Successfully added treatment",
+          className: "bg-green-50 border-green-200"
+        });
+        setTimeout(() => navigate(createPageUrl("Dashboard")), 800);
+      }
+    },
+    onError: (err) => {
+      toast({
+        title: "Could not save treatment",
+        description: err?.message || String(err),
+        variant: "destructive"
+      });
     },
   });
 
@@ -360,9 +376,8 @@ export default function QuickAdd() {
       recurrence_frequency: data.recurrence_frequency,
       is_active: data.is_recurring ? true : undefined,
       last_generated_date: data.is_recurring ? data.date : undefined,
-      is_auto_generated: data.is_auto_generated || false,
     }),
-    onSuccess: () => {
+    onSuccess: (_data, variables) => {
       queryClient.invalidateQueries({ queryKey: ['expenses'] });
       setExpenseForm({
         date: format(new Date(), 'yyyy-MM-dd'),
@@ -371,6 +386,21 @@ export default function QuickAdd() {
         notes: '',
         is_recurring: false,
         recurrence_frequency: 'monthly'
+      });
+      if (variables?.addAnother !== true) {
+        toast({
+          title: "Expense saved",
+          description: "Successfully added expense",
+          className: "bg-green-50 border-green-200"
+        });
+        setTimeout(() => navigate(createPageUrl("Dashboard")), 800);
+      }
+    },
+    onError: (err) => {
+      toast({
+        title: "Could not save expense",
+        description: err?.message || String(err),
+        variant: "destructive"
       });
     },
   });
@@ -522,20 +552,12 @@ export default function QuickAdd() {
     const formData = {
       ...treatmentForm,
       price_paid: treatmentForm.price_paid || selectedTreatment?.default_price || 0,
-      sendSMS: sendInvoiceSMS
+      sendSMS: sendInvoiceSMS,
+      addAnother
     };
 
     createTreatmentMutation.mutate(formData);
-
-    if (!addAnother) {
-      toast({
-        title: "Treatment saved",
-        description: "Successfully added treatment",
-        className: "bg-green-50 border-green-200"
-      });
-      setTimeout(() => navigate(createPageUrl("Dashboard")), 1000);
-    }
-    };
+  };
 
   const handleExpenseSubmit = (e, addAnother = false) => {
     e.preventDefault();
@@ -548,19 +570,9 @@ export default function QuickAdd() {
       recurrence_frequency: expenseForm.is_recurring ? expenseForm.recurrence_frequency : undefined,
       is_active: expenseForm.is_recurring ? true : undefined,
       last_generated_date: expenseForm.is_recurring ? expenseForm.date : undefined,
-      is_auto_generated: false
+      addAnother
     };
-    
     createExpenseMutation.mutate(expenseData);
-    
-    if (!addAnother) {
-      toast({
-        title: "Expense saved",
-        description: "Successfully added expense",
-        className: "bg-green-50 border-green-200"
-      });
-      setTimeout(() => navigate(createPageUrl("Dashboard")), 1000);
-    }
   };
 
   const handleAISubmit = async (e) => {
