@@ -60,18 +60,26 @@ serve(async (req) => {
       throw new Error("Invoice not found");
     }
 
-    // Get user profile
+    // Get user profile (clinic + bank details for message)
     const { data: profile, error: profileError } = await supabaseClient
       .from("profiles")
-      .select("clinic_name")
+      .select("clinic_name, bank_name, account_number, sort_code")
       .eq("id", user.id)
       .single();
 
     const clinicName = profile?.clinic_name || "Our Clinic";
+    const bankName = profile?.bank_name?.trim() || "";
+    const sortCode = profile?.sort_code?.trim() || "";
+    const accountNumber = profile?.account_number?.trim() || "";
+    const bankLines: string[] = [];
+    if (bankName) bankLines.push(`Bank: ${bankName}`);
+    if (sortCode) bankLines.push(`Sort code: ${sortCode}`);
+    if (accountNumber) bankLines.push(`Account: ${accountNumber}`);
+    const bankDetailsText = bankLines.length > 0 ? bankLines.join(". ") : "See invoice for payment details.";
 
     const results: any = {};
 
-    // Send via SMS
+    // Send via SMS (Twilio)
     if (sendVia === "sms" || sendVia === "both") {
       if (!invoice.patient_contact) {
         throw new Error("Patient phone number not found");
@@ -82,16 +90,15 @@ serve(async (req) => {
       const twilioPhoneNumber = Deno.env.get("TWILIO_PHONE_NUMBER");
 
       if (!twilioAccountSid || !twilioAuthToken || !twilioPhoneNumber) {
-        throw new Error("Twilio credentials not configured");
+        throw new Error("Twilio credentials not configured. Add TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN, TWILIO_PHONE_NUMBER in Supabase Edge Function secrets.");
       }
 
+      const patientName = invoice.patient_name || "there";
       const treatmentName = invoice.treatment_name || "your treatment";
-      let smsMessage = `Thanks for visiting and having ${treatmentName}. `;
-      smsMessage += `Please find your invoice below. We hope to see you soon!\n\n`;
-      smsMessage += `Invoice ${invoice.invoice_number} from ${clinicName}\n`;
-      smsMessage += `Amount: £${Number(invoice.amount).toFixed(2)}\n`;
+      const amountStr = `£${Number(invoice.amount).toFixed(2)}`;
+      let smsMessage = `Hi ${patientName}, thank you for visiting ${clinicName}, for ${treatmentName}. Amount due: ${amountStr}. ${bankDetailsText}. Please find an invoice attached. We hope to see you again soon.`;
       if (invoice.invoice_pdf_url) {
-        smsMessage += `View & download: ${invoice.invoice_pdf_url}`;
+        smsMessage += ` ${invoice.invoice_pdf_url}`;
       }
 
       const twilioUrl = `https://api.twilio.com/2010-04-01/Accounts/${twilioAccountSid}/Messages.json`;
@@ -117,27 +124,32 @@ serve(async (req) => {
       results.sms = { success: true };
     }
 
-    // Send via Email (Resend API - optional: set RESEND_API_KEY and FROM_EMAIL in secrets)
+    // Send via Email (Resend API – set RESEND_API_KEY and optional FROM_EMAIL in Supabase secrets)
     if (sendVia === "email" || sendVia === "both") {
       const patientEmail = invoice.patient_contact?.includes("@")
         ? invoice.patient_contact
         : null;
 
       if (!patientEmail) {
-        throw new Error("Patient email address not found");
+        throw new Error("Patient email address not found. Use Edit on the invoice to add the patient's email.");
       }
 
       const resendApiKey = Deno.env.get("RESEND_API_KEY");
-      const fromEmail = Deno.env.get("FROM_EMAIL") || "invoices@resend.dev"; // Resend onboarding domain
+      const fromEmail = Deno.env.get("FROM_EMAIL") || "invoices@resend.dev";
 
+      const patientName = invoice.patient_name || "there";
       const treatmentName = invoice.treatment_name || "your treatment";
+      const amountStr = `£${Number(invoice.amount).toFixed(2)}`;
+      const bankHtml =
+        bankLines.length > 0
+          ? `<p><strong>Bank details:</strong><br/>${bankLines.join("<br/>")}</p>`
+          : "";
       const emailHtml = `
-<p>Dear ${invoice.patient_name},</p>
-<p>Thanks for visiting and having <strong>${treatmentName}</strong>. Please find your invoice attached.</p>
-<p>We hope to see you soon!</p>
-<p><strong>Invoice Number:</strong> ${invoice.invoice_number}<br/>
-<strong>Amount:</strong> £${Number(invoice.amount).toFixed(2)}</p>
-${invoice.invoice_pdf_url ? `<p><a href="${invoice.invoice_pdf_url}">View and download your PDF invoice</a></p>` : ""}
+<p>Hi ${patientName},</p>
+<p>Thank you for visiting ${clinicName}, for <strong>${treatmentName}</strong>. Amount due: ${amountStr}.</p>
+${bankHtml}
+<p>Please find your invoice attached. We hope to see you again soon.</p>
+<p><strong>Invoice:</strong> ${invoice.invoice_number}${invoice.invoice_pdf_url ? ` – <a href="${invoice.invoice_pdf_url}">View / download PDF</a>` : ""}</p>
 <p>Best regards,<br/>${clinicName}</p>
       `.trim();
 

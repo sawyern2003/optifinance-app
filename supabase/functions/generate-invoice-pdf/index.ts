@@ -1,6 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-import { PDFDocument, StandardFonts } from "https://esm.sh/pdf-lib@1.17.1";
+import { PDFDocument, StandardFonts, rgb } from "https://esm.sh/pdf-lib@1.17.1";
 
 const corsHeaders: Record<string, string> = {
   "Access-Control-Allow-Origin": "*",
@@ -87,10 +87,10 @@ serve(async (req) => {
       .single();
 
     const clinicName = profile?.clinic_name || "Our Clinic";
-    const bankDetails =
-      profile?.account_number && profile?.sort_code
-        ? `${profile.bank_name || ""} ${profile.sort_code} ${profile.account_number}`.trim()
-        : null;
+    const bankName = profile?.bank_name?.trim() || null;
+    const sortCode = profile?.sort_code?.trim() || null;
+    const accountNumber = profile?.account_number?.trim() || null;
+    const hasBankDetails = bankName || sortCode || accountNumber;
     const logoUrl = (profile as { logo_url?: string })?.logo_url;
 
     const invoiceDate = new Date(invoice.issue_date).toLocaleDateString("en-GB");
@@ -99,9 +99,17 @@ serve(async (req) => {
       : "";
     const amountStr = `£${Number(invoice.amount).toFixed(2)}`;
 
-    // Create real PDF with pdf-lib
+    // ========== INVOICE LAYOUT (edit this file to change format) ==========
+    // File: supabase/functions/generate-invoice-pdf/index.ts
+    // - margin (50): left/right and top spacing
+    // - lineHeight (16), smallLine (12): font sizes for body text
+    // - Logo: maxH 48, scale; Header: clinic 22pt, "INVOICE" 18pt
+    // - Table columns: Description at margin, Date at 320, Amount at 480 (x in pt)
+    // - footerY (50): vertical position of footer from bottom
+    // - pdf-lib: page.drawText(text, { x, y, font, size }), page.drawLine(...)
+    // =====================================================================
     const pdfDoc = await PDFDocument.create();
-    const page = pdfDoc.addPage([595, 842]); // A4
+    const page = pdfDoc.addPage([595, 842]); // A4 (595 x 842 pt)
     const font = await pdfDoc.embedFont(StandardFonts.Helvetica);
     const fontBold = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
 
@@ -110,6 +118,9 @@ serve(async (req) => {
     let y = page.getHeight() - margin;
     const lineHeight = 16;
     const smallLine = 12;
+    const brand = rgb(0.16, 0.24, 0.31); // #2A3D4F
+    const subtle = rgb(0.95, 0.96, 0.98);
+    const muted = rgb(0.38, 0.43, 0.49);
 
     const next = (dy: number = lineHeight) => {
       y -= dy;
@@ -142,14 +153,26 @@ serve(async (req) => {
     y = headerStartY;
 
     // Header: clinic name and INVOICE
-    page.drawText(clinicName, { x: margin, y, font: fontBold, size: 22 });
-    next(28);
-    page.drawText("INVOICE", { x: margin, y, font: fontBold, size: 18 });
-    next(24);
+    page.drawText(clinicName, { x: margin, y, font: fontBold, size: 22, color: brand });
+    next(30);
+    page.drawRectangle({
+      x: margin,
+      y: y - 4,
+      width: pageWidth - margin * 2,
+      height: 32,
+      color: subtle,
+    });
+    page.drawText("INVOICE", { x: margin + 10, y: y + 7, font: fontBold, size: 16, color: brand });
+    page.drawText(String(invoice.invoice_number), {
+      x: pageWidth - margin - 150,
+      y: y + 7,
+      font: fontBold,
+      size: 12,
+      color: muted,
+    });
+    next(42);
 
     // Details
-    drawText(page, `Invoice Number: ${invoice.invoice_number}`, margin, y, font, smallLine);
-    next();
     drawText(page, `Issue Date: ${invoiceDate}`, margin, y, font, smallLine);
     next();
     drawText(page, `Patient: ${invoice.patient_name}`, margin, y, font, smallLine);
@@ -162,32 +185,64 @@ serve(async (req) => {
       drawText(page, `Practitioner: ${invoice.practitioner_name}`, margin, y, font, smallLine);
       next();
     }
-    next(12);
+    next(16);
 
     // Table header
-    drawText(page, "Description", margin, y, fontBold, smallLine);
-    drawText(page, "Date", 320, y, fontBold, smallLine);
-    drawText(page, "Amount", 480, y, fontBold, smallLine);
-    next(14);
-    page.drawLine({ start: { x: margin, y }, end: { x: page.getWidth() - margin, y } });
-    next(8);
+    page.drawRectangle({
+      x: margin,
+      y: y - 6,
+      width: pageWidth - margin * 2,
+      height: 24,
+      color: subtle,
+    });
+    drawText(page, "Description", margin + 8, y + 2, fontBold, 11);
+    drawText(page, "Date", 330, y + 2, fontBold, 11);
+    drawText(page, "Amount", 475, y + 2, fontBold, 11);
+    next(26);
 
     // Table row
-    drawText(page, invoice.treatment_name || "Treatment", margin, y, font, smallLine);
-    drawText(page, treatmentDate, 320, y, font, smallLine);
-    drawText(page, amountStr, 480, y, font, smallLine);
-    next(20);
+    drawText(page, invoice.treatment_name || "Treatment", margin + 8, y, font, smallLine);
+    drawText(page, treatmentDate, 330, y, font, smallLine);
+    drawText(page, amountStr, 475, y, fontBold, smallLine);
+    next(14);
+    page.drawLine({ start: { x: margin, y }, end: { x: page.getWidth() - margin, y }, color: subtle });
+    next(14);
 
     // Total
-    drawText(page, "Total", margin, y, fontBold, 14);
-    drawText(page, amountStr, 480, y, fontBold, 14);
-    next(24);
+    page.drawRectangle({
+      x: pageWidth - margin - 180,
+      y: y - 8,
+      width: 180,
+      height: 30,
+      color: subtle,
+    });
+    drawText(page, "Total", pageWidth - margin - 170, y + 2, fontBold, 13);
+    drawText(page, amountStr, pageWidth - margin - 68, y + 2, fontBold, 13);
+    next(40);
 
-    if (bankDetails) {
-      page.drawText("Bank transfer details:", { x: margin, y, font: fontBold, size: smallLine });
-      next();
-      page.drawText(bankDetails, { x: margin, y, font, size: smallLine });
-      next(20);
+    if (hasBankDetails) {
+      page.drawRectangle({
+        x: margin,
+        y: y - 8,
+        width: pageWidth - margin * 2,
+        height: 76,
+        color: subtle,
+      });
+      page.drawText("Bank transfer details", { x: margin + 10, y: y + 52, font: fontBold, size: 12, color: brand });
+      y += 34;
+      if (bankName) {
+        drawText(page, `Bank Name: ${bankName}`, margin + 10, y, font, smallLine);
+        next();
+      }
+      if (accountNumber) {
+        drawText(page, `Account Number: ${accountNumber}`, margin + 10, y, font, smallLine);
+        next();
+      }
+      if (sortCode) {
+        drawText(page, `Sort Code: ${sortCode}`, margin + 10, y, font, smallLine);
+        next();
+      }
+      next(22);
     }
 
     if (invoice.notes) {
