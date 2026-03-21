@@ -392,20 +392,19 @@ ${clinicName}
                           >
                             <Pencil className="w-4 h-4" />
                           </button>
-                          {!invoice.invoice_pdf_url ? (
-                            <button
-                              onClick={() => generatePdf(invoice)}
-                              disabled={generatingPdf === invoice.id}
-                              className="p-2 hover:bg-amber-50 rounded-lg text-gray-400 hover:text-amber-600 transition-colors disabled:opacity-50"
-                              title="Generate PDF"
-                            >
-                              {generatingPdf === invoice.id ? (
-                                <Loader2 className="w-4 h-4 animate-spin" />
-                              ) : (
-                                <FileText className="w-4 h-4" />
-                              )}
-                            </button>
-                          ) : (
+                          <button
+                            onClick={() => generatePdf(invoice)}
+                            disabled={generatingPdf === invoice.id}
+                            className="p-2 hover:bg-amber-50 rounded-lg text-gray-400 hover:text-amber-600 transition-colors disabled:opacity-50"
+                            title={invoice.invoice_pdf_url ? "Regenerate PDF with latest layout" : "Generate PDF"}
+                          >
+                            {generatingPdf === invoice.id ? (
+                              <Loader2 className="w-4 h-4 animate-spin" />
+                            ) : (
+                              <FileText className="w-4 h-4" />
+                            )}
+                          </button>
+                          {invoice.invoice_pdf_url && (
                             <button
                               onClick={() => openPdfDownload(invoice)}
                               disabled={downloadingPdf === invoice.id}
