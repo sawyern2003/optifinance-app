@@ -8,22 +8,17 @@ const corsHeaders: Record<string, string> = {
   "Access-Control-Allow-Methods": "POST, OPTIONS",
 };
 
-function drawText(
-  page: { drawText: (text: string, opts: { x: number; y: number; font: any; size: number }) => void },
-  text: string,
-  x: number,
-  y: number,
-  font: any,
-  size: number
-) {
-  page.drawText(text, { x, y, font, size });
-}
-
 const json = (body: object, status: number) =>
   new Response(JSON.stringify(body), {
     status,
     headers: { ...corsHeaders, "Content-Type": "application/json" },
   });
+
+const splitAddressLines = (value?: string | null) =>
+  String(value || "")
+    .split(/\r?\n|,/)
+    .map((s) => s.trim())
+    .filter(Boolean);
 
 serve(async (req) => {
   if (req.method === "OPTIONS") {
@@ -82,11 +77,12 @@ serve(async (req) => {
 
     const { data: profile } = await supabaseClient
       .from("profiles")
-      .select("clinic_name, bank_name, account_number, sort_code, logo_url")
+      .select("clinic_name, business_address, bank_name, account_number, sort_code, logo_url")
       .eq("id", user.id)
       .single();
 
     const clinicName = profile?.clinic_name || "Our Clinic";
+    const clinicAddress = profile?.business_address?.trim() || "";
     const bankName = profile?.bank_name?.trim() || null;
     const sortCode = profile?.sort_code?.trim() || null;
     const accountNumber = profile?.account_number?.trim() || null;
@@ -98,37 +94,53 @@ serve(async (req) => {
       ? new Date(invoice.treatment_date).toLocaleDateString("en-GB")
       : "";
     const amountStr = `£${Number(invoice.amount).toFixed(2)}`;
+    const dueDate = new Date(invoice.issue_date);
+    dueDate.setDate(dueDate.getDate() + 30);
+    const dueDateStr = dueDate.toLocaleDateString("en-GB");
 
-    // ========== INVOICE LAYOUT (edit this file to change format) ==========
-    // File: supabase/functions/generate-invoice-pdf/index.ts
-    // - margin (50): left/right and top spacing
-    // - lineHeight (16), smallLine (12): font sizes for body text
-    // - Logo: maxH 48, scale; Header: clinic 22pt, "INVOICE" 18pt
-    // - Table columns: Description at margin, Date at 320, Amount at 480 (x in pt)
-    // - footerY (50): vertical position of footer from bottom
-    // - pdf-lib: page.drawText(text, { x, y, font, size }), page.drawLine(...)
-    // =====================================================================
+    // Fetch patient address from patient catalogue via treatment entry
+    let patientAddress = "";
+    if (invoice.treatment_entry_id) {
+      const { data: treatmentEntry } = await supabaseClient
+        .from("treatment_entries")
+        .select("patient_id")
+        .eq("id", invoice.treatment_entry_id)
+        .eq("user_id", user.id)
+        .maybeSingle();
+
+      if (treatmentEntry?.patient_id) {
+        const { data: patient } = await supabaseClient
+          .from("patients")
+          .select("address")
+          .eq("id", treatmentEntry.patient_id)
+          .eq("user_id", user.id)
+          .maybeSingle();
+        patientAddress = patient?.address?.trim() || "";
+      }
+    }
+
     const pdfDoc = await PDFDocument.create();
-    const page = pdfDoc.addPage([595, 842]); // A4 (595 x 842 pt)
+    const page = pdfDoc.addPage([595, 842]); // A4
     const font = await pdfDoc.embedFont(StandardFonts.Helvetica);
     const fontBold = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
 
-    const margin = 50;
+    const margin = 32;
     const pageWidth = page.getWidth();
-    let y = page.getHeight() - margin;
-    const lineHeight = 16;
-    const smallLine = 12;
-    const brand = rgb(0.16, 0.24, 0.31); // #2A3D4F
-    const subtle = rgb(0.95, 0.96, 0.98);
-    const muted = rgb(0.38, 0.43, 0.49);
+    const pageHeight = page.getHeight();
+    const contentWidth = pageWidth - margin * 2;
+    let y = pageHeight - margin;
+    const brand = rgb(0.10, 0.14, 0.28);
+    const textColor = rgb(0.17, 0.19, 0.24);
+    const muted = rgb(0.45, 0.48, 0.55);
+    const line = rgb(0.88, 0.90, 0.94);
+    const softBlue = rgb(0.90, 0.95, 1.0);
 
-    const next = (dy: number = lineHeight) => {
-      y -= dy;
-      return y;
+    const step = (amount: number) => {
+      y -= amount;
     };
 
-    // Optional logo (top-left, max height 48pt)
-    let headerStartY = y;
+    // Top section
+    let logoDrawnHeight = 0;
     if (logoUrl && logoUrl.startsWith("http")) {
       try {
         const logoRes = await fetch(logoUrl);
@@ -136,139 +148,135 @@ serve(async (req) => {
           const logoBuf = new Uint8Array(await logoRes.arrayBuffer());
           const contentType = (logoRes.headers.get("content-type") || "").toLowerCase();
           const isPng = contentType.includes("png") || (logoBuf[0] === 0x89 && logoBuf[1] === 0x50);
-          const image = isPng
-            ? await pdfDoc.embedPng(logoBuf)
-            : await pdfDoc.embedJpg(logoBuf);
-          const maxH = 48;
-          const scale = Math.min(maxH / image.height, 200 / image.width);
+          const image = isPng ? await pdfDoc.embedPng(logoBuf) : await pdfDoc.embedJpg(logoBuf);
+          const maxH = 44;
+          const scale = Math.min(maxH / image.height, 180 / image.width);
           const w = image.width * scale;
           const h = image.height * scale;
           page.drawImage(image, { x: margin, y: y - h, width: w, height: h });
-          headerStartY = y - h - 8;
+          logoDrawnHeight = h;
         }
       } catch (_) {
-        // Skip logo on fetch/embed error
+        // no-op if logo fails
       }
     }
-    y = headerStartY;
 
-    // Header: clinic name and INVOICE
-    page.drawText(clinicName, { x: margin, y, font: fontBold, size: 22, color: brand });
-    next(30);
-    page.drawRectangle({
-      x: margin,
-      y: y - 4,
-      width: pageWidth - margin * 2,
-      height: 32,
-      color: subtle,
-    });
-    page.drawText("INVOICE", { x: margin + 10, y: y + 7, font: fontBold, size: 16, color: brand });
-    page.drawText(String(invoice.invoice_number), {
-      x: pageWidth - margin - 150,
-      y: y + 7,
+    const headerLeftTop = y;
+    const businessNameY = logoDrawnHeight > 0 ? y - logoDrawnHeight - 8 : y - 2;
+    page.drawText(clinicName.toUpperCase(), { x: margin, y: businessNameY, font: fontBold, size: 14, color: brand });
+    let clinicAddressY = businessNameY - 16;
+    for (const lineItem of splitAddressLines(clinicAddress).slice(0, 4)) {
+      page.drawText(lineItem, { x: margin, y: clinicAddressY, font, size: 10.5, color: textColor });
+      clinicAddressY -= 13;
+    }
+
+    const rightColX = pageWidth - margin - 150;
+    page.drawText(`Invoice #${invoice.invoice_number}`, {
+      x: rightColX,
+      y: headerLeftTop - 4,
       font: fontBold,
-      size: 12,
-      color: muted,
+      size: 13,
+      color: brand,
     });
-    next(42);
+    page.drawText(`Issue Date: ${invoiceDate}`, {
+      x: rightColX,
+      y: headerLeftTop - 26,
+      font,
+      size: 11,
+      color: textColor,
+    });
+    page.drawText(`Due Date: ${dueDateStr}`, {
+      x: rightColX,
+      y: headerLeftTop - 42,
+      font,
+      size: 11,
+      color: textColor,
+    });
 
-    // Details
-    drawText(page, `Issue Date: ${invoiceDate}`, margin, y, font, smallLine);
-    next();
-    drawText(page, `Patient: ${invoice.patient_name}`, margin, y, font, smallLine);
-    next();
+    y = Math.min(clinicAddressY + 10, headerLeftTop - 42);
+    step(20);
+    page.drawLine({ start: { x: margin, y }, end: { x: margin + contentWidth, y }, color: line, thickness: 1 });
+    step(22);
+
+    // Customer info block
+    page.drawText("Customer Info:", { x: margin, y, font: fontBold, size: 11, color: muted });
+    step(18);
+    page.drawText(invoice.patient_name || "-", { x: margin, y, font: fontBold, size: 12, color: textColor });
+    step(16);
     if (invoice.patient_contact) {
-      drawText(page, `Contact: ${invoice.patient_contact}`, margin, y, font, smallLine);
-      next();
+      page.drawText(invoice.patient_contact, { x: margin, y, font, size: 11, color: textColor });
+      step(16);
+    }
+    for (const lineItem of splitAddressLines(patientAddress).slice(0, 3)) {
+      page.drawText(lineItem, { x: margin, y, font, size: 10.5, color: textColor });
+      step(14);
     }
     if (invoice.practitioner_name) {
-      drawText(page, `Practitioner: ${invoice.practitioner_name}`, margin, y, font, smallLine);
-      next();
+      page.drawText(`Practitioner: ${invoice.practitioner_name}`, { x: margin, y, font, size: 11, color: textColor });
+      step(16);
     }
-    next(16);
+    step(10);
 
-    // Table header
-    page.drawRectangle({
-      x: margin,
-      y: y - 6,
-      width: pageWidth - margin * 2,
-      height: 24,
-      color: subtle,
-    });
-    drawText(page, "Description", margin + 8, y + 2, fontBold, 11);
-    drawText(page, "Date", 330, y + 2, fontBold, 11);
-    drawText(page, "Amount", 475, y + 2, fontBold, 11);
-    next(26);
+    // Service table header
+    const rowH = 34;
+    page.drawRectangle({ x: margin, y: y - rowH + 10, width: contentWidth, height: rowH, color: softBlue });
+    page.drawText("Product or Service", { x: margin + 8, y: y - 8, font: fontBold, size: 11, color: brand });
+    page.drawText("Date", { x: margin + 320, y: y - 8, font: fontBold, size: 11, color: brand });
+    page.drawText("Line Total", { x: margin + contentWidth - 74, y: y - 8, font: fontBold, size: 11, color: brand });
+    step(42);
 
-    // Table row
-    drawText(page, invoice.treatment_name || "Treatment", margin + 8, y, font, smallLine);
-    drawText(page, treatmentDate, 330, y, font, smallLine);
-    drawText(page, amountStr, 475, y, fontBold, smallLine);
-    next(14);
-    page.drawLine({ start: { x: margin, y }, end: { x: page.getWidth() - margin, y }, color: subtle });
-    next(14);
+    // Service row
+    page.drawText(invoice.treatment_name || "Treatment", { x: margin + 8, y, font: fontBold, size: 12, color: textColor });
+    page.drawText(treatmentDate || "-", { x: margin + 320, y, font, size: 11, color: textColor });
+    page.drawText(amountStr, { x: margin + contentWidth - 58, y, font: fontBold, size: 12, color: textColor });
+    step(22);
+    page.drawLine({ start: { x: margin, y }, end: { x: margin + contentWidth, y }, color: line, thickness: 1 });
+    step(28);
 
-    // Total
-    page.drawRectangle({
-      x: pageWidth - margin - 180,
-      y: y - 8,
-      width: 180,
-      height: 30,
-      color: subtle,
-    });
-    drawText(page, "Total", pageWidth - margin - 170, y + 2, fontBold, 13);
-    drawText(page, amountStr, pageWidth - margin - 68, y + 2, fontBold, 13);
-    next(40);
+    // Totals block (right aligned)
+    const totalsXLabel = margin + contentWidth - 210;
+    const totalsXValue = margin + contentWidth - 20;
+    page.drawText("Subtotal", { x: totalsXLabel, y, font: fontBold, size: 11, color: textColor });
+    page.drawText(amountStr, { x: totalsXValue - 34, y, font: fontBold, size: 11, color: textColor });
+    step(18);
+    page.drawText("Invoice Total", { x: totalsXLabel, y, font: fontBold, size: 11, color: textColor });
+    page.drawText(amountStr, { x: totalsXValue - 34, y, font: fontBold, size: 11, color: textColor });
+    step(26);
 
+    // Bank details box
     if (hasBankDetails) {
+      const boxY = y - 70;
       page.drawRectangle({
         x: margin,
-        y: y - 8,
-        width: pageWidth - margin * 2,
-        height: 76,
-        color: subtle,
+        y: boxY,
+        width: contentWidth,
+        height: 86,
+        color: rgb(0.97, 0.98, 1),
       });
-      page.drawText("Bank transfer details", { x: margin + 10, y: y + 52, font: fontBold, size: 12, color: brand });
-      y += 34;
-      if (bankName) {
-        drawText(page, `Bank Name: ${bankName}`, margin + 10, y, font, smallLine);
-        next();
-      }
-      if (accountNumber) {
-        drawText(page, `Account Number: ${accountNumber}`, margin + 10, y, font, smallLine);
-        next();
-      }
-      if (sortCode) {
-        drawText(page, `Sort Code: ${sortCode}`, margin + 10, y, font, smallLine);
-        next();
-      }
-      next(22);
+      page.drawText("Bank Details", { x: margin + 10, y: boxY + 66, font: fontBold, size: 11, color: brand });
+      page.drawText(`Business Name: ${clinicName}`, { x: margin + 10, y: boxY + 48, font, size: 11, color: textColor });
+      if (bankName) page.drawText(`Bank Name: ${bankName}`, { x: margin + 10, y: boxY + 32, font, size: 11, color: textColor });
+      if (accountNumber) page.drawText(`Account Number: ${accountNumber}`, { x: margin + 10, y: boxY + 16, font, size: 11, color: textColor });
+      if (sortCode) page.drawText(`Sort Code: ${sortCode}`, { x: margin + 290, y: boxY + 16, font, size: 11, color: textColor });
+      y = boxY - 18;
     }
 
+    // Optional notes
     if (invoice.notes) {
-      page.drawText("Notes:", { x: margin, y, font: fontBold, size: smallLine });
-      next();
-      const notesLines = (invoice.notes as string).split("\n").slice(0, 5);
-      for (const line of notesLines) {
-        page.drawText(line.substring(0, 80), { x: margin, y, font, size: smallLine });
-        next();
+      page.drawText("Notes", { x: margin, y, font: fontBold, size: 11, color: muted });
+      step(16);
+      const notesLines = (invoice.notes as string).split("\n").slice(0, 4);
+      for (const lineItem of notesLines) {
+        page.drawText(lineItem.substring(0, 95), { x: margin, y, font, size: 10.5, color: textColor });
+        step(14);
       }
+      step(8);
     }
 
-    // Footer at bottom of page
-    const footerY = 50;
-    page.drawText("Thank you for your business.", {
-      x: margin,
-      y: footerY,
-      font: font,
-      size: smallLine,
-    });
-    page.drawText(clinicName, {
-      x: margin,
-      y: footerY - lineHeight,
-      font: font,
-      size: 11,
-    });
+    // Footer
+    const footerY = 40;
+    page.drawLine({ start: { x: margin, y: footerY + 18 }, end: { x: margin + contentWidth, y: footerY + 18 }, color: line, thickness: 1 });
+    page.drawText("Thank you for your business.", { x: margin, y: footerY, font, size: 10.5, color: muted });
 
     const pdfBytes = await pdfDoc.save();
 

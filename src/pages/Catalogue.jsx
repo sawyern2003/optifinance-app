@@ -28,6 +28,7 @@ export default function Catalogue() {
     patient_name: '',
     patient_phone: '', // New field for patient phone
     patient_contact: '', // This will now be for patient email
+    patient_address: '',
     expense_category: '',
     expense_amount: '',
     expense_notes: '',
@@ -296,7 +297,8 @@ export default function Catalogue() {
       const data = {
         name: formData.patient_name,
         phone: formData.patient_phone, // New field
-        contact: formData.patient_contact // Now for email
+        contact: formData.patient_contact, // Now for email
+        address: formData.patient_address
       };
       if (editingItem) {
         updatePatientMutation.mutate({ id: editingItem.id, data });
@@ -326,6 +328,7 @@ export default function Catalogue() {
       patient_name: '',
       patient_phone: '', // Reset new field
       patient_contact: '', // Reset new field
+      patient_address: '',
       expense_category: '',
       expense_amount: '',
       expense_notes: '',
@@ -349,6 +352,7 @@ export default function Catalogue() {
           patient_name: '',
           patient_phone: '', // Added for consistency
           patient_contact: '', // Added for consistency
+          patient_address: '',
           expense_category: '',
           expense_amount: '',
           expense_notes: '',
@@ -365,6 +369,7 @@ export default function Catalogue() {
           patient_name: '',
           patient_phone: '', // Added for consistency
           patient_contact: '', // Added for consistency
+          patient_address: '',
           expense_category: '',
           expense_amount: '',
           expense_notes: '',
@@ -381,6 +386,7 @@ export default function Catalogue() {
           patient_name: item.name,
           patient_phone: item.phone || '', // New field
           patient_contact: item.contact || '', // Now for email
+          patient_address: item.address || '',
           expense_category: '',
           expense_amount: '',
           expense_notes: '',
@@ -397,6 +403,7 @@ export default function Catalogue() {
           patient_name: '',
           patient_phone: '', // Added for consistency
           patient_contact: '', // Added for consistency
+          patient_address: '',
           expense_category: item.category,
           expense_amount: item.amount,
           expense_notes: item.notes || '',
@@ -419,6 +426,7 @@ export default function Catalogue() {
       patient_name: '',
       patient_phone: '', // Added for consistency
       patient_contact: '', // Added for consistency
+      patient_address: '',
       expense_category: '',
       expense_amount: '',
       expense_notes: '',
@@ -955,6 +963,18 @@ export default function Catalogue() {
                       value={formData.patient_contact}
                       onChange={(e) => setFormData({...formData, patient_contact: e.target.value})}
                       placeholder="e.g. emma@example.com"
+                      className="rounded-xl border-gray-300"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="patient_address" className="text-sm font-medium text-gray-700">
+                      Patient Address
+                    </Label>
+                    <Input
+                      id="patient_address"
+                      value={formData.patient_address}
+                      onChange={(e) => setFormData({...formData, patient_address: e.target.value})}
+                      placeholder="e.g. 22 Market St, London, SW1A 1AA"
                       className="rounded-xl border-gray-300"
                     />
                   </div>

@@ -3,6 +3,7 @@ import { api } from "@/api/api";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/components/ui/use-toast";
 import { Loader2, Building2, User, Mail, Landmark, Image } from "lucide-react";
 
@@ -16,6 +17,7 @@ export default function Settings() {
   const [accountNumber, setAccountNumber] = useState("");
   const [sortCode, setSortCode] = useState("");
   const [logoUrl, setLogoUrl] = useState("");
+  const [businessAddress, setBusinessAddress] = useState("");
 
   useEffect(() => {
     const fetchUser = async () => {
@@ -27,6 +29,7 @@ export default function Settings() {
       setAccountNumber(userData.account_number || "");
       setSortCode(userData.sort_code || "");
       setLogoUrl(userData.logo_url || "");
+      setBusinessAddress(userData.business_address || "");
       setIsLoading(false);
     };
     fetchUser();
@@ -41,7 +44,8 @@ export default function Settings() {
       bank_name: bankName,
       account_number: accountNumber,
       sort_code: sortCode,
-      logo_url: logoUrl || null
+      logo_url: logoUrl || null,
+      business_address: businessAddress || null,
     });
     
     toast({
@@ -128,6 +132,18 @@ export default function Settings() {
                   <p className="text-xs text-gray-500">
                     Optional. A public image URL (e.g. from Supabase Storage) — appears on generated invoice PDFs.
                   </p>
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="business-address" className="text-sm font-medium text-gray-700">
+                    Business Address (for invoice PDFs)
+                  </Label>
+                  <Textarea
+                    id="business-address"
+                    value={businessAddress}
+                    onChange={(e) => setBusinessAddress(e.target.value)}
+                    placeholder={"e.g. 10 High Street\nLondon\nSW1A 1AA"}
+                    className="rounded-xl border-gray-300 min-h-[96px]"
+                  />
                 </div>
               </div>
             </div>
