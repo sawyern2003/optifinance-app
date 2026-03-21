@@ -1,8 +1,8 @@
 // Inspired by react-hot-toast library
 import { useState, useEffect, createContext, useContext } from "react";
 
-const TOAST_LIMIT = 20;
-const TOAST_REMOVE_DELAY = 1000000;
+const TOAST_LIMIT = 4;
+const TOAST_REMOVE_DELAY = 3200;
 
 const actionTypes = {
   ADD_TOAST: "ADD_TOAST",
@@ -133,6 +133,9 @@ function toast({ ...props }) {
       },
     },
   });
+
+  // Auto-dismiss toasts so the UI stays clean.
+  setTimeout(() => dismiss(), TOAST_REMOVE_DELAY - 200);
 
   return {
     id,
