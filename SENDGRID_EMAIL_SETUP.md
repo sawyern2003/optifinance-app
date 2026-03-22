@@ -15,10 +15,14 @@ In **Project Settings → Edge Functions → Secrets**:
 | Secret | Example |
 |--------|---------|
 | `SENDGRID_API_KEY` | `SG.xxx...` |
-| **`INVOICE_SEND_DOMAIN`** | **`mail.optimedix.ai`** (verify this **whole subdomain** once in SendGrid) |
+| **`INVOICE_SEND_DOMAIN`** | **`mail.optimedix.ai`** (see **Sender verification** below) |
+| **`SENDGRID_VERIFIED_FROM_EMAIL`** | **Recommended until domain auth is done:** e.g. `invoices@optimedix.ai` — must be a **verified Single Sender** or on a **domain-authenticated** zone in SendGrid. When set, SendGrid uses this as **From**; patients still see the clinician name and **Reply-to** goes to Settings / your account email. |
 | `FROM_EMAIL` | Optional legacy; not used for From when `INVOICE_SEND_DOMAIN` is set |
 
-With **`INVOICE_SEND_DOMAIN`**, each clinic automatically gets **`{slug}-{id}@mail.optimedix.ai`** — no per-clinic DNS. Patients see **clinician + clinic name**; **Reply-to** uses Settings.
+With **`INVOICE_SEND_DOMAIN`**, each clinic gets a logical address **`{slug}-{id}@mail.optimedix.ai`** for display/tracking. **SendGrid still requires that address to be allowed:**
+
+1. **Best long-term:** In SendGrid → **Settings → Sender Authentication** → **Authenticate Your Domain** for **`mail.optimedix.ai`** (exact subdomain). Then arbitrary local parts on that domain are valid **From** addresses.
+2. **Fast fix:** Create a **Single Sender** (e.g. `invoices@yourdomain.com`), verify it in SendGrid, and set **`SENDGRID_VERIFIED_FROM_EMAIL`** to that address in Supabase secrets. All invoice mail will **From** that address until you complete domain auth and remove the secret.
 
 If **`INVOICE_SEND_DOMAIN`** is **not** set, clinics must fill **Custom send-from** in Settings (their own verified address).
 

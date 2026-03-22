@@ -17,6 +17,16 @@ function baseSlug(name: string): string {
   return s || "clinic";
 }
 
+/** SendGrid/local-part safe (RFC-ish); avoids "Invalid from email address" from bad slug chars */
+function sanitizeEmailLocalPart(local: string): string {
+  let t = String(local || "")
+    .toLowerCase()
+    .replace(/[^a-z0-9._+-]/g, "-");
+  t = t.replace(/-+/g, "-").replace(/^[-.]+|[-.]+$/g, "");
+  const out = (t || "clinic").slice(0, 64);
+  return out || "clinic";
+}
+
 /**
  * One platform domain (e.g. mail.optimedix.ai) verified once in SendGrid.
  * Each clinic gets a stable address: {slug}-{userIdShort}@domain
@@ -28,10 +38,11 @@ async function ensurePlatformInvoiceFrom(
   clinicName: string,
   domain: string,
 ): Promise<string> {
-  let slug = String(profile.invoice_send_slug || "").trim().toLowerCase();
-  if (!slug) {
+  const rawSlug = String(profile.invoice_send_slug || "").trim();
+  let slug: string;
+  if (!rawSlug) {
     const idPart = userId.replace(/-/g, "").slice(0, 10);
-    slug = `${baseSlug(clinicName)}-${idPart}`;
+    slug = sanitizeEmailLocalPart(`${baseSlug(clinicName)}-${idPart}`);
     const { error } = await supabaseClient
       .from("profiles")
       .update({ invoice_send_slug: slug })
@@ -39,6 +50,8 @@ async function ensurePlatformInvoiceFrom(
     if (error) {
       throw new Error(`Could not assign your send address: ${error.message}`);
     }
+  } else {
+    slug = sanitizeEmailLocalPart(rawSlug.toLowerCase());
   }
   return `${slug}@${domain}`;
 }
@@ -293,7 +306,14 @@ ${viewLink}
       const subject = `New invoice from ${clinicName}`;
 
       if (sendgridApiKey) {
-        const fromParts = parseFromParts(fromHeader);
+        // Optional: one verified Single Sender in SendGrid (Settings → Sender Authentication).
+        // Without this, SendGrid requires Domain Authentication on INVOICE_SEND_DOMAIN so every
+        // local-part@domain is allowed; otherwise you get "Invalid from email address".
+        const sendgridVerifiedFrom = Deno.env.get("SENDGRID_VERIFIED_FROM_EMAIL")?.trim() || "";
+        const fromEmailForSg =
+          sendgridVerifiedFrom.includes("@") ? sendgridVerifiedFrom : clinicFrom;
+        const fromHeaderForSg = `"${senderDisplay}" <${fromEmailForSg}>`;
+        const fromParts = parseFromParts(fromHeaderForSg);
         const sgBody: Record<string, unknown> = {
           personalizations: [{ to: [{ email: patientEmail }] }],
           from: fromParts.name
@@ -324,7 +344,21 @@ ${viewLink}
         });
         if (!sgRes.ok) {
           const errText = await sgRes.text();
-          throw new Error(`SendGrid error: ${errText}`);
+          let hint = "";
+          try {
+            const j = JSON.parse(errText) as { errors?: { message?: string }[] };
+            const m = j?.errors?.[0]?.message || "";
+            if (/invalid from|from email/i.test(m)) {
+              hint =
+                " Verify the From address in SendGrid: authenticate domain " +
+                (invoiceSendDomain ? `"${invoiceSendDomain}" (Domain Authentication)` : "for your From domain") +
+                ", or set Edge secret SENDGRID_VERIFIED_FROM_EMAIL to a verified Single Sender email " +
+                `(tried "${fromEmailForSg}").`;
+            }
+          } catch {
+            /* ignore */
+          }
+          throw new Error(`SendGrid error: ${errText}${hint}`);
         }
         results.email = { success: true, provider: "sendgrid" };
       } else if (resendApiKey) {
