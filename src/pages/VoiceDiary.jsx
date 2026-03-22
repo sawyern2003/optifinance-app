@@ -4,13 +4,19 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { Card, CardContent } from "@/components/ui/card";
 import { Loader2, Mic, MicOff, AudioLines } from "lucide-react";
 import { format, subDays, parseISO } from "date-fns";
 import { useToast } from "@/components/ui/use-toast";
 import { createPageUrl } from "@/utils";
 import { friendsFamilyInvoiceFields } from "@/lib/invoiceFriendsFamily";
 import { Link } from "react-router-dom";
+
+/** Bar heights for the horizontal waveform (deterministic, not random per render). */
+const WAVE_HEIGHTS = Array.from({ length: 56 }, (_, i) => {
+  const wobble =
+    Math.sin(i * 0.51) * 10 + Math.cos(i * 0.19) * 7 + Math.sin(i * 0.11) * 4;
+  return Math.max(5, Math.round(12 + wobble + (i % 5) * 2));
+});
 
 export default function VoiceDiary() {
   const { toast } = useToast();
@@ -639,83 +645,165 @@ export default function VoiceDiary() {
 
   const inputBusy =
     processing || isWhisperRecording || isWhisperTranscribing;
+  const orbEnergized =
+    isWhisperRecording || isRecording || isWhisperTranscribing;
 
   return (
-    <div className="p-6 md:p-10 bg-[#f4f5f7] min-h-screen">
-      <div className="max-w-2xl mx-auto space-y-6">
-        <header>
-          <h1 className="text-2xl font-semibold text-[#1a2845] tracking-tight">
-            Voice diary
-          </h1>
-          <p className="mt-1 text-sm text-slate-500">
-            Type or record, then parse to update visits and invoices.
-          </p>
+    <>
+      <div className="relative min-h-screen overflow-x-hidden bg-[#030708] text-white selection:bg-cyan-500/30">
+        {/* Atmosphere */}
+        <div
+          className="pointer-events-none absolute inset-0 bg-gradient-to-b from-[#071218] via-[#0d2529] to-[#050a0c]"
+          aria-hidden
+        />
+        <div
+          className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_90%_55%_at_50%_-15%,rgba(45,212,191,0.14),transparent_58%)]"
+          aria-hidden
+        />
+        <div
+          className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_50%_45%_at_100%_80%,rgba(56,189,248,0.08),transparent)]"
+          aria-hidden
+        />
+        <div
+          className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_40%_35%_at_0%_60%,rgba(99,102,241,0.06),transparent)]"
+          aria-hidden
+        />
+
+        {/* Top bar */}
+        <header className="relative z-30 flex items-center justify-between px-5 pt-5 md:px-10 md:pt-8">
+          <span className="text-[11px] font-semibold uppercase tracking-[0.22em] text-white/45">
+            Voice
+          </span>
+          <div className="flex items-center gap-2">
+            {recognition ? (
+              <button
+                type="button"
+                onClick={toggleRecording}
+                disabled={inputBusy && !isRecording}
+                title="Browser live captions — less accurate for names"
+                className={`flex h-9 w-9 items-center justify-center rounded-full border border-white/10 bg-white/5 text-white/70 transition hover:bg-white/10 hover:text-white disabled:opacity-30 ${
+                  isRecording ? "border-cyan-400/40 text-cyan-200" : ""
+                }`}
+              >
+                {isRecording ? (
+                  <MicOff className="h-4 w-4" />
+                ) : (
+                  <Mic className="h-4 w-4" />
+                )}
+              </button>
+            ) : null}
+            <Link
+              to={createPageUrl("Dashboard")}
+              className="rounded-full border border-white/10 bg-white/5 px-3 py-1.5 text-[11px] font-medium text-white/55 transition hover:border-white/20 hover:text-white/90"
+            >
+              Done
+            </Link>
+          </div>
         </header>
 
-        <Card className="border border-slate-200/90 shadow-sm rounded-2xl bg-white">
-          <CardContent className="p-5 md:p-6 space-y-4">
+        {/* Waveform strip (crosses the stage) */}
+        <div
+          className={`pointer-events-none absolute left-0 right-0 top-[38%] z-10 flex h-16 -translate-y-1/2 items-end justify-center gap-[3px] px-6 opacity-90 md:top-[40%] md:px-16 ${
+            orbEnergized ? "" : "vd-wave-calm opacity-55"
+          }`}
+          aria-hidden
+        >
+          {WAVE_HEIGHTS.map((h, i) => (
+            <div
+              key={i}
+              className="vd-wave-bar w-[2px] shrink-0 rounded-full bg-gradient-to-t from-teal-300/25 via-cyan-200/80 to-white"
+              style={{
+                height: `${h}px`,
+                animationDelay: `${i * 0.035}s`,
+              }}
+            />
+          ))}
+        </div>
+
+        {/* Interactive orb */}
+        <div className="relative z-20 mx-auto flex max-w-lg flex-col items-center px-6 pt-4 pb-2 md:pt-10">
+          <div className="relative grid h-[min(72vw,17.5rem)] w-[min(72vw,17.5rem)] place-items-center md:h-[19rem] md:w-[19rem]">
+            <div
+              className={`absolute inset-[-22%] rounded-full blur-[56px] ${
+                isWhisperRecording
+                  ? "bg-rose-500/25 vd-orb-glow-intense"
+                  : "bg-cyan-400/20 vd-orb-glow"
+              }`}
+              aria-hidden
+            />
+            <div
+              className="vd-orb-ring absolute inset-[-8%] rounded-full opacity-[0.55]"
+              style={{
+                background:
+                  "conic-gradient(from 200deg, transparent 0%, rgba(34,211,238,0.35) 18%, transparent 38%, rgba(129,140,248,0.35) 58%, transparent 78%, rgba(45,212,191,0.2) 100%)",
+              }}
+              aria-hidden
+            />
+            <div
+              className="absolute inset-0 rounded-full border border-white/[0.09] bg-gradient-to-br from-cyan-500/[0.12] via-slate-950/50 to-[#020617]/95 shadow-[inset_0_1px_0_rgba(255,255,255,0.11),0_0_100px_-20px_rgba(34,211,238,0.35)] backdrop-blur-[2px]"
+              aria-hidden
+            >
+              <div className="absolute inset-0 rounded-full bg-[radial-gradient(circle_at_32%_28%,rgba(165,243,252,0.18),transparent_52%)]" />
+              <div className="absolute inset-0 rounded-full bg-[radial-gradient(circle_at_72%_68%,rgba(129,140,248,0.15),transparent_48%)]" />
+              <div
+                className="absolute inset-[12%] rounded-full opacity-40 mix-blend-screen"
+                style={{
+                  background:
+                    "radial-gradient(ellipse at 50% 50%, rgba(255,255,255,0.07), transparent 70%)",
+                }}
+              />
+            </div>
+
+            <button
+              type="button"
+              onClick={toggleWhisperRecording}
+              disabled={isWhisperTranscribing || (processing && !isWhisperRecording)}
+              className="relative z-10 flex items-center gap-2 rounded-full bg-[#0a0a0a] px-5 py-2.5 text-[13px] font-medium tracking-tight text-white shadow-[0_12px_40px_rgba(0,0,0,0.65)] ring-1 ring-white/[0.12] transition hover:ring-white/25 active:scale-[0.98] disabled:pointer-events-none disabled:opacity-40"
+            >
+              {isWhisperTranscribing ? (
+                <>
+                  <Loader2 className="h-4 w-4 animate-spin text-cyan-300" />
+                  Working…
+                </>
+              ) : isWhisperRecording ? (
+                <>
+                  <span className="relative flex h-2 w-2">
+                    <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-rose-400 opacity-60" />
+                    <span className="relative inline-flex h-2 w-2 rounded-full bg-rose-400" />
+                  </span>
+                  Stop
+                </>
+              ) : (
+                <>
+                  <AudioLines className="h-4 w-4 text-cyan-300" />
+                  Dictate
+                </>
+              )}
+            </button>
+          </div>
+
+          <p className="mt-7 max-w-[14rem] text-center text-[11px] leading-relaxed text-white/32">
+            {isWhisperTranscribing
+              ? "Transcribing…"
+              : isWhisperRecording
+                ? "Tap stop when finished"
+                : "Whisper + your patient names as hints"}
+          </p>
+        </div>
+
+        {/* Glass dock */}
+        <div className="relative z-20 mx-auto mt-6 w-full max-w-lg px-5 pb-10 md:px-6">
+          <div className="rounded-[1.25rem] border border-white/[0.08] bg-white/[0.04] p-4 shadow-[0_-8px_48px_-12px_rgba(0,0,0,0.55)] backdrop-blur-xl">
             <Textarea
               id="voice-diary-input"
               value={transcript}
               onChange={(e) => setTranscript(e.target.value)}
-              placeholder="e.g. Today: Sarah — Botox £250 paid. Mark — filler £200 pending."
-              className="rounded-xl border-slate-200 min-h-[200px] text-[15px] leading-relaxed resize-y focus-visible:ring-[#1a2845]/20"
+              placeholder="Your note appears here — or type directly."
+              className="min-h-[140px] resize-y rounded-xl border-white/10 bg-black/25 text-[14px] leading-relaxed text-white/90 placeholder:text-white/25 focus-visible:ring-1 focus-visible:ring-cyan-400/40"
               disabled={processing}
             />
-
-            <div className="flex flex-wrap items-center gap-2">
-              <Button
-                type="button"
-                variant="default"
-                size="sm"
-                className="rounded-lg bg-[#1a2845] hover:bg-[#0f1829]"
-                onClick={toggleWhisperRecording}
-                disabled={processing || isWhisperTranscribing}
-                title="Accurate transcription — we send audio to be transcribed (OpenAI Whisper). Patient names from your list are used as hints."
-              >
-                {isWhisperTranscribing ? (
-                  <>
-                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                    Transcribing…
-                  </>
-                ) : isWhisperRecording ? (
-                  <>
-                    <MicOff className="w-4 h-4 mr-2" />
-                    Stop & transcribe
-                  </>
-                ) : (
-                  <>
-                    <AudioLines className="w-4 h-4 mr-2" />
-                    Record
-                  </>
-                )}
-              </Button>
-              {recognition ? (
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  className="rounded-lg border-slate-200 text-slate-600"
-                  onClick={toggleRecording}
-                  disabled={inputBusy || isWhisperRecording}
-                  title="Live captions in the browser — often mishears names. Prefer Record for accuracy."
-                >
-                  {isRecording ? (
-                    <>
-                      <MicOff className="w-3.5 h-3.5 mr-1.5" />
-                      Stop live mic
-                    </>
-                  ) : (
-                    <>
-                      <Mic className="w-3.5 h-3.5 mr-1.5" />
-                      Live mic
-                    </>
-                  )}
-                </Button>
-              ) : null}
-            </div>
-
             <Button
+              type="button"
               onClick={processTranscript}
               disabled={
                 processing ||
@@ -724,41 +812,40 @@ export default function VoiceDiary() {
                 isWhisperRecording ||
                 isWhisperTranscribing
               }
-              className="w-full rounded-xl h-11 text-sm font-medium bg-[#1a2845] hover:bg-[#0f1829] text-white"
+              className="mt-3 h-11 w-full rounded-xl border-0 bg-gradient-to-r from-teal-400 via-cyan-400 to-sky-400 text-[13px] font-semibold text-slate-950 shadow-[0_0_24px_-4px_rgba(34,211,238,0.45)] hover:from-teal-300 hover:via-cyan-300 hover:to-sky-300 disabled:from-white/10 disabled:via-white/10 disabled:to-white/10 disabled:text-white/25 disabled:shadow-none"
             >
               {processing ? (
                 <>
-                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                  Parsing…
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Parse…
                 </>
               ) : isRecording ? (
-                "Stop live mic to parse"
+                "Stop live mic first"
               ) : isWhisperRecording ? (
-                "Stop recording to parse"
+                "Stop dictate first"
               ) : (
                 "Parse & review"
               )}
             </Button>
+          </div>
+          <div className="mt-4 flex justify-center gap-6 text-[11px] text-white/30">
+            <Link
+              to={createPageUrl("Dashboard")}
+              className="hover:text-white/60"
+            >
+              Dashboard
+            </Link>
+            <Link
+              to={createPageUrl("Records")}
+              className="hover:text-white/60"
+            >
+              Records
+            </Link>
+          </div>
+        </div>
+      </div>
 
-            <div className="flex justify-center gap-3 text-xs text-slate-400 pt-1">
-              <Link
-                to={createPageUrl("Dashboard")}
-                className="text-slate-600 hover:text-[#1a2845]"
-              >
-                Dashboard
-              </Link>
-              <span>·</span>
-              <Link
-                to={createPageUrl("Records")}
-                className="text-slate-600 hover:text-[#1a2845]"
-              >
-                Records
-              </Link>
-            </div>
-          </CardContent>
-        </Card>
-
-        {/* Review Dialog */}
+      {/* Review Dialog */}
         <Dialog open={reviewDialogOpen} onOpenChange={setReviewDialogOpen}>
           <DialogContent className="sm:max-w-4xl max-h-[85vh] overflow-y-auto rounded-2xl border-slate-200">
             <DialogHeader>
@@ -1031,7 +1118,6 @@ export default function VoiceDiary() {
             )}
           </DialogContent>
         </Dialog>
-      </div>
-    </div>
+    </>
   );
 }

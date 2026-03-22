@@ -157,3 +157,50 @@ button:focus-visible {
     @apply bg-background text-foreground;
   }
 }
+
+/* Voice diary — orb + waveform (ElevenLabs-inspired, no generic “AI” chrome) */
+@layer utilities {
+  @keyframes vd-orb-spin {
+    to {
+      transform: rotate(360deg);
+    }
+  }
+  @keyframes vd-orb-breathe {
+    0%,
+    100% {
+      opacity: 0.4;
+      transform: scale(0.94);
+    }
+    50% {
+      opacity: 0.85;
+      transform: scale(1.06);
+    }
+  }
+  @keyframes vd-wave {
+    0%,
+    100% {
+      transform: scaleY(0.2);
+      opacity: 0.25;
+    }
+    50% {
+      transform: scaleY(1);
+      opacity: 0.95;
+    }
+  }
+  .vd-orb-ring {
+    animation: vd-orb-spin 22s linear infinite;
+  }
+  .vd-orb-glow {
+    animation: vd-orb-breathe 3.8s ease-in-out infinite;
+  }
+  .vd-orb-glow-intense {
+    animation: vd-orb-breathe 1.6s ease-in-out infinite;
+  }
+  .vd-wave-bar {
+    transform-origin: center bottom;
+    animation: vd-wave 1.05s ease-in-out infinite;
+  }
+  .vd-wave-calm .vd-wave-bar {
+    animation-duration: 2.8s;
+  }
+}
