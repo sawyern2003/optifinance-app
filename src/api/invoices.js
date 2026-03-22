@@ -12,19 +12,41 @@ async function ensureSession() {
 }
 
 /**
+ * Read Edge Function error body. Supabase sets `error.context` and `response` to the same
+ * Response; the generic message is "Edge Function returned a non-2xx status code".
+ * Prefer .text() + JSON.parse so we never miss the server `error` field.
+ */
+export async function edgeInvokeErrorMessage(error, response) {
+  let msg = error?.message || 'Request failed';
+  const resp = response ?? error?.context;
+  if (resp && typeof resp.text === 'function') {
+    try {
+      const text = await resp.text();
+      if (text) {
+        try {
+          const j = JSON.parse(text);
+          if (typeof j.error === 'string') return j.error;
+          if (typeof j.message === 'string') return j.message;
+        } catch {
+          /* not JSON */
+        }
+        return text.length > 800 ? `${text.slice(0, 800)}…` : text;
+      }
+    } catch {
+      /* ignore */
+    }
+  }
+  return msg;
+}
+
+/**
  * Invoke a Supabase Edge Function and surface JSON `{ error }` from non-2xx bodies.
  */
 async function invokeEdgeFunction(functionName, body) {
   await ensureSession();
-  const { data, error } = await supabase.functions.invoke(functionName, { body });
+  const { data, error, response } = await supabase.functions.invoke(functionName, { body });
   if (error) {
-    let msg = error.message;
-    if (error.context && typeof error.context.json === 'function') {
-      try {
-        const errBody = await error.context.json();
-        if (errBody?.error) msg = errBody.error;
-      } catch (_) { /* ignore */ }
-    }
+    const msg = await edgeInvokeErrorMessage(error, response);
     throw new Error(msg);
   }
   if (data && typeof data === 'object' && data.error) {
@@ -72,18 +94,12 @@ export class InvoicesAPI {
   async generateInvoicePDF(invoiceId) {
     await ensureSession();
 
-    const { data, error } = await supabase.functions.invoke('generate-invoice-pdf', {
+    const { data, error, response } = await supabase.functions.invoke('generate-invoice-pdf', {
       body: { invoiceId }
     });
 
     if (error) {
-      let msg = error.message;
-      if (error.context && typeof error.context.json === 'function') {
-        try {
-          const body = await error.context.json();
-          if (body?.error) msg = body.error;
-        } catch (_) {}
-      }
+      const msg = await edgeInvokeErrorMessage(error, response);
       throw new Error(msg);
     }
     return data;
