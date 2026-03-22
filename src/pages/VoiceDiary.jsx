@@ -30,6 +30,67 @@ function diaryTreatmentLookupKey(patientName, treatmentName, date) {
 }
 
 /** Model often returns only treatments[]; user said "send invoice" → still need an invoice row to run PDF/send. */
+/**
+ * Invoice row with no matching visit: create pending treatment, then invoice/PDF/email can run.
+ */
+async function createPendingTreatmentForVoiceInvoice({
+  api,
+  invoiceData,
+  patient,
+  treatmentCatalog,
+  leadPractitioner,
+  treatmentMap,
+  invKey,
+}) {
+  const nameLower = String(invoiceData.treatment_name || "").trim().toLowerCase();
+  const catExact = treatmentCatalog.find(
+    (t) => t.treatment_name.toLowerCase() === nameLower,
+  );
+  const catFuzzy =
+    catExact ||
+    treatmentCatalog.find((t) =>
+      nameLower.includes(t.treatment_name.toLowerCase()),
+    ) ||
+    treatmentCatalog.find((t) =>
+      t.treatment_name.toLowerCase().includes(nameLower),
+    ) ||
+    null;
+
+  const pricePaid =
+    Number(invoiceData.amount) > 0
+      ? Number(invoiceData.amount)
+      : Number(catFuzzy?.default_price) || 0;
+  if (!Number.isFinite(pricePaid) || pricePaid <= 0) {
+    throw new Error(
+      "Add a price on the invoice line or a default price for this treatment in your catalogue.",
+    );
+  }
+
+  const productCost = Number(catFuzzy?.typical_product_cost) || 0;
+
+  const createdTreatment = await api.entities.TreatmentEntry.create({
+    date: invoiceData.date,
+    patient_id: patient.id,
+    patient_name: patient.name,
+    treatment_id: catFuzzy?.id ?? null,
+    treatment_name:
+      catFuzzy?.treatment_name ||
+      String(invoiceData.treatment_name || "").trim(),
+    duration_minutes: catFuzzy?.duration_minutes ?? null,
+    price_paid: pricePaid,
+    payment_status: "pending",
+    amount_paid: 0,
+    product_cost: productCost,
+    profit: 0 - productCost,
+    practitioner_id: leadPractitioner?.id ?? null,
+    practitioner_name: leadPractitioner?.name || "",
+    notes: null,
+  });
+
+  treatmentMap.set(invKey, createdTreatment);
+  return createdTreatment;
+}
+
 function transcriptImpliesInvoiceSend(text) {
   const s = String(text || "").toLowerCase();
   if (
@@ -790,7 +851,7 @@ export default function VoiceDiary() {
           );
 
           // Find the treatment (DB or just created this run; case-insensitive names + normalized dates)
-          const treatment =
+          let treatment =
             treatments.find((t) => {
               if (t.patient_id !== patient.id) return false;
               if (t.payment_status !== "pending") return false;
@@ -807,10 +868,22 @@ export default function VoiceDiary() {
             }) || treatmentMap.get(invKey);
 
           if (!treatment) {
-            invoiceSkipped.push(
-              `${invoiceData.patient_name} — ${invoiceData.treatment_name} (${normalizeDiaryDate(invoiceData.date)}): no matching pending treatment. Create the visit in this diary or check the date matches.`,
-            );
-            continue;
+            try {
+              treatment = await createPendingTreatmentForVoiceInvoice({
+                api,
+                invoiceData,
+                patient,
+                treatmentCatalog,
+                leadPractitioner,
+                treatmentMap,
+                invKey,
+              });
+            } catch (createErr) {
+              invoiceSkipped.push(
+                `${invoiceData.patient_name} — ${invoiceData.treatment_name} (${normalizeDiaryDate(invoiceData.date)}): ${createErr?.message || "Could not create visit."}`,
+              );
+              continue;
+            }
           }
 
           const finalContact =
@@ -1198,10 +1271,10 @@ export default function VoiceDiary() {
                 Review before saving
               </DialogTitle>
               <DialogDescription className="text-sm text-slate-500 pt-1">
-                Toggle items off if something looks wrong, then apply. Saying things
-                like &quot;please send an invoice to…&quot; or &quot;email her the
-                invoice&quot; will create the invoice and send it automatically after
-                you confirm (patient needs email or phone on file, or say it in the
+                Toggle items off if something looks wrong, then apply. If you ask to
+                send an invoice and there is no matching visit yet, we create a{" "}
+                <strong>pending</strong> treatment for that patient, then the invoice,
+                PDF, and email (patient needs email or phone on file, or say it in the
                 diary).
               </DialogDescription>
             </DialogHeader>
