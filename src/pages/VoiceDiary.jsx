@@ -21,6 +21,10 @@ export default function VoiceDiary() {
   }, [transcript]);
   /** Set after `processTranscript` is defined; used from Whisper `onstop` for auto-parse */
   const processTranscriptRef = useRef(async () => {});
+  /** Snapshot when opening Edit text — parse on Done only if transcript changed */
+  const transcriptAtEditStartRef = useRef(null);
+  /** Live mic: only auto-parse on stop if transcript grew since recording started */
+  const liveMicBaselineRef = useRef(0);
   const [isRecording, setIsRecording] = useState(false);
   const [isWhisperRecording, setIsWhisperRecording] = useState(false);
   const [isWhisperTranscribing, setIsWhisperTranscribing] = useState(false);
@@ -158,7 +162,11 @@ export default function VoiceDiary() {
         }
 
         if (finalTranscript) {
-          setTranscript(prev => prev + finalTranscript);
+          setTranscript((prev) => {
+            const next = prev + finalTranscript;
+            transcriptRef.current = next;
+            return next;
+          });
         }
       };
 
@@ -177,6 +185,12 @@ export default function VoiceDiary() {
       recognitionInstance.onend = () => {
         setIsRecording(false);
         setBrowserSpeechActive(false);
+        const full = (transcriptRef.current || "").trim();
+        const grew =
+          (transcriptRef.current || "").length > liveMicBaselineRef.current;
+        if (full && grew) {
+          void processTranscriptRef.current(transcriptRef.current);
+        }
       };
 
       recognitionInstance.onsoundstart = () => setBrowserSpeechActive(true);
@@ -201,6 +215,7 @@ export default function VoiceDiary() {
       recognition.stop();
       setIsRecording(false);
     } else {
+      liveMicBaselineRef.current = (transcriptRef.current || "").length;
       recognition.start();
       setIsRecording(true);
     }
@@ -952,44 +967,50 @@ export default function VoiceDiary() {
               </div>
             )}
 
-            <div className="mt-3 flex flex-wrap items-center gap-2">
+            <div className="mt-3 flex flex-col gap-2">
               <Button
                 type="button"
                 variant="outline"
                 size="sm"
-                onClick={() => setDiaryEditing((e) => !e)}
+                onClick={() => {
+                  if (processing) return;
+                  if (diaryEditing) {
+                    const start = transcriptAtEditStartRef.current;
+                    transcriptAtEditStartRef.current = null;
+                    setDiaryEditing(false);
+                    const changed = start !== transcript;
+                    if (transcript.trim() && changed) {
+                      void processTranscript();
+                    }
+                  } else {
+                    transcriptAtEditStartRef.current = transcript;
+                    setDiaryEditing(true);
+                  }
+                }}
                 disabled={processing}
-                className="rounded-lg border-[#e8dcc8] text-xs font-medium text-[#1a2845] hover:bg-[#faf8f4]"
+                className="w-fit rounded-lg border-[#e8dcc8] text-xs font-medium text-[#1a2845] hover:bg-[#faf8f4]"
               >
                 {diaryEditing ? "Done editing" : "Edit text"}
               </Button>
+              <p className="text-[11px] leading-snug text-slate-400">
+                {processing ? (
+                  <span className="inline-flex items-center gap-1.5 text-[#1a2845]/70">
+                    <Loader2 className="h-3 w-3 animate-spin shrink-0" />
+                    Updating from your diary…
+                  </span>
+                ) : (
+                  <>
+                    Parses automatically when you stop{" "}
+                    <span className="font-medium text-slate-500">Dictate</span>{" "}
+                    or the live mic, or when you tap{" "}
+                    <span className="font-medium text-slate-500">
+                      Done editing
+                    </span>{" "}
+                    after a change.
+                  </>
+                )}
+              </p>
             </div>
-
-            <Button
-              type="button"
-              onClick={processTranscript}
-              disabled={
-                processing ||
-                !transcript.trim() ||
-                isRecording ||
-                isWhisperRecording ||
-                isWhisperTranscribing
-              }
-              className="mt-3 h-11 w-full rounded-xl border border-[#b8941f] bg-gradient-to-b from-[#d4af37] to-[#c9a227] text-sm font-semibold text-[#1a2845] shadow-sm hover:from-[#dfc15a] hover:to-[#d4af37] disabled:border-slate-200 disabled:from-slate-100 disabled:to-slate-100 disabled:text-slate-400"
-            >
-              {processing ? (
-                <>
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  Parsing…
-                </>
-              ) : isRecording ? (
-                "Stop live mic first"
-              ) : isWhisperRecording ? (
-                "Stop dictate first"
-              ) : (
-                "Parse & review"
-              )}
-            </Button>
           </div>
 
           <div className="mt-4 flex shrink-0 justify-center gap-6 pb-2 text-xs text-slate-400">
