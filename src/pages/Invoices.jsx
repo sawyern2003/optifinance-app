@@ -369,7 +369,16 @@ ${clinicName}
                     <tr key={invoice.id} className="border-b border-gray-100 hover:bg-gray-50 transition-colors">
                       <td className="px-6 py-4 text-sm font-medium text-gray-900">{invoice.invoice_number}</td>
                       <td className="px-6 py-4 text-sm text-gray-900">{invoice.patient_name}</td>
-                      <td className="px-6 py-4 text-sm text-gray-900">{invoice.treatment_name}</td>
+                      <td className="px-6 py-4 text-sm text-gray-900">
+                        <span className="inline-flex items-center gap-2 flex-wrap">
+                          {invoice.treatment_name}
+                          {invoice.friends_family_discount_applied && (
+                            <span className="text-[10px] font-semibold uppercase tracking-wide px-2 py-0.5 rounded-full bg-indigo-100 text-indigo-800">
+                              F&amp;F
+                            </span>
+                          )}
+                        </span>
+                      </td>
                       <td className="px-6 py-4 text-sm font-semibold text-gray-900">£{invoice.amount?.toFixed(2)}</td>
                       <td className="px-6 py-4 text-sm text-gray-900">{format(new Date(invoice.treatment_date), 'dd MMM yyyy')}</td>
                       <td className="px-6 py-4">

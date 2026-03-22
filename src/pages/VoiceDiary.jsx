@@ -9,6 +9,7 @@ import { format, subDays, parseISO } from "date-fns";
 import { useToast } from "@/components/ui/use-toast";
 import { useNavigate } from "react-router-dom";
 import { createPageUrl } from "@/utils";
+import { friendsFamilyInvoiceFields } from "@/lib/invoiceFriendsFamily";
 
 export default function VoiceDiary() {
   const { toast } = useToast();
@@ -495,6 +496,11 @@ Return in this JSON format:
         }
       }
 
+      const patientsForFf = [...patients];
+      for (const p of patientMap.values()) {
+        if (!patientsForFf.some((x) => x.id === p.id)) patientsForFf.push(p);
+      }
+
       // Create invoices for pending treatments
       for (const invoiceData of confirmedData.invoices.filter(i => i.include)) {
         try {
@@ -526,7 +532,12 @@ Return in this JSON format:
             practitioner_name: treatment.practitioner_name || '',
             issue_date: format(new Date(), 'yyyy-MM-dd'),
             status: 'sent',
-            notes: ''
+            notes: '',
+            ...friendsFamilyInvoiceFields(
+              treatment,
+              treatmentCatalog,
+              patientsForFf,
+            ),
           });
         } catch (error) {
           console.error('Failed to create invoice:', error);

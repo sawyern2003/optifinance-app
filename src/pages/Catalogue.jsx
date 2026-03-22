@@ -32,7 +32,8 @@ export default function Catalogue() {
     expense_category: '',
     expense_amount: '',
     expense_notes: '',
-    recurrence_frequency: 'monthly'
+    recurrence_frequency: 'monthly',
+    friends_family_discount_percent: ''
   });
 
   const { data: treatments, isLoading: loadingTreatments } = useQuery({
@@ -279,7 +280,7 @@ export default function Catalogue() {
         category: formData.category,
         default_price: parseFloat(formData.default_price),
         typical_product_cost: parseFloat(formData.typical_product_cost || 0),
-        default_duration_minutes: formData.duration_minutes ? parseInt(formData.duration_minutes, 10) : undefined
+        default_duration_minutes: formData.duration_minutes ? parseInt(formData.duration_minutes, 10) : undefined,
       };
       if (editingItem) {
         updateTreatmentMutation.mutate({ id: editingItem.id, data });
@@ -294,11 +295,20 @@ export default function Catalogue() {
         createPractitionerMutation.mutate(data);
       }
     } else if (activeTab === 'patients') {
+      const ffRaw = String(formData.friends_family_discount_percent ?? "").trim();
+      let friends_family_discount_percent = null;
+      if (ffRaw !== "") {
+        const n = parseFloat(ffRaw);
+        if (Number.isFinite(n) && n >= 0 && n <= 100) {
+          friends_family_discount_percent = n;
+        }
+      }
       const data = {
         name: formData.patient_name,
         phone: formData.patient_phone, // New field
         contact: formData.patient_contact, // Now for email
-        address: formData.patient_address
+        address: formData.patient_address,
+        friends_family_discount_percent,
       };
       if (editingItem) {
         updatePatientMutation.mutate({ id: editingItem.id, data });
@@ -332,7 +342,8 @@ export default function Catalogue() {
       expense_category: '',
       expense_amount: '',
       expense_notes: '',
-      recurrence_frequency: 'monthly'
+      recurrence_frequency: 'monthly',
+      friends_family_discount_percent: ''
     });
     setEditingItem(null);
     setIsDialogOpen(false);
@@ -356,7 +367,8 @@ export default function Catalogue() {
           expense_category: '',
           expense_amount: '',
           expense_notes: '',
-          recurrence_frequency: 'monthly'
+          recurrence_frequency: 'monthly',
+          friends_family_discount_percent: '',
         });
       } else if (type === 'practitioner') {
         setFormData({
@@ -373,7 +385,8 @@ export default function Catalogue() {
           expense_category: '',
           expense_amount: '',
           expense_notes: '',
-          recurrence_frequency: 'monthly'
+          recurrence_frequency: 'monthly',
+          friends_family_discount_percent: '',
         });
       } else if (type === 'patient') {
         setFormData({
@@ -390,7 +403,12 @@ export default function Catalogue() {
           expense_category: '',
           expense_amount: '',
           expense_notes: '',
-          recurrence_frequency: 'monthly'
+          recurrence_frequency: 'monthly',
+          friends_family_discount_percent:
+            item.friends_family_discount_percent != null &&
+            item.friends_family_discount_percent !== ""
+              ? String(item.friends_family_discount_percent)
+              : "",
         });
       } else if (type === 'recurring') {
         setFormData({
@@ -407,7 +425,8 @@ export default function Catalogue() {
           expense_category: item.category,
           expense_amount: item.amount,
           expense_notes: item.notes || '',
-          recurrence_frequency: item.recurrence_frequency || 'monthly'
+          recurrence_frequency: item.recurrence_frequency || 'monthly',
+          friends_family_discount_percent: '',
         });
       }
     }
@@ -430,7 +449,8 @@ export default function Catalogue() {
       expense_category: '',
       expense_amount: '',
       expense_notes: '',
-      recurrence_frequency: 'monthly'
+      recurrence_frequency: 'monthly',
+      friends_family_discount_percent: '',
     });
     setIsDialogOpen(true);
   };
@@ -676,7 +696,15 @@ export default function Catalogue() {
                         <Users className="w-5 h-5 text-white" />
                       </div>
                       <div>
-                        <p className="font-medium text-gray-900">{patient.name}</p>
+                        <p className="font-medium text-gray-900 flex items-center gap-2 flex-wrap">
+                          {patient.name}
+                          {patient.friends_family_discount_percent != null &&
+                            patient.friends_family_discount_percent !== "" && (
+                              <span className="text-[10px] font-semibold uppercase tracking-wide px-2 py-0.5 rounded-full bg-indigo-100 text-indigo-800">
+                                F&amp;F {Number(patient.friends_family_discount_percent)}%
+                              </span>
+                            )}
+                        </p>
                         <div className="flex gap-2 text-sm text-gray-500">
                           {patient.phone && <span>{patient.phone}</span>}
                           {patient.phone && patient.contact && <span>•</span>}
@@ -977,6 +1005,27 @@ export default function Catalogue() {
                       placeholder="e.g. 22 Market St, London, SW1A 1AA"
                       className="rounded-xl border-gray-300"
                     />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="patient_friends_family_discount_percent" className="text-sm font-medium text-gray-700">
+                      Friends &amp; family discount (%)
+                    </Label>
+                    <Input
+                      id="patient_friends_family_discount_percent"
+                      type="number"
+                      step="0.01"
+                      min="0"
+                      max="100"
+                      value={formData.friends_family_discount_percent}
+                      onChange={(e) =>
+                        setFormData({ ...formData, friends_family_discount_percent: e.target.value })
+                      }
+                      placeholder="Leave blank — patient not eligible"
+                      className="rounded-xl border-gray-300"
+                    />
+                    <p className="text-xs text-gray-500">
+                      Only for patients you offer friends &amp; family rates. When set, you can mark each of their visits for invoice disclosure; other patients never see this option.
+                    </p>
                   </div>
                 </>
               )}

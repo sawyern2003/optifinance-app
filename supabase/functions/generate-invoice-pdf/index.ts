@@ -231,7 +231,70 @@ serve(async (req) => {
     page.drawText(amountStr, { x: margin + contentWidth - 58, y, font: fontBold, size: 12, color: textColor });
     step(22);
     page.drawLine({ start: { x: margin, y }, end: { x: margin + contentWidth, y }, color: line, thickness: 1 });
-    step(28);
+    step(20);
+
+    // Friends & family discount disclosure (when applicable)
+    const inv = invoice as Record<string, unknown>;
+    const ffApplied =
+      inv.friends_family_discount_applied === true ||
+      inv.friends_family_discount_applied === "true";
+    const ffPct =
+      inv.friends_family_discount_percent != null &&
+      inv.friends_family_discount_percent !== ""
+        ? Number(inv.friends_family_discount_percent)
+        : null;
+    const ffStd =
+      inv.friends_family_standard_price != null &&
+      inv.friends_family_standard_price !== ""
+        ? Number(inv.friends_family_standard_price)
+        : null;
+    const invAmount = Number(invoice.amount);
+    if (ffApplied) {
+      page.drawText("Friends & family", { x: margin + 8, y, font: fontBold, size: 10, color: brand });
+      step(14);
+      if (
+        Number.isFinite(ffStd) &&
+        ffStd > invAmount + 0.005
+      ) {
+        page.drawText(`Standard list price: £${ffStd.toFixed(2)}`, {
+          x: margin + 8,
+          y,
+          font,
+          size: 10,
+          color: textColor,
+        });
+        step(14);
+        const disc = Math.max(0, ffStd - invAmount);
+        const pctLabel =
+          Number.isFinite(ffPct) && ffPct > 0 ? ` (${ffPct}% rate)` : "";
+        page.drawText(`Friends & family discount${pctLabel}: -£${disc.toFixed(2)}`, {
+          x: margin + 8,
+          y,
+          font,
+          size: 10,
+          color: textColor,
+        });
+        step(14);
+      } else if (Number.isFinite(ffPct) && ffPct > 0) {
+        page.drawText(
+          `Friends & family discount applied (${ffPct}% off standard list where offered)`,
+          { x: margin + 8, y, font, size: 10, color: textColor },
+        );
+        step(14);
+      } else {
+        page.drawText("Friends & family discount applied to this treatment.", {
+          x: margin + 8,
+          y,
+          font,
+          size: 10,
+          color: textColor,
+        });
+        step(14);
+      }
+      step(6);
+    } else {
+      step(8);
+    }
 
     // Totals block (right aligned)
     const totalsXLabel = margin + contentWidth - 210;

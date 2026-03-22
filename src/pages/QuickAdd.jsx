@@ -13,6 +13,10 @@ import { format } from "date-fns";
 import { useToast } from "@/components/ui/use-toast";
 import { useNavigate } from "react-router-dom";
 import { createPageUrl } from "@/utils";
+import {
+  friendsFamilyInvoiceFields,
+  patientEligibleForFriendsFamily,
+} from "@/lib/invoiceFriendsFamily";
 
 export default function QuickAdd() {
   const { toast } = useToast();
@@ -109,7 +113,8 @@ export default function QuickAdd() {
     amount_paid: '',
     practitioner_id: '',
     duration_minutes: '',
-    notes: ''
+    notes: '',
+    friends_family_discount_applied: false,
   });
 
   // Auto-select lead practitioner when component mounts or practitioners change
@@ -234,7 +239,8 @@ export default function QuickAdd() {
           issue_date: format(new Date(), 'yyyy-MM-dd'),
           status: 'sent',
           notes: treatment.notes || '',
-          payment_link: paymentLink
+          payment_link: paymentLink,
+          ...friendsFamilyInvoiceFields(treatment, treatmentCatalog, patients),
         });
         console.log('✅ Step 10: Invoice created successfully');
       } catch (invoiceError) {
@@ -291,6 +297,9 @@ export default function QuickAdd() {
       }
 
       const treatment = treatmentCatalog.find(t => t.id === data.treatment_id);
+      const resolvedPatient =
+        patientId && patients.find((p) => p.id === patientId);
+      const ffPatientOk = patientEligibleForFriendsFamily(resolvedPatient);
 
       const productCost = treatment?.typical_product_cost || 0;
       const pricePaid = parseFloat(data.price_paid);
@@ -313,7 +322,9 @@ export default function QuickAdd() {
         profit: profit,
         practitioner_id: practitionerId && practitionerId !== '' ? practitionerId : undefined,
         practitioner_name: practitionerName ?? undefined,
-        notes: data.notes && data.notes !== '' ? data.notes : undefined
+        notes: data.notes && data.notes !== '' ? data.notes : undefined,
+        friends_family_discount_applied:
+          ffPatientOk && !!data.friends_family_discount_applied,
       });
 
       // If sendInvoiceSMS is checked AND payment is pending, send it NOW
@@ -342,7 +353,8 @@ export default function QuickAdd() {
         amount_paid: '',
         practitioner_id: useLeadPractitioner ? (leadPractitioner?.id || '') : '',
         duration_minutes: '',
-        notes: ''
+        notes: '',
+        friends_family_discount_applied: false,
       });
       setNewPatientName(null);
       setNewPractitionerName(null);
@@ -824,7 +836,7 @@ Return an array of treatment objects, even if there's only one treatment.`;
       treatment_id: treatmentId,
       price_paid: treatment?.default_price || '',
       amount_paid: treatment?.default_price || '',
-      duration_minutes: treatment?.duration_minutes || ''
+      duration_minutes: treatment?.duration_minutes || treatment?.default_duration_minutes || '',
     });
   };
 
@@ -1041,7 +1053,12 @@ Return an array of treatment objects, even if there's only one treatment.`;
                           type="button"
                           onClick={() => {
                             setNewPatientName(null);
-                            setTreatmentForm({...treatmentForm, patient_id: '', patient_name: ''});
+                            setTreatmentForm({
+                              ...treatmentForm,
+                              patient_id: '',
+                              patient_name: '',
+                              friends_family_discount_applied: false,
+                            });
                           }}
                           className="px-4 py-2 rounded-xl border border-gray-300 hover:bg-gray-50 transition-colors"
                         >
@@ -1054,10 +1071,23 @@ Return an array of treatment objects, even if there's only one treatment.`;
                         onValueChange={(value) => {
                           if (value === 'new') {
                             setNewPatientName('');
-                            setTreatmentForm({...treatmentForm, patient_id: '', patient_name: ''});
+                            setTreatmentForm({
+                              ...treatmentForm,
+                              patient_id: '',
+                              patient_name: '',
+                              friends_family_discount_applied: false,
+                            });
                           } else {
                             const patient = patients.find(p => p.id === value);
-                            setTreatmentForm({...treatmentForm, patient_id: value, patient_name: patient?.name});
+                            const ffOk = patientEligibleForFriendsFamily(patient);
+                            setTreatmentForm({
+                              ...treatmentForm,
+                              patient_id: value,
+                              patient_name: patient?.name,
+                              friends_family_discount_applied: ffOk
+                                ? treatmentForm.friends_family_discount_applied
+                                : false,
+                            });
                           }
                         }}
                       >
@@ -1109,6 +1139,37 @@ Return an array of treatment objects, even if there's only one treatment.`;
                       required
                     />
                   </div>
+
+                  {(() => {
+                    const pat = patients.find(
+                      (p) => p.id === treatmentForm.patient_id,
+                    );
+                    if (!patientEligibleForFriendsFamily(pat)) return null;
+                    return (
+                      <div className="flex items-start gap-3 rounded-xl border border-indigo-100 bg-indigo-50/50 p-3 md:col-span-2">
+                        <input
+                          type="checkbox"
+                          id="quickadd-friends-family"
+                          checked={!!treatmentForm.friends_family_discount_applied}
+                          onChange={(e) =>
+                            setTreatmentForm({
+                              ...treatmentForm,
+                              friends_family_discount_applied: e.target.checked,
+                            })
+                          }
+                          className="w-4 h-4 text-indigo-600 border-gray-300 rounded mt-0.5"
+                        />
+                        <div>
+                          <Label htmlFor="quickadd-friends-family" className="text-sm font-medium text-gray-900 cursor-pointer">
+                            Friends &amp; family discount applied
+                          </Label>
+                          <p className="text-xs text-gray-600 mt-0.5">
+                            This patient has a {pat.friends_family_discount_percent}% friends &amp; family rate on file. The price above is what you charge; tick this so invoices show the disclosure.
+                          </p>
+                        </div>
+                      </div>
+                    );
+                  })()}
 
                   <div className="space-y-2">
                     <Label htmlFor="duration" className="text-sm font-medium text-gray-700">Duration (minutes)</Label>

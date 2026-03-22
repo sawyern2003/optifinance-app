@@ -11,6 +11,10 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { Trash2, Search, Sparkles, CreditCard, Pencil, FileText, Loader2, Download } from "lucide-react";
 import { format, startOfMonth, endOfMonth, subMonths, startOfYear } from "date-fns";
 import { useToast } from "@/components/ui/use-toast";
+import {
+  friendsFamilyInvoiceFields,
+  patientEligibleForFriendsFamily,
+} from "@/lib/invoiceFriendsFamily";
 
 export default function Records() {
   const { toast } = useToast();
@@ -221,7 +225,8 @@ export default function Records() {
           practitioner_name: treatment.practitioner_name || '',
           issue_date: format(new Date(), 'yyyy-MM-dd'),
           status: 'sent',
-          notes: treatment.notes || ''
+          notes: treatment.notes || '',
+          ...friendsFamilyInvoiceFields(treatment, treatmentCatalog, patients),
         });
         console.log('✅ Invoice created');
 
@@ -385,7 +390,8 @@ export default function Records() {
         duration_minutes: item.duration_minutes || '',
         practitioner_id: initialPractitionerId,
         practitioner_name: item.practitioner_name || '',
-        notes: item.notes || ''
+        notes: item.notes || '',
+        friends_family_discount_applied: !!item.friends_family_discount_applied,
       });
     } else {
       setEditForm({
@@ -440,6 +446,7 @@ export default function Records() {
       
       const selectedTreatment = treatmentCatalog.find(t => t.id === editForm.treatment_id);
       const selectedPatient = patients.find(p => p.id === editForm.patient_id);
+      const ffPatientOk = patientEligibleForFriendsFamily(selectedPatient);
       
       const productCost = selectedTreatment?.typical_product_cost || 0;
       const profit = amountPaid - productCost;
@@ -461,7 +468,9 @@ export default function Records() {
           profit: profit,
           practitioner_id: finalPractitionerId,
           practitioner_name: finalPractitionerName,
-          notes: editForm.notes
+          notes: editForm.notes,
+          friends_family_discount_applied:
+            ffPatientOk && !!editForm.friends_family_discount_applied,
         }
       });
     } else {
@@ -497,6 +506,7 @@ export default function Records() {
         issue_date: format(new Date(), 'yyyy-MM-dd'),
         status: treatment.payment_status === 'paid' ? 'paid' : 'draft',
         notes: treatment.notes || '',
+        ...friendsFamilyInvoiceFields(treatment, treatmentCatalog, patients),
       });
 
       // Generate real PDF (clinic name, patient, price, bank details) via Edge Function and upload to Storage
@@ -824,7 +834,16 @@ export default function Records() {
                       </td>
                       <td className="px-6 py-4 text-sm text-gray-900">{format(new Date(treatment.date), 'dd MMM yyyy')}</td>
                       <td className="px-6 py-4 text-sm text-gray-900">{treatment.patient_name || '-'}</td>
-                      <td className="px-6 py-4 text-sm font-medium text-gray-900">{treatment.treatment_name}</td>
+                      <td className="px-6 py-4 text-sm font-medium text-gray-900">
+                        <span className="inline-flex items-center gap-2 flex-wrap">
+                          {treatment.treatment_name}
+                          {treatment.friends_family_discount_applied && (
+                            <span className="text-[10px] font-semibold uppercase tracking-wide px-2 py-0.5 rounded-full bg-indigo-100 text-indigo-800">
+                              F&amp;F
+                            </span>
+                          )}
+                        </span>
+                      </td>
                       <td className="px-6 py-4 text-sm text-gray-900">
                         {treatment.duration_minutes ? `${treatment.duration_minutes} min` : '-'}
                       </td>
@@ -1072,11 +1091,16 @@ export default function Records() {
                     <Select 
                       value={editForm.patient_id} 
                       onValueChange={(value) => {
-                        const patient = patients.find(p => p.id === value);
+                        const patient =
+                          value === "none" ? null : patients.find((p) => p.id === value);
+                        const ffOk = patientEligibleForFriendsFamily(patient);
                         setEditForm({
-                          ...editForm, 
+                          ...editForm,
                           patient_id: value,
-                          patient_name: patient?.name || ''
+                          patient_name: patient?.name || "",
+                          friends_family_discount_applied: ffOk
+                            ? editForm.friends_family_discount_applied
+                            : false,
                         });
                       }}
                     >
@@ -1096,15 +1120,15 @@ export default function Records() {
 
                   <div className="space-y-2">
                     <Label htmlFor="edit-treatment" className="text-sm font-medium text-gray-700">Treatment *</Label>
-                    <Select 
+                      <Select 
                       value={editForm.treatment_id} 
                       onValueChange={(value) => {
                         const treatment = treatmentCatalog.find(t => t.id === value);
                         setEditForm({
-                          ...editForm, 
+                          ...editForm,
                           treatment_id: value,
-                          treatment_name: treatment?.treatment_name || '',
-                          price_paid: treatment?.default_price || editForm.price_paid
+                          treatment_name: treatment?.treatment_name || "",
+                          price_paid: treatment?.default_price || editForm.price_paid,
                         });
                       }}
                       required
@@ -1180,6 +1204,35 @@ export default function Records() {
                       />
                     </div>
                   )}
+
+                  {(() => {
+                    const pat = patients.find((p) => p.id === editForm.patient_id);
+                    if (!patientEligibleForFriendsFamily(pat)) return null;
+                    return (
+                      <div className="flex items-start gap-3 rounded-xl border border-indigo-100 bg-indigo-50/50 p-3">
+                        <input
+                          type="checkbox"
+                          id="edit-friends-family"
+                          checked={!!editForm.friends_family_discount_applied}
+                          onChange={(e) =>
+                            setEditForm({
+                              ...editForm,
+                              friends_family_discount_applied: e.target.checked,
+                            })
+                          }
+                          className="w-4 h-4 text-indigo-600 border-gray-300 rounded mt-0.5"
+                        />
+                        <div>
+                          <Label htmlFor="edit-friends-family" className="text-sm font-medium text-gray-900 cursor-pointer">
+                            Friends &amp; family discount applied
+                          </Label>
+                          <p className="text-xs text-gray-600 mt-0.5">
+                            This patient&apos;s rate is {pat.friends_family_discount_percent}% — disclosed on invoice PDFs when ticked.
+                          </p>
+                        </div>
+                      </div>
+                    );
+                  })()}
 
                   <div className="space-y-3 pt-2 border-t border-gray-100">
                     <div className="flex items-center gap-3">

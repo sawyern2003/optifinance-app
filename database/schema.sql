@@ -25,6 +25,7 @@ CREATE TABLE IF NOT EXISTS patients (
   email TEXT,
   address TEXT,
   notes TEXT,
+  friends_family_discount_percent DECIMAL(5, 2),
   created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
   updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
@@ -72,6 +73,7 @@ CREATE TABLE IF NOT EXISTS treatment_entries (
   product_cost DECIMAL(10, 2),
   profit DECIMAL(10, 2),
   notes TEXT,
+  friends_family_discount_applied BOOLEAN NOT NULL DEFAULT false,
   created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
   updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
@@ -109,6 +111,9 @@ CREATE TABLE IF NOT EXISTS invoices (
   status TEXT DEFAULT 'draft', -- 'draft', 'sent', 'paid', 'overdue'
   notes TEXT,
   invoice_pdf_url TEXT,
+  friends_family_discount_applied BOOLEAN NOT NULL DEFAULT false,
+  friends_family_discount_percent DECIMAL(5, 2),
+  friends_family_standard_price DECIMAL(10, 2),
   created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
   updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
