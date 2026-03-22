@@ -7,6 +7,42 @@ const corsHeaders: Record<string, string> = {
   "Access-Control-Allow-Methods": "POST, OPTIONS",
 };
 
+/** URL-safe slug from clinic name (used in you@mail.yourdomain.com) */
+function baseSlug(name: string): string {
+  const s = String(name || "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-|-$/g, "")
+    .slice(0, 20);
+  return s || "clinic";
+}
+
+/**
+ * One platform domain (e.g. mail.optimedix.ai) verified once in SendGrid.
+ * Each clinic gets a stable address: {slug}-{userIdShort}@domain
+ */
+async function ensurePlatformInvoiceFrom(
+  supabaseClient: ReturnType<typeof createClient>,
+  userId: string,
+  profile: { invoice_send_slug?: string | null },
+  clinicName: string,
+  domain: string,
+): Promise<string> {
+  let slug = String(profile.invoice_send_slug || "").trim().toLowerCase();
+  if (!slug) {
+    const idPart = userId.replace(/-/g, "").slice(0, 10);
+    slug = `${baseSlug(clinicName)}-${idPart}`;
+    const { error } = await supabaseClient
+      .from("profiles")
+      .update({ invoice_send_slug: slug })
+      .eq("id", userId);
+    if (error) {
+      throw new Error(`Could not assign your send address: ${error.message}`);
+    }
+  }
+  return `${slug}@${domain}`;
+}
+
 serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { status: 204, headers: { ...corsHeaders } });
@@ -64,7 +100,7 @@ serve(async (req) => {
     const { data: profile, error: profileError } = await supabaseClient
       .from("profiles")
       .select(
-        "clinic_name, bank_name, account_number, sort_code, invoice_from_email, invoice_reply_to_email, invoice_sender_name",
+        "clinic_name, bank_name, account_number, sort_code, invoice_from_email, invoice_reply_to_email, invoice_sender_name, invoice_send_slug",
       )
       .eq("id", user.id)
       .single();
@@ -79,12 +115,27 @@ serve(async (req) => {
     if (accountNumber) bankLines.push(`Account: ${accountNumber}`);
     const bankDetailsText = bankLines.length > 0 ? bankLines.join(". ") : "See invoice for payment details.";
 
-    const clinicFromForEmail = (profile as { invoice_from_email?: string })
-      ?.invoice_from_email?.trim() || "";
-    if ((sendVia === "email" || sendVia === "both") && !clinicFromForEmail) {
-      throw new Error(
-        "Add your clinic send-from email in Settings → Invoice emails (e.g. info@yourclinic.com). Invoice emails are sent only from your clinic address, not the software default.",
-      );
+    const invoiceSendDomain = Deno.env.get("INVOICE_SEND_DOMAIN")?.trim().toLowerCase() || "";
+
+    let clinicFromForEmail = "";
+    if (sendVia === "email" || sendVia === "both") {
+      if (invoiceSendDomain) {
+        clinicFromForEmail = await ensurePlatformInvoiceFrom(
+          supabaseClient,
+          user.id,
+          profile as { invoice_send_slug?: string | null },
+          clinicName,
+          invoiceSendDomain,
+        );
+      } else {
+        clinicFromForEmail = (profile as { invoice_from_email?: string })
+          ?.invoice_from_email?.trim() || "";
+        if (!clinicFromForEmail) {
+          throw new Error(
+            "Add INVOICE_SEND_DOMAIN (e.g. mail.optimedix.ai) to Supabase Edge secrets for automatic clinic addresses, or set a custom Clinic send-from email in Settings.",
+          );
+        }
+      }
     }
 
     const results: any = {};
@@ -186,6 +237,7 @@ serve(async (req) => {
       const clinicNameSafe = esc(clinicName);
       const senderDisplaySafe = esc(senderDisplay);
       const clinicFromSafe = esc(clinicFrom);
+      const footerContactSafe = esc((replyTo || clinicFrom).trim());
       const invNumSafe = esc(String(invoice.invoice_number));
       const bankHtml =
         bankLines.length > 0
@@ -210,7 +262,7 @@ ${bankHtml}
 <p style="margin:20px 0 0;font-size:14px;line-height:1.5;color:#52525b;">Please find your invoice attached. We hope to see you again soon.</p>
 ${viewLink}
 <p style="margin:28px 0 0;font-size:14px;line-height:1.5;color:#18181b;">Best regards,<br/><strong>${senderDisplaySafe}</strong><br/><span style="color:#71717a;font-size:13px;">${clinicNameSafe}</span></p>
-<p style="margin:24px 0 0;padding-top:16px;border-top:1px solid #e4e4e7;font-size:12px;color:#a1a1aa;">Questions? Reply to this email or contact <a href="mailto:${clinicFromSafe}" style="color:#52525b;">${clinicFromSafe}</a>.</p>
+<p style="margin:24px 0 0;padding-top:16px;border-top:1px solid #e4e4e7;font-size:12px;color:#a1a1aa;">Questions? Reply to this email or contact <a href="mailto:${footerContactSafe}" style="color:#52525b;">${footerContactSafe}</a>.</p>
 </div>
 </body></html>
       `.trim();
@@ -302,7 +354,7 @@ ${viewLink}
         results.email = {
           success: false,
           note:
-            "Set SENDGRID_API_KEY or RESEND_API_KEY in Supabase Edge Function secrets. Clinics must set their send-from email in Settings (domain verified in SendGrid/Resend).",
+            "Set SENDGRID_API_KEY or RESEND_API_KEY, and INVOICE_SEND_DOMAIN (e.g. mail.optimedix.ai) in Supabase Edge secrets. Verify that domain once in SendGrid.",
         };
       }
     }

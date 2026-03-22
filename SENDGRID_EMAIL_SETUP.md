@@ -15,9 +15,14 @@ In **Project Settings → Edge Functions → Secrets**:
 | Secret | Example |
 |--------|---------|
 | `SENDGRID_API_KEY` | `SG.xxx...` |
-| `FROM_EMAIL` | `invoices@optimedix.ai` |
+| **`INVOICE_SEND_DOMAIN`** | **`mail.optimedix.ai`** (verify this **whole subdomain** once in SendGrid) |
+| `FROM_EMAIL` | Optional legacy; not used for From when `INVOICE_SEND_DOMAIN` is set |
 
-If **`SENDGRID_API_KEY`** is set, the **`send-invoice`** function uses **SendGrid** and **ignores** `RESEND_API_KEY` for that send.
+With **`INVOICE_SEND_DOMAIN`**, each clinic automatically gets **`{slug}-{id}@mail.optimedix.ai`** — no per-clinic DNS. Patients see **clinician + clinic name**; **Reply-to** uses Settings.
+
+If **`INVOICE_SEND_DOMAIN`** is **not** set, clinics must fill **Custom send-from** in Settings (their own verified address).
+
+If **`SENDGRID_API_KEY`** is set, **`send-invoice`** uses SendGrid (over Resend when both exist).
 
 ## 3. Deploy
 

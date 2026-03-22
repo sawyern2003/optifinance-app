@@ -163,11 +163,36 @@ export default function Settings() {
                 Invoice emails
               </h2>
               <div className="space-y-4 bg-amber-50/60 border border-amber-100 rounded-xl p-4">
-                <p className="text-xs text-amber-950/80 leading-relaxed">
-                  <strong>Invoice emails are sent only from your clinic.</strong> Patients see{" "}
-                  <strong>Dr / clinician name</strong> and <strong>your clinic email</strong> in their inbox
-                  (not the software&apos;s address). The clinic domain must be verified in SendGrid or Resend.
-                </p>
+                {import.meta.env.VITE_INVOICE_SEND_DOMAIN ? (
+                  <>
+                    <p className="text-xs text-amber-950/80 leading-relaxed">
+                      <strong>Platform send address.</strong> Invoices go out from a unique address at{" "}
+                      <code className="bg-white/80 px-1 rounded">
+                        @{import.meta.env.VITE_INVOICE_SEND_DOMAIN}
+                      </code>{" "}
+                      (you verify that domain <strong>once</strong> in SendGrid). Patients still see{" "}
+                      <strong>your clinician name</strong> and <strong>clinic name</strong> in their inbox;{" "}
+                      <strong>replies</strong> go to your reply-to or login email — like Wix-style routing.
+                    </p>
+                    <div className="rounded-lg border border-amber-200/80 bg-white/90 px-3 py-2.5">
+                      <p className="text-[11px] font-medium uppercase tracking-wide text-amber-900/70">
+                        Your send-from address
+                      </p>
+                      <p className="text-sm font-mono text-[#1a2845] break-all mt-1">
+                        {user?.invoice_send_slug
+                          ? `${user.invoice_send_slug}@${import.meta.env.VITE_INVOICE_SEND_DOMAIN}`
+                          : `(e.g. your-clinic-name-xxxxxxxxx@${import.meta.env.VITE_INVOICE_SEND_DOMAIN} — saved when you first send an invoice)`}
+                      </p>
+                    </div>
+                  </>
+                ) : (
+                  <p className="text-xs text-amber-950/80 leading-relaxed">
+                    <strong>Custom domain mode.</strong> Set <code className="bg-white/80 px-1 rounded">VITE_INVOICE_SEND_DOMAIN</code> in
+                    your app env and <code className="bg-white/80 px-1 rounded">INVOICE_SEND_DOMAIN</code> in Supabase for automatic{" "}
+                    <code className="bg-white/80 px-1 rounded">slug@mail.yourbrand.com</code> addresses. Otherwise use{" "}
+                    <strong>Clinic send-from</strong> below (must be verified in SendGrid).
+                  </p>
+                )}
                 <div className="space-y-2">
                   <Label htmlFor="invoice-sender-name" className="text-sm font-medium text-gray-700">
                     Clinician name (inbox display name)
@@ -181,41 +206,42 @@ export default function Settings() {
                     className="rounded-xl border-gray-300 h-11"
                   />
                   <p className="text-xs text-gray-500">
-                    Shown as the sender name in Gmail etc. If empty, your <strong>Clinic name</strong> above is
-                    used instead.
-                  </p>
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="invoice-from-email" className="text-sm font-medium text-gray-700">
-                    Clinic send-from email <span className="text-red-600">*</span>
-                  </Label>
-                  <Input
-                    id="invoice-from-email"
-                    type="email"
-                    value={invoiceFromEmail}
-                    onChange={(e) => setInvoiceFromEmail(e.target.value)}
-                    placeholder="e.g. info@yourclinic.co.uk"
-                    className="rounded-xl border-gray-300 h-11"
-                  />
-                  <p className="text-xs text-gray-500">
-                    Required to email invoices. Use the same address you verified in SendGrid (e.g.{" "}
-                    <code className="bg-white/80 px-1 rounded">info@theoxfordwellnessdoctor.com</code>).
+                    Shown as the sender <strong>name</strong> in Gmail (e.g. Oxford Wellness). If empty,{" "}
+                    <strong>Clinic name</strong> is used.
                   </p>
                 </div>
                 <div className="space-y-2">
                   <Label htmlFor="invoice-reply-to" className="text-sm font-medium text-gray-700">
-                    Reply-to email (optional)
+                    Reply-to email (recommended)
                   </Label>
                   <Input
                     id="invoice-reply-to"
                     type="email"
                     value={invoiceReplyToEmail}
                     onChange={(e) => setInvoiceReplyToEmail(e.target.value)}
-                    placeholder={`Defaults to your login email${user?.email ? ` (${user.email})` : ""}`}
+                    placeholder={`Your real inbox${user?.email ? ` (default: ${user.email})` : ""}`}
                     className="rounded-xl border-gray-300 h-11"
                   />
                   <p className="text-xs text-gray-500">
-                    Where patient replies should go (e.g. your clinic inbox).
+                    Patient <strong>Reply</strong> goes here (e.g. your real clinic or personal email).
+                  </p>
+                </div>
+                <div className="space-y-2 pt-2 border-t border-amber-200/60">
+                  <Label htmlFor="invoice-from-email" className="text-sm font-medium text-gray-700">
+                    Custom send-from email (advanced, optional)
+                  </Label>
+                  <Input
+                    id="invoice-from-email"
+                    type="email"
+                    value={invoiceFromEmail}
+                    onChange={(e) => setInvoiceFromEmail(e.target.value)}
+                    placeholder="Only if not using platform domain above"
+                    className="rounded-xl border-gray-300 h-11"
+                  />
+                  <p className="text-xs text-gray-500">
+                    Leave blank when using <strong>INVOICE_SEND_DOMAIN</strong>. Fill only if you run without
+                    platform mail and send from your own verified address (e.g.{" "}
+                    <code className="bg-white/80 px-1 rounded">info@yourclinic.com</code>).
                   </p>
                 </div>
               </div>

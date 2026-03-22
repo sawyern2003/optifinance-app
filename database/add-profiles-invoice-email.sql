@@ -6,3 +6,8 @@
 ALTER TABLE profiles ADD COLUMN IF NOT EXISTS invoice_from_email TEXT;
 ALTER TABLE profiles ADD COLUMN IF NOT EXISTS invoice_reply_to_email TEXT;
 ALTER TABLE profiles ADD COLUMN IF NOT EXISTS invoice_sender_name TEXT;
+ALTER TABLE profiles ADD COLUMN IF NOT EXISTS invoice_send_slug TEXT;
+
+CREATE UNIQUE INDEX IF NOT EXISTS profiles_invoice_send_slug_unique
+  ON profiles (invoice_send_slug)
+  WHERE invoice_send_slug IS NOT NULL AND invoice_send_slug <> '';

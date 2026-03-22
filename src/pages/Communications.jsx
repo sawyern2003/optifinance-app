@@ -219,10 +219,11 @@ export default function Communications() {
             <CardDescription className="text-xs leading-relaxed">
               Sends a branded email with the invoice <strong>PDF attached</strong>{" "}
               (same as Wix-style invoice email). Set{" "}
-              <strong>SENDGRID_API_KEY</strong> (Twilio SendGrid) or{" "}
-              <strong>RESEND_API_KEY</strong> in Supabase secrets. Each clinic sets{" "}
-              <strong>Clinician name</strong> and <strong>Clinic send-from email</strong> in{" "}
-              <strong>Settings</strong> (that domain must be verified in SendGrid/Resend). Each clinic can
+              <strong>SENDGRID_API_KEY</strong> or <strong>RESEND_API_KEY</strong>, plus{" "}
+              <strong>INVOICE_SEND_DOMAIN</strong> (e.g. <code className="text-[11px]">mail.optimedix.ai</code>){" "}
+              for automatic <code className="text-[11px]">slug@yourdomain</code> — verify that domain once in
+              SendGrid. Each clinic sets <strong>Clinician name</strong> and <strong>Reply-to</strong> in{" "}
+              <strong>Settings</strong>. Each clinic can
               set a custom &quot;from&quot; or reply-to in{" "}
               <strong>Settings → Invoice emails</strong>. Patient contact must
               be an <strong>email address</strong> on the invoice.
