@@ -8,7 +8,10 @@
 - **Sending to patients**:
   - **Invoices** → **Send**: The app calls **generate-invoice-pdf** first if the invoice doesn’t have a PDF yet, then **send-invoice** (SMS and/or email). SMS includes the PDF link; email (when Resend is configured) includes a “View and download your PDF invoice” link.
   - **Records / QuickAdd** → “Send payment link via SMS”: creates the invoice, then you can trigger **send-invoice** with `sendVia: 'sms'` so the patient gets an SMS with the amount and, once the PDF exists, the link. For “instant” PDF before SMS, call **generate-invoice-pdf** after creating the invoice, then send (the current flow from Invoices does this; from Records/QuickAdd the SMS goes out with whatever URL exists, so generate PDF first if you want the link in that SMS).
-- **Email**: Set **RESEND_API_KEY** (and optionally **FROM_EMAIL**) in Supabase Edge Function secrets. Then “Send” with email or “both” sends a real email with the PDF link via Resend.
+- **Email** (pick one provider in Supabase secrets):
+  - **SendGrid / Twilio SendGrid** (recommended if Resend fails): set **`SENDGRID_API_KEY`** (API key from SendGrid) and **`FROM_EMAIL`** (sender on a domain verified under **Sender Authentication** in SendGrid). If **`SENDGRID_API_KEY`** is set, it is used **instead of** Resend.
+  - **Resend**: set **`RESEND_API_KEY`** and **`FROM_EMAIL`** (verified domain in Resend).
+  - **Per clinic**: **Settings → Invoice emails** — optional custom **from** (domain must be verified in the same provider) and **reply-to**. If custom from is blank, **`FROM_EMAIL`** is used with **clinic name** as the display name (`"Clinic Name" <address>`).
 
 ---
 

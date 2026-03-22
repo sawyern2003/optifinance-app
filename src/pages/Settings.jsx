@@ -18,6 +18,9 @@ export default function Settings() {
   const [sortCode, setSortCode] = useState("");
   const [logoUrl, setLogoUrl] = useState("");
   const [businessAddress, setBusinessAddress] = useState("");
+  const [invoiceSenderName, setInvoiceSenderName] = useState("");
+  const [invoiceFromEmail, setInvoiceFromEmail] = useState("");
+  const [invoiceReplyToEmail, setInvoiceReplyToEmail] = useState("");
 
   useEffect(() => {
     const fetchUser = async () => {
@@ -30,6 +33,9 @@ export default function Settings() {
       setSortCode(userData.sort_code || "");
       setLogoUrl(userData.logo_url || "");
       setBusinessAddress(userData.business_address || "");
+      setInvoiceSenderName(userData.invoice_sender_name || "");
+      setInvoiceFromEmail(userData.invoice_from_email || "");
+      setInvoiceReplyToEmail(userData.invoice_reply_to_email || "");
       setIsLoading(false);
     };
     fetchUser();
@@ -46,6 +52,9 @@ export default function Settings() {
       sort_code: sortCode,
       logo_url: logoUrl || null,
       business_address: businessAddress || null,
+      invoice_sender_name: invoiceSenderName.trim() || null,
+      invoice_from_email: invoiceFromEmail.trim() || null,
+      invoice_reply_to_email: invoiceReplyToEmail.trim() || null,
     });
     
     toast({
@@ -144,6 +153,70 @@ export default function Settings() {
                     placeholder={"e.g. 10 High Street\nLondon\nSW1A 1AA"}
                     className="rounded-xl border-gray-300 min-h-[96px]"
                   />
+                </div>
+              </div>
+            </div>
+
+            {/* Invoice emails (per clinic) */}
+            <div>
+              <h2 className="text-sm font-medium text-gray-500 uppercase tracking-wide mb-4">
+                Invoice emails
+              </h2>
+              <div className="space-y-4 bg-amber-50/60 border border-amber-100 rounded-xl p-4">
+                <p className="text-xs text-amber-950/80 leading-relaxed">
+                  <strong>Invoice emails are sent only from your clinic.</strong> Patients see{" "}
+                  <strong>Dr / clinician name</strong> and <strong>your clinic email</strong> in their inbox
+                  (not the software&apos;s address). The clinic domain must be verified in SendGrid or Resend.
+                </p>
+                <div className="space-y-2">
+                  <Label htmlFor="invoice-sender-name" className="text-sm font-medium text-gray-700">
+                    Clinician name (inbox display name)
+                  </Label>
+                  <Input
+                    id="invoice-sender-name"
+                    type="text"
+                    value={invoiceSenderName}
+                    onChange={(e) => setInvoiceSenderName(e.target.value)}
+                    placeholder='e.g. Dr Jane Smith'
+                    className="rounded-xl border-gray-300 h-11"
+                  />
+                  <p className="text-xs text-gray-500">
+                    Shown as the sender name in Gmail etc. If empty, your <strong>Clinic name</strong> above is
+                    used instead.
+                  </p>
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="invoice-from-email" className="text-sm font-medium text-gray-700">
+                    Clinic send-from email <span className="text-red-600">*</span>
+                  </Label>
+                  <Input
+                    id="invoice-from-email"
+                    type="email"
+                    value={invoiceFromEmail}
+                    onChange={(e) => setInvoiceFromEmail(e.target.value)}
+                    placeholder="e.g. info@yourclinic.co.uk"
+                    className="rounded-xl border-gray-300 h-11"
+                  />
+                  <p className="text-xs text-gray-500">
+                    Required to email invoices. Use the same address you verified in SendGrid (e.g.{" "}
+                    <code className="bg-white/80 px-1 rounded">info@theoxfordwellnessdoctor.com</code>).
+                  </p>
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="invoice-reply-to" className="text-sm font-medium text-gray-700">
+                    Reply-to email (optional)
+                  </Label>
+                  <Input
+                    id="invoice-reply-to"
+                    type="email"
+                    value={invoiceReplyToEmail}
+                    onChange={(e) => setInvoiceReplyToEmail(e.target.value)}
+                    placeholder={`Defaults to your login email${user?.email ? ` (${user.email})` : ""}`}
+                    className="rounded-xl border-gray-300 h-11"
+                  />
+                  <p className="text-xs text-gray-500">
+                    Where patient replies should go (e.g. your clinic inbox).
+                  </p>
                 </div>
               </div>
             </div>

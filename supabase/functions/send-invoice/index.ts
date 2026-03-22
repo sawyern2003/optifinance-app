@@ -60,10 +60,12 @@ serve(async (req) => {
       throw new Error("Invoice not found");
     }
 
-    // Get user profile (clinic + bank details for message)
+    // Get user profile (clinic + bank details + per-clinic email identity)
     const { data: profile, error: profileError } = await supabaseClient
       .from("profiles")
-      .select("clinic_name, bank_name, account_number, sort_code")
+      .select(
+        "clinic_name, bank_name, account_number, sort_code, invoice_from_email, invoice_reply_to_email, invoice_sender_name",
+      )
       .eq("id", user.id)
       .single();
 
@@ -76,6 +78,14 @@ serve(async (req) => {
     if (sortCode) bankLines.push(`Sort code: ${sortCode}`);
     if (accountNumber) bankLines.push(`Account: ${accountNumber}`);
     const bankDetailsText = bankLines.length > 0 ? bankLines.join(". ") : "See invoice for payment details.";
+
+    const clinicFromForEmail = (profile as { invoice_from_email?: string })
+      ?.invoice_from_email?.trim() || "";
+    if ((sendVia === "email" || sendVia === "both") && !clinicFromForEmail) {
+      throw new Error(
+        "Add your clinic send-from email in Settings → Invoice emails (e.g. info@yourclinic.com). Invoice emails are sent only from your clinic address, not the software default.",
+      );
+    }
 
     const results: any = {};
 
@@ -124,7 +134,7 @@ serve(async (req) => {
       results.sms = { success: true };
     }
 
-    // Send via Email (Resend API – set RESEND_API_KEY and optional FROM_EMAIL in Supabase secrets)
+    // Send via Email: SendGrid (Twilio SendGrid) if SENDGRID_API_KEY, else Resend if RESEND_API_KEY
     if (sendVia === "email" || sendVia === "both") {
       const patientEmail = invoice.patient_contact?.includes("@")
         ? invoice.patient_contact
@@ -134,23 +144,75 @@ serve(async (req) => {
         throw new Error("Patient email address not found. Use Edit on the invoice to add the patient's email.");
       }
 
+      const sendgridApiKey = Deno.env.get("SENDGRID_API_KEY");
       const resendApiKey = Deno.env.get("RESEND_API_KEY");
-      const fromEmail = Deno.env.get("FROM_EMAIL") || "invoices@resend.dev";
 
-      const patientName = invoice.patient_name || "there";
-      const treatmentName = invoice.treatment_name || "your treatment";
+      /** Split "Name" <email> for APIs that need separate fields (SendGrid) */
+      const parseFromParts = (header: string): { email: string; name?: string } => {
+        const angle = header.match(/<([^>]+)>/);
+        if (angle) {
+          const email = angle[1].trim();
+          const namePart = header
+            .replace(/<[^>]+>/, "")
+            .replace(/^[\s"']+|[\s"']+$/g, "")
+            .trim();
+          return namePart ? { email, name: namePart } : { email };
+        }
+        return { email: header.trim() };
+      };
+
+      const clinicFrom = clinicFromForEmail;
+
+      const senderFromProfile = (profile as { invoice_sender_name?: string })
+        ?.invoice_sender_name?.trim() || "";
+      const fallbackName = (clinicName || "Clinic").replace(/["<>]/g, "").trim() || "Clinic";
+      const senderDisplay = (senderFromProfile || fallbackName).replace(/["<>]/g, "").trim();
+      /** From: "Dr Name" <clinic@domain> — clinic email required; domain must be verified in SendGrid/Resend */
+      const fromHeader = `"${senderDisplay}" <${clinicFrom}>`;
+      const replyTo =
+        (profile as { invoice_reply_to_email?: string })?.invoice_reply_to_email?.trim() ||
+        user.email ||
+        undefined;
+
+      const esc = (s: string) =>
+        String(s)
+          .replace(/&/g, "&amp;")
+          .replace(/</g, "&lt;")
+          .replace(/>/g, "&gt;")
+          .replace(/"/g, "&quot;");
+      const patientName = esc(invoice.patient_name || "there");
+      const treatmentName = esc(invoice.treatment_name || "your treatment");
       const amountStr = `£${Number(invoice.amount).toFixed(2)}`;
+      const clinicNameSafe = esc(clinicName);
+      const senderDisplaySafe = esc(senderDisplay);
+      const clinicFromSafe = esc(clinicFrom);
+      const invNumSafe = esc(String(invoice.invoice_number));
       const bankHtml =
         bankLines.length > 0
-          ? `<p><strong>Bank details:</strong><br/>${bankLines.join("<br/>")}</p>`
+          ? `<p style="margin:16px 0 0;font-size:14px;line-height:1.5;color:#444;"><strong>Bank details</strong><br/>${bankLines.join("<br/>")}</p>`
           : "";
+      const pdfUrl = invoice.invoice_pdf_url || "";
+      const pdfUrlSafe = pdfUrl.replace(/"/g, "%22");
+      const viewLink = pdfUrlSafe
+        ? `<a href="${pdfUrlSafe}" style="display:inline-block;margin-top:20px;background:#1a1a1a;color:#fff!important;padding:12px 22px;text-decoration:none;border-radius:6px;font-size:14px;font-weight:600;">View invoice</a>`
+        : "";
       const emailHtml = `
-<p>Hi ${patientName},</p>
-<p>Thank you for visiting ${clinicName}, for <strong>${treatmentName}</strong>. Amount due: ${amountStr}.</p>
+<!DOCTYPE html><html><body style="margin:0;padding:24px 16px;background:#f4f4f5;font-family:system-ui,-apple-system,sans-serif;">
+<div style="max-width:560px;margin:0 auto;background:#fff;border:1px solid #e4e4e7;border-radius:10px;padding:28px 24px;">
+<p style="margin:0 0 12px;font-size:15px;line-height:1.5;color:#18181b;">Hi ${patientName},</p>
+<p style="margin:0 0 8px;font-size:15px;line-height:1.55;color:#3f3f46;">You received a new invoice from <strong>${clinicNameSafe}</strong>.</p>
+<p style="margin:0 0 16px;font-size:14px;line-height:1.5;color:#52525b;">Thank you for visiting for <strong>${treatmentName}</strong>. Amount due: <strong>${amountStr}</strong>.</p>
+<div style="margin:16px 0;padding:14px 16px;background:#fafafa;border-radius:8px;border:1px solid #f4f4f5;">
+<p style="margin:0;font-size:13px;color:#52525b;"><strong>Invoice number</strong> ${invNumSafe}</p>
+<p style="margin:8px 0 0;font-size:13px;color:#52525b;"><strong>Amount</strong> ${amountStr}</p>
+</div>
 ${bankHtml}
-<p>Please find your invoice attached. We hope to see you again soon.</p>
-<p><strong>Invoice:</strong> ${invoice.invoice_number}${invoice.invoice_pdf_url ? ` – <a href="${invoice.invoice_pdf_url}">View / download PDF</a>` : ""}</p>
-<p>Best regards,<br/>${clinicName}</p>
+<p style="margin:20px 0 0;font-size:14px;line-height:1.5;color:#52525b;">Please find your invoice attached. We hope to see you again soon.</p>
+${viewLink}
+<p style="margin:28px 0 0;font-size:14px;line-height:1.5;color:#18181b;">Best regards,<br/><strong>${senderDisplaySafe}</strong><br/><span style="color:#71717a;font-size:13px;">${clinicNameSafe}</span></p>
+<p style="margin:24px 0 0;padding-top:16px;border-top:1px solid #e4e4e7;font-size:12px;color:#a1a1aa;">Questions? Reply to this email or contact <a href="mailto:${clinicFromSafe}" style="color:#52525b;">${clinicFromSafe}</a>.</p>
+</div>
+</body></html>
       `.trim();
 
       const attachments: { filename: string; content: string }[] = [];
@@ -176,13 +238,51 @@ ${bankHtml}
         }
       }
 
-      if (resendApiKey) {
+      const subject = `New invoice from ${clinicName}`;
+
+      if (sendgridApiKey) {
+        const fromParts = parseFromParts(fromHeader);
+        const sgBody: Record<string, unknown> = {
+          personalizations: [{ to: [{ email: patientEmail }] }],
+          from: fromParts.name
+            ? { email: fromParts.email, name: fromParts.name }
+            : { email: fromParts.email },
+          subject,
+          content: [{ type: "text/html", value: emailHtml }],
+        };
+        if (replyTo) {
+          sgBody.reply_to = { email: replyTo };
+        }
+        if (attachments.length > 0) {
+          sgBody.attachments = attachments.map((a) => ({
+            content: a.content,
+            filename: a.filename,
+            type: "application/pdf",
+            disposition: "attachment",
+          }));
+        }
+
+        const sgRes = await fetch("https://api.sendgrid.com/v3/mail/send", {
+          method: "POST",
+          headers: {
+            "Authorization": `Bearer ${sendgridApiKey}`,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify(sgBody),
+        });
+        if (!sgRes.ok) {
+          const errText = await sgRes.text();
+          throw new Error(`SendGrid error: ${errText}`);
+        }
+        results.email = { success: true, provider: "sendgrid" };
+      } else if (resendApiKey) {
         const payload: Record<string, unknown> = {
-          from: fromEmail,
+          from: fromHeader,
           to: patientEmail,
-          subject: `Your invoice from ${clinicName} – ${invoice.invoice_number}`,
+          subject,
           html: emailHtml,
         };
+        if (replyTo) payload.reply_to = replyTo;
         if (attachments.length > 0) payload.attachments = attachments;
 
         const resendRes = await fetch("https://api.resend.com/emails", {
@@ -195,11 +295,15 @@ ${bankHtml}
         });
         if (!resendRes.ok) {
           const errText = await resendRes.text();
-          throw new Error(`Email failed: ${errText}`);
+          throw new Error(`Resend error: ${errText}`);
         }
-        results.email = { success: true };
+        results.email = { success: true, provider: "resend" };
       } else {
-        results.email = { success: false, note: "Set RESEND_API_KEY (and optional FROM_EMAIL) in Supabase secrets to send email" };
+        results.email = {
+          success: false,
+          note:
+            "Set SENDGRID_API_KEY or RESEND_API_KEY in Supabase Edge Function secrets. Clinics must set their send-from email in Settings (domain verified in SendGrid/Resend).",
+        };
       }
     }
 
