@@ -1342,7 +1342,7 @@ export default function Records() {
                             <PopoverContent className="text-sm space-y-2" align="start">
                               <p className="font-medium text-gray-900">Amount charged</p>
                               <p className="text-gray-600 leading-snug">
-                                Uses this treatment&apos;s default list price from the Catalogue, minus the friends &amp; family discount %. Uncheck &quot;Apply friends &amp; family discount&quot; below to enter any price manually.
+                                Worked out automatically from this treatment&apos;s Catalogue price and your friends &amp; family settings. Uncheck &quot;Apply friends &amp; family discount&quot; below to type any amount yourself.
                               </p>
                             </PopoverContent>
                           </Popover>
@@ -1422,10 +1422,10 @@ export default function Records() {
                         <PopoverContent className="text-sm w-80 space-y-2" align="start">
                           <p className="font-medium text-gray-900">Friends &amp; family</p>
                           <ul className="text-gray-600 space-y-1.5 list-disc pl-4 leading-snug">
-                            <li>Charged amount = list price × (1 − discount %).</li>
-                            <li>Leave discount % blank to use the patient&apos;s default in Catalogue → Patients (if set).</li>
-                            <li>The treatment needs a default price in the Catalogue.</li>
-                            <li>Invoices can show list price, discount, and amount charged; dashboard revenue uses the charged amount.</li>
+                            <li>The charged amount updates automatically from the Catalogue price and the discount you enter.</li>
+                            <li>Leave discount blank to use the patient&apos;s default in Catalogue → Patients, if they have one.</li>
+                            <li>Each treatment needs a default price set in the Catalogue.</li>
+                            <li>Invoices can show the breakdown; dashboard revenue follows the charged amount.</li>
                           </ul>
                         </PopoverContent>
                       </Popover>
@@ -1492,7 +1492,7 @@ export default function Records() {
                                 </PopoverTrigger>
                                 <PopoverContent className="text-sm space-y-1.5" align="start">
                                   <p className="text-gray-600 leading-snug">
-                                    Formula: charged = list price × (1 − %). Leave empty to use the patient&apos;s saved default in Catalogue → Patients.
+                                    Leave blank to use the patient&apos;s saved default in Catalogue → Patients, if they have one.
                                   </p>
                                 </PopoverContent>
                               </Popover>
