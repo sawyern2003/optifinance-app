@@ -8,7 +8,8 @@ import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { Trash2, Search, Sparkles, CreditCard, Pencil, FileText, Loader2, Download } from "lucide-react";
+import { Trash2, Search, Sparkles, CreditCard, Pencil, FileText, Loader2, Download, HelpCircle } from "lucide-react";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { format, startOfMonth, endOfMonth, subMonths, startOfYear } from "date-fns";
 import { useToast } from "@/components/ui/use-toast";
 import {
@@ -1321,11 +1322,32 @@ export default function Records() {
 
                   <div className="grid grid-cols-2 gap-4">
                     <div className="space-y-2">
-                      <Label htmlFor="edit-price" className="text-sm font-medium text-gray-700">
-                        {editForm.friends_family_discount_applied
-                          ? "Amount charged (£) *"
-                          : "Price (£) *"}
-                      </Label>
+                      <div className="flex items-center gap-1.5">
+                        <Label htmlFor="edit-price" className="text-sm font-medium text-gray-700">
+                          {editForm.friends_family_discount_applied
+                            ? "Amount charged (£) *"
+                            : "Price (£) *"}
+                        </Label>
+                        {editForm.friends_family_discount_applied && (
+                          <Popover>
+                            <PopoverTrigger asChild>
+                              <button
+                                type="button"
+                                className="text-gray-400 hover:text-gray-600 rounded-full p-0.5 -ml-0.5"
+                                aria-label="How amount charged is calculated"
+                              >
+                                <HelpCircle className="w-4 h-4" />
+                              </button>
+                            </PopoverTrigger>
+                            <PopoverContent className="text-sm space-y-2" align="start">
+                              <p className="font-medium text-gray-900">Amount charged</p>
+                              <p className="text-gray-600 leading-snug">
+                                Uses this treatment&apos;s default list price from the Catalogue, minus the friends &amp; family discount %. Uncheck &quot;Apply friends &amp; family discount&quot; below to enter any price manually.
+                              </p>
+                            </PopoverContent>
+                          </Popover>
+                        )}
+                      </div>
                       <Input
                         id="edit-price"
                         type="number"
@@ -1336,11 +1358,6 @@ export default function Records() {
                         required
                         disabled={editForm.friends_family_discount_applied}
                       />
-                      {editForm.friends_family_discount_applied && (
-                        <p className="text-xs text-indigo-800 bg-indigo-50/80 rounded-lg px-3 py-2 border border-indigo-100">
-                          From catalogue list price minus friends &amp; family %. Turn off the discount below to set a custom price.
-                        </p>
-                      )}
                     </div>
 
                     <div className="space-y-2">
@@ -1388,13 +1405,30 @@ export default function Records() {
                   )}
 
                   <div className="rounded-xl border border-indigo-100 bg-indigo-50/50 p-4 space-y-3">
-                    <div>
+                    <div className="flex items-center gap-1.5">
                       <p className="text-sm font-semibold text-gray-900">
                         Friends &amp; family discount
                       </p>
-                      <p className="text-xs text-gray-600 mt-1">
-                        Amount charged and revenue update from the catalogue list price. Invoices show list, discount, and amount charged.
-                      </p>
+                      <Popover>
+                        <PopoverTrigger asChild>
+                          <button
+                            type="button"
+                            className="text-gray-500 hover:text-gray-700 rounded-full p-0.5"
+                            aria-label="Friends and family discount help"
+                          >
+                            <HelpCircle className="w-4 h-4" />
+                          </button>
+                        </PopoverTrigger>
+                        <PopoverContent className="text-sm w-80 space-y-2" align="start">
+                          <p className="font-medium text-gray-900">Friends &amp; family</p>
+                          <ul className="text-gray-600 space-y-1.5 list-disc pl-4 leading-snug">
+                            <li>Charged amount = list price × (1 − discount %).</li>
+                            <li>Leave discount % blank to use the patient&apos;s default in Catalogue → Patients (if set).</li>
+                            <li>The treatment needs a default price in the Catalogue.</li>
+                            <li>Invoices can show list price, discount, and amount charged; dashboard revenue uses the charged amount.</li>
+                          </ul>
+                        </PopoverContent>
+                      </Popover>
                     </div>
                     <div className="flex items-start gap-3">
                       <input
@@ -1439,12 +1473,30 @@ export default function Records() {
                         </Label>
                         {editForm.friends_family_discount_applied && (
                           <div className="space-y-2">
-                            <Label
-                              htmlFor="edit-ff-percent"
-                              className="text-xs font-medium text-gray-700"
-                            >
-                              Discount for this visit (%)
-                            </Label>
+                            <div className="flex items-center gap-1.5">
+                              <Label
+                                htmlFor="edit-ff-percent"
+                                className="text-xs font-medium text-gray-700"
+                              >
+                                Discount for this visit (%)
+                              </Label>
+                              <Popover>
+                                <PopoverTrigger asChild>
+                                  <button
+                                    type="button"
+                                    className="text-gray-500 hover:text-gray-700 rounded-full p-0.5"
+                                    aria-label="Discount percent help"
+                                  >
+                                    <HelpCircle className="w-3.5 h-3.5" />
+                                  </button>
+                                </PopoverTrigger>
+                                <PopoverContent className="text-sm space-y-1.5" align="start">
+                                  <p className="text-gray-600 leading-snug">
+                                    Formula: charged = list price × (1 − %). Leave empty to use the patient&apos;s saved default in Catalogue → Patients.
+                                  </p>
+                                </PopoverContent>
+                              </Popover>
+                            </div>
                             <Input
                               id="edit-ff-percent"
                               type="number"
