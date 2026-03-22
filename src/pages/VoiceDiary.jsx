@@ -9,6 +9,8 @@ import { format, subDays, parseISO } from "date-fns";
 import { useToast } from "@/components/ui/use-toast";
 import { createPageUrl } from "@/utils";
 import { friendsFamilyInvoiceFields } from "@/lib/invoiceFriendsFamily";
+import { resolveInvoiceSendVia } from "@/lib/contactGuards";
+import { invoicesAPI, summarizeSendInvoiceResults } from "@/api/invoices";
 import { Link } from "react-router-dom";
 
 export default function VoiceDiary() {
@@ -559,7 +561,14 @@ export default function VoiceDiary() {
       setConfirmedData({
         treatments: processedData.treatments.map(t => ({ ...t, include: true })),
         payment_updates: processedPaymentUpdates.map(u => ({ ...u, include: true })),
-        invoices: processedData.invoices.map(i => ({ ...i, include: true })),
+        invoices: processedData.invoices.map((i) => ({
+          ...i,
+          send_after_create: Boolean(i.send_after_create),
+          send_via:
+            i.send_via === "email" || i.send_via === "sms" ? i.send_via : "both",
+          patient_contact: i.patient_contact || null,
+          include: true,
+        })),
         patients: processedData.patients.map(p => ({ ...p, include: true }))
       });
       setReviewDialogOpen(true);
@@ -685,6 +694,9 @@ export default function VoiceDiary() {
         if (!patientsForFf.some((x) => x.id === p.id)) patientsForFf.push(p);
       }
 
+      /** After voice diary apply: PDF + send-invoice when send_after_create */
+      const invoiceSendOutcomes = [];
+
       // Create invoices for pending treatments
       for (const invoiceData of confirmedData.invoices.filter(i => i.include)) {
         try {
@@ -704,18 +716,25 @@ export default function VoiceDiary() {
 
           if (!treatment) continue;
 
+          const finalContact =
+            (invoiceData.patient_contact &&
+              String(invoiceData.patient_contact).trim()) ||
+            patient.contact ||
+            patient.phone ||
+            "";
+
           const invoiceNumber = generateInvoiceNumber();
-          await api.entities.Invoice.create({
+          const createdInvoice = await api.entities.Invoice.create({
             invoice_number: invoiceNumber,
             treatment_entry_id: treatment.id,
             patient_name: invoiceData.patient_name,
-            patient_contact: patient.contact || patient.phone || '',
+            patient_contact: finalContact,
             treatment_name: invoiceData.treatment_name,
             treatment_date: invoiceData.date,
             amount: invoiceData.amount,
             practitioner_name: treatment.practitioner_name || '',
             issue_date: format(new Date(), 'yyyy-MM-dd'),
-            status: 'sent',
+            status: 'pending',
             notes: '',
             ...friendsFamilyInvoiceFields(
               treatment,
@@ -723,6 +742,33 @@ export default function VoiceDiary() {
               patientsForFf,
             ),
           });
+
+          if (invoiceData.send_after_create && createdInvoice?.id) {
+            const sendVia = resolveInvoiceSendVia(
+              invoiceData.send_via || "both",
+              finalContact,
+            );
+            try {
+              await invoicesAPI.generateInvoicePDF(createdInvoice.id);
+              const sendData = await invoicesAPI.sendInvoice(
+                createdInvoice.id,
+                sendVia,
+              );
+              const summary = summarizeSendInvoiceResults(sendVia, sendData);
+              invoiceSendOutcomes.push({
+                ok: true,
+                patient: invoiceData.patient_name,
+                text: summary.description || "Sent.",
+              });
+            } catch (sendErr) {
+              console.error("Voice diary auto-send invoice:", sendErr);
+              invoiceSendOutcomes.push({
+                ok: false,
+                patient: invoiceData.patient_name,
+                text: sendErr?.message || "Send failed",
+              });
+            }
+          }
         } catch (error) {
           console.error('Failed to create invoice:', error);
         }
@@ -734,10 +780,30 @@ export default function VoiceDiary() {
       queryClient.invalidateQueries({ queryKey: ['invoices'] });
       queryClient.invalidateQueries({ queryKey: ['practitioners'] });
 
+      const sendOk = invoiceSendOutcomes.filter((o) => o.ok);
+      const sendBad = invoiceSendOutcomes.filter((o) => !o.ok);
+      let description =
+        "Your diary entry is saved. Open the dashboard or records anytime.";
+      if (sendOk.length) {
+        description += ` ${sendOk.map((o) => `${o.patient}: ${o.text}`).join(" ")}`;
+      }
+      if (sendBad.length) {
+        description += ` Could not send: ${sendBad.map((o) => `${o.patient} (${o.text})`).join("; ")}.`;
+      }
+
       toast({
         title: "Changes applied",
-        description: "Your diary entry is saved. Open the dashboard or records anytime.",
-        className: "bg-green-50 border-green-200"
+        description,
+        className:
+          invoiceSendOutcomes.length > 0 &&
+          sendBad.length &&
+          !sendOk.length
+            ? undefined
+            : "bg-green-50 border-green-200",
+        variant:
+          sendBad.length && !sendOk.length && invoiceSendOutcomes.length > 0
+            ? "destructive"
+            : undefined,
       });
 
       setReviewDialogOpen(false);
@@ -958,7 +1024,7 @@ export default function VoiceDiary() {
                 id="voice-diary-input"
                 value={transcript}
                 onChange={(e) => setTranscript(e.target.value)}
-                placeholder="Type or paste notes…"
+                placeholder="e.g. …please send an invoice to Jane for her facial…"
                 className="min-h-[140px] w-full resize-y border-0 border-b border-slate-200 bg-transparent px-0 py-2 text-[15px] leading-7 text-[#1a2845] shadow-none placeholder:text-slate-400 focus-visible:border-[#1a2845]/40 focus-visible:ring-0 focus-visible:ring-offset-0 rounded-none"
                 disabled={processing}
                 autoFocus
@@ -1026,7 +1092,11 @@ export default function VoiceDiary() {
                 Review before saving
               </DialogTitle>
               <DialogDescription className="text-sm text-slate-500 pt-1">
-                Toggle items off if something looks wrong, then apply.
+                Toggle items off if something looks wrong, then apply. Saying things
+                like &quot;please send an invoice to…&quot; or &quot;email her the
+                invoice&quot; will create the invoice and send it automatically after
+                you confirm (patient needs email or phone on file, or say it in the
+                diary).
               </DialogDescription>
             </DialogHeader>
 
@@ -1205,6 +1275,37 @@ export default function VoiceDiary() {
                                 <span className="text-xs text-gray-500 uppercase tracking-wide">Date</span>
                                 <p className="text-gray-900 font-light">{invoice.date}</p>
                               </div>
+                              {invoice.send_after_create ? (
+                                <div className="col-span-2">
+                                  <span className="text-xs text-gray-500 uppercase tracking-wide">
+                                    After save
+                                  </span>
+                                  <p className="text-emerald-800 font-medium text-sm">
+                                    Auto-send via{" "}
+                                    {invoice.send_via === "email"
+                                      ? "email"
+                                      : invoice.send_via === "sms"
+                                        ? "SMS"
+                                        : "email + SMS"}{" "}
+                                    (PDF generated first)
+                                  </p>
+                                  {invoice.patient_contact ? (
+                                    <p className="text-xs text-gray-600 mt-0.5">
+                                      Contact: {invoice.patient_contact}
+                                    </p>
+                                  ) : null}
+                                </div>
+                              ) : (
+                                <div className="col-span-2">
+                                  <span className="text-xs text-gray-500 uppercase tracking-wide">
+                                    After save
+                                  </span>
+                                  <p className="text-gray-600 text-sm font-light">
+                                    Invoice only — send from Communications or
+                                    Invoices when ready
+                                  </p>
+                                </div>
+                              )}
                             </div>
                           </div>
                         </div>

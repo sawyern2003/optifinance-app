@@ -27,15 +27,10 @@ import {
   invoicesAPI,
   summarizeSendInvoiceResults,
 } from "@/api/invoices";
-
-function looksLikeEmail(contact) {
-  return Boolean(contact?.trim()) && contact.includes("@");
-}
-
-/** SMS / Twilio: must not be an email; expect a phone (ideally E.164 e.g. +44…) */
-function looksLikePhone(contact) {
-  return Boolean(contact?.trim()) && !contact.includes("@");
-}
+import {
+  looksLikeEmail,
+  looksLikePhone,
+} from "@/lib/contactGuards";
 
 export default function Communications() {
   const { toast } = useToast();

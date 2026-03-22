@@ -228,8 +228,14 @@ Extract ALL relevant information:
 2) PAYMENT UPDATES — money received against existing work; phrases like paid, settled, cleared.
    Fields: patient_name, treatment_name (string or null), amount_paid (number), date_hint (string or null, e.g. "yesterday").
 
-3) INVOICES — user asks to invoice / send invoice for a pending treatment.
-   Fields: patient_name, treatment_name, amount (number), date (YYYY-MM-DD of the treatment).
+3) INVOICES — create an invoice for a pending treatment, and optionally SEND it (email / SMS / both).
+   - Set send_after_create to TRUE when the speaker asks to send, email, text, SMS, WhatsApp, or "fire off" the invoice (e.g. "please send an invoice to Jane", "email Bob his invoice", "text her the invoice").
+   - Set send_after_create to FALSE when they only want the invoice created/raised without sending (e.g. "create an invoice for Sam" with no send/dispatch wording).
+   Fields per item:
+   - patient_name, treatment_name, amount (number), date (YYYY-MM-DD of the treatment)
+   - send_after_create (boolean)
+   - send_via: "email" if they specify email/mail; "sms" for text/SMS/message (not email); "both" if they want both channels or it is unclear
+   - patient_contact (string or null): ONLY if the entry gives an explicit email or phone for delivery (e.g. "send to jane@x.com"); otherwise null (the app will use the patient record)
 
 4) NEW PATIENTS — people not clearly in KNOWN PATIENTS with contact info if given.
    Fields: name, contact (string or null), phone (string or null).
@@ -240,7 +246,8 @@ Rules:
 - If nothing for a section, use an empty array [].
 
 Respond with ONLY a single JSON object (no markdown), exactly in this shape:
-{"treatments":[],"payment_updates":[],"invoices":[],"patients":[]}`;
+{"treatments":[],"payment_updates":[],"invoices":[],"patients":[]}
+Each object in "invoices" must include: patient_name, treatment_name, amount, date, send_after_create (boolean), send_via ("email"|"sms"|"both"), patient_contact (string or null).`;
 }
 
 async function handleVoiceDiary(
@@ -319,12 +326,32 @@ async function handleVoiceDiary(
         : null,
   }));
 
-  const invoices = normalized.invoices.map((i) => ({
-    patient_name: String(i.patient_name ?? ""),
-    treatment_name: String(i.treatment_name ?? ""),
-    amount: Number(i.amount ?? 0),
-    date: String(i.date ?? ctx.todayDate),
-  }));
+  const invoices = normalized.invoices.map((i) => {
+    const sendViaRaw = String(i.send_via ?? "").toLowerCase().trim();
+    let send_via: "email" | "sms" | "both" = "both";
+    if (sendViaRaw === "email") send_via = "email";
+    else if (sendViaRaw === "sms") send_via = "sms";
+
+    const truthy = (v: unknown) =>
+      v === true || v === "true" || v === "yes" || v === 1;
+    const send_after_create =
+      truthy(i.send_after_create) || truthy(i.send_invoice);
+
+    const patient_contact =
+      i.patient_contact != null && String(i.patient_contact).trim().length > 0
+        ? String(i.patient_contact).trim()
+        : null;
+
+    return {
+      patient_name: String(i.patient_name ?? ""),
+      treatment_name: String(i.treatment_name ?? ""),
+      amount: Number(i.amount ?? 0),
+      date: String(i.date ?? ctx.todayDate),
+      send_after_create,
+      send_via,
+      patient_contact,
+    };
+  });
 
   const patients = normalized.patients.map((p) => ({
     name: String(p.name ?? ""),
