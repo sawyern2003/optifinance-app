@@ -94,13 +94,16 @@ If you see **401**, **CORS**, or **"Edge Function returned a non-2xx status code
 
 1. **Sign in again** – The app now refreshes your session before calling these functions; an expired session will show "Session expired. Please sign in again."
 2. **Vercel env** – Same as step 1: **VITE_SUPABASE_URL** and **VITE_SUPABASE_ANON_KEY** must be set for project **xfkitnutpzhaamuaaelp**, then redeploy.
-3. **If 401 persists** – Deploy the invoice/reminder functions with JWT verification disabled at the gateway (auth is still enforced inside each function):
+3. **If 401 persists** – The repo includes `supabase/config.toml` with `verify_jwt = false` for these functions. From a **linked** project folder, deploy so the setting applies:
    ```bash
    cd optifinance-app  # or your app root
-   supabase functions deploy generate-invoice-pdf --no-verify-jwt
-   supabase functions deploy send-invoice --no-verify-jwt
-   supabase functions deploy send-payment-reminder --no-verify-jwt
+   supabase link --project-ref xfkitnutpzhaamuaaelp   # once
+   supabase functions deploy send-invoice
+   supabase functions deploy generate-invoice-pdf
+   supabase functions deploy send-payment-reminder
    ```
+   Or use flags (same effect): `supabase functions deploy send-invoice --no-verify-jwt` (and the other two). Alternatively, in **Dashboard → Edge Functions →** each function **→** turn **Verify JWT** off (auth is still enforced inside each function via `getUser()`).
+4. **Explicit JWT on the client** – The app passes `Authorization: Bearer <access_token>` from a fresh `refreshSession()` on every invoice/PDF/reminder invoke so the gateway always receives the same token you just refreshed.
 
 ---
 

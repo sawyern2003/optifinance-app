@@ -1,5 +1,5 @@
 import { supabase } from '@/config/supabase';
-import { edgeInvokeErrorMessage } from '@/api/invoices';
+import { edgeInvokeErrorMessage, ensureSession } from '@/api/invoices';
 
 // Helper function to convert orderBy string to Supabase order format
 function parseOrderBy(orderBy) {
@@ -378,8 +378,10 @@ class Functions {
         console.warn('sendInvoiceSMS: invoiceId required for Twilio. Payload:', payload);
         return { success: false, message: 'invoiceId required' };
       }
+      const session = await ensureSession();
       const { data, error, response } = await supabase.functions.invoke('send-invoice', {
         body: { invoiceId, sendVia: 'sms' },
+        headers: { Authorization: `Bearer ${session.access_token}` },
       });
       if (error) {
         const msg = await edgeInvokeErrorMessage(error, response);

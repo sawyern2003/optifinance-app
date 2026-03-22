@@ -4,11 +4,16 @@ import { supabase } from '@/config/supabase';
  * Ensure we have a valid session before calling Edge Functions (avoids 401/CORS issues).
  * Refreshes the session so the JWT is valid when the gateway receives it.
  */
-async function ensureSession() {
+/** Exported for other API modules that call Edge Functions (e.g. send-invoice from QuickAdd). */
+export async function ensureSession() {
   const { data: { session }, error: refreshError } = await supabase.auth.refreshSession();
   if (refreshError) throw new Error('Session expired. Please sign in again.');
   if (!session?.access_token) throw new Error('Not signed in. Please sign in and try again.');
   return session;
+}
+
+function authHeaders(session) {
+  return { Authorization: `Bearer ${session.access_token}` };
 }
 
 /**
@@ -43,8 +48,11 @@ export async function edgeInvokeErrorMessage(error, response) {
  * Invoke a Supabase Edge Function and surface JSON `{ error }` from non-2xx bodies.
  */
 async function invokeEdgeFunction(functionName, body) {
-  await ensureSession();
-  const { data, error, response } = await supabase.functions.invoke(functionName, { body });
+  const session = await ensureSession();
+  const { data, error, response } = await supabase.functions.invoke(functionName, {
+    body,
+    headers: authHeaders(session),
+  });
   if (error) {
     const msg = await edgeInvokeErrorMessage(error, response);
     throw new Error(msg);
@@ -92,10 +100,11 @@ export class InvoicesAPI {
    * Generate PDF for invoice
    */
   async generateInvoicePDF(invoiceId) {
-    await ensureSession();
+    const session = await ensureSession();
 
     const { data, error, response } = await supabase.functions.invoke('generate-invoice-pdf', {
-      body: { invoiceId }
+      body: { invoiceId },
+      headers: authHeaders(session),
     });
 
     if (error) {

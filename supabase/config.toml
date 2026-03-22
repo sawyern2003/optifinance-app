@@ -1,0 +1,19 @@
+# Per-function gateway JWT verification (Supabase CLI deploy).
+# When true, the hosted gateway can return 401 before your code runs if its JWT check fails.
+# These functions still require a valid user: they read Authorization and call auth.getUser().
+#
+# After changing this file, redeploy:
+#   supabase functions deploy send-invoice
+#   supabase functions deploy generate-invoice-pdf
+#   supabase functions deploy send-payment-reminder
+#
+# Or toggle "Verify JWT" off for each function in Dashboard → Edge Functions → function → Details.
+
+[functions.send-invoice]
+verify_jwt = false
+
+[functions.generate-invoice-pdf]
+verify_jwt = false
+
+[functions.send-payment-reminder]
+verify_jwt = false
