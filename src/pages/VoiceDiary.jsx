@@ -922,55 +922,14 @@ export default function VoiceDiary() {
             </div>
           </div>
 
-          <div className="shrink-0 rounded-2xl border border-[#ebe4d6] bg-gradient-to-b from-white to-[#faf8f4] p-5 shadow-sm">
-            <p className="mb-3 text-[11px] font-medium uppercase tracking-[0.2em] text-[#1a2845]/45">
-              Today&apos;s diary
-            </p>
-
-            {diaryEditing ? (
-              <Textarea
-                id="voice-diary-input"
-                value={transcript}
-                onChange={(e) => setTranscript(e.target.value)}
-                placeholder="Your notes…"
-                className="min-h-[160px] resize-y rounded-xl border-[#e8dcc8] bg-white/90 text-sm text-[#1a2845] placeholder:text-slate-400 focus-visible:ring-[#c9a227]/40"
-                disabled={processing}
-                autoFocus
-              />
-            ) : (
-              <div
-                className="relative min-h-[160px] rounded-xl border border-[#ebe4d6]/80 bg-[#fffcf7] px-4 py-4 shadow-[inset_0_1px_0_rgba(255,255,255,0.85)]"
-                aria-live="polite"
-                aria-label="Diary transcript"
-              >
-                <div
-                  className="pointer-events-none absolute left-0 top-3 bottom-3 w-px bg-gradient-to-b from-[#c9a227]/0 via-[#c9a227]/55 to-[#c9a227]/0"
-                  aria-hidden
-                />
-                {transcript.trim() || revealText ? (
-                  <p className="pl-3 font-serif text-[15px] leading-[1.75] tracking-[0.01em] text-[#1a2845] whitespace-pre-wrap">
-                    {revealText}
-                    <span
-                      className={`ml-0.5 inline-block h-[1.1em] w-[2px] translate-y-[0.08em] bg-[#c9a227] align-middle shadow-[0_0_8px_rgba(201,162,39,0.45)] ${
-                        revealText.length >= transcript.length
-                          ? "animate-pulse"
-                          : ""
-                      }`}
-                      aria-hidden
-                    />
-                  </p>
-                ) : (
-                  <p className="pl-3 font-serif text-[15px] leading-[1.75] text-slate-400 italic">
-                    Speak or dictate — your words will appear here as you go.
-                  </p>
-                )}
-              </div>
-            )}
-
-            <div className="mt-3 flex flex-col gap-2">
+          <section className="shrink-0 border-t border-slate-200/70 pt-5">
+            <div className="mb-1 flex items-center justify-between gap-3">
+              <h2 className="text-sm font-semibold tracking-tight text-[#1a2845]">
+                Today&apos;s diary
+              </h2>
               <Button
                 type="button"
-                variant="outline"
+                variant="ghost"
                 size="sm"
                 onClick={() => {
                   if (processing) return;
@@ -988,30 +947,59 @@ export default function VoiceDiary() {
                   }
                 }}
                 disabled={processing}
-                className="w-fit rounded-lg border-[#e8dcc8] text-xs font-medium text-[#1a2845] hover:bg-[#faf8f4]"
+                className="h-8 shrink-0 px-2 text-xs font-medium text-slate-600 hover:bg-slate-100 hover:text-[#1a2845]"
               >
-                {diaryEditing ? "Done editing" : "Edit text"}
+                {diaryEditing ? "Done" : "Edit"}
               </Button>
-              <p className="text-[11px] leading-snug text-slate-400">
-                {processing ? (
-                  <span className="inline-flex items-center gap-1.5 text-[#1a2845]/70">
-                    <Loader2 className="h-3 w-3 animate-spin shrink-0" />
-                    Updating from your diary…
-                  </span>
-                ) : (
-                  <>
-                    Parses automatically when you stop{" "}
-                    <span className="font-medium text-slate-500">Dictate</span>{" "}
-                    or the live mic, or when you tap{" "}
-                    <span className="font-medium text-slate-500">
-                      Done editing
-                    </span>{" "}
-                    after a change.
-                  </>
-                )}
-              </p>
             </div>
-          </div>
+
+            {diaryEditing ? (
+              <Textarea
+                id="voice-diary-input"
+                value={transcript}
+                onChange={(e) => setTranscript(e.target.value)}
+                placeholder="Type or paste notes…"
+                className="min-h-[140px] w-full resize-y border-0 border-b border-slate-200 bg-transparent px-0 py-2 text-[15px] leading-7 text-[#1a2845] shadow-none placeholder:text-slate-400 focus-visible:border-[#1a2845]/40 focus-visible:ring-0 focus-visible:ring-offset-0 rounded-none"
+                disabled={processing}
+                autoFocus
+              />
+            ) : (
+              <div
+                className="min-h-[120px] py-2"
+                aria-live="polite"
+                aria-label="Diary transcript"
+              >
+                {transcript.trim() || revealText ? (
+                  <p className="text-[15px] font-normal leading-7 tracking-normal text-slate-800 antialiased whitespace-pre-wrap">
+                    {revealText}
+                    <span
+                      className={`ml-px inline-block h-[1.05em] w-0.5 translate-y-px bg-[#1a2845]/35 align-middle ${
+                        revealText.length >= transcript.length
+                          ? "animate-pulse"
+                          : ""
+                      }`}
+                      aria-hidden
+                    />
+                  </p>
+                ) : (
+                  <p className="text-[15px] leading-7 text-slate-400">
+                    Your transcript appears here as you use Dictate or the mic.
+                  </p>
+                )}
+              </div>
+            )}
+
+            <p className="mt-2 text-xs leading-relaxed text-slate-400">
+              {processing ? (
+                <span className="inline-flex items-center gap-1.5 text-slate-500">
+                  <Loader2 className="h-3.5 w-3.5 animate-spin shrink-0" />
+                  Updating records from this diary…
+                </span>
+              ) : (
+                "Updates run automatically when you stop speaking or finish editing."
+              )}
+            </p>
+          </section>
 
           <div className="mt-4 flex shrink-0 justify-center gap-6 pb-2 text-xs text-slate-400">
             <Link
