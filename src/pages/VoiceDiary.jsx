@@ -4,16 +4,6 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from "@/components/ui/alert-dialog";
 import { Loader2, Mic, MicOff, AudioLines } from "lucide-react";
 import { format, subDays, parseISO } from "date-fns";
 import { useToast } from "@/components/ui/use-toast";
@@ -25,6 +15,12 @@ export default function VoiceDiary() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const [transcript, setTranscript] = useState('');
+  const transcriptRef = useRef("");
+  useEffect(() => {
+    transcriptRef.current = transcript;
+  }, [transcript]);
+  /** Set after `processTranscript` is defined; used from Whisper `onstop` for auto-parse */
+  const processTranscriptRef = useRef(async () => {});
   const [isRecording, setIsRecording] = useState(false);
   const [isWhisperRecording, setIsWhisperRecording] = useState(false);
   const [isWhisperTranscribing, setIsWhisperTranscribing] = useState(false);
@@ -88,7 +84,6 @@ export default function VoiceDiary() {
   /** Read-only typewriter view vs plain textarea */
   const [diaryEditing, setDiaryEditing] = useState(false);
   const [revealText, setRevealText] = useState("");
-  const [parseConfirmOpen, setParseConfirmOpen] = useState(false);
 
   // Keep typewriter display in sync; animate only when not editing
   useEffect(() => {
@@ -292,6 +287,7 @@ export default function VoiceDiary() {
         }
 
         setIsWhisperTranscribing(true);
+        let mergedAfterDictate = null;
         try {
           const dataUrl = await new Promise((resolve, reject) => {
             const r = new FileReader();
@@ -308,10 +304,12 @@ export default function VoiceDiary() {
             nameHint: buildNameHint(),
           });
 
-          if (text) {
-            setTranscript((prev) =>
-              (prev ? `${prev.trimEnd()} ` : "") + text.trim(),
-            );
+          if (text?.trim()) {
+            const trimmed = text.trim();
+            const prev = transcriptRef.current || "";
+            mergedAfterDictate = (prev.trimEnd() ? `${prev.trimEnd()} ` : "") + trimmed;
+            transcriptRef.current = mergedAfterDictate;
+            setTranscript(mergedAfterDictate);
           }
         } catch (err) {
           console.error(err);
@@ -322,6 +320,9 @@ export default function VoiceDiary() {
           });
         } finally {
           setIsWhisperTranscribing(false);
+        }
+        if (mergedAfterDictate?.trim()) {
+          void processTranscriptRef.current(mergedAfterDictate);
         }
       };
 
@@ -443,8 +444,11 @@ export default function VoiceDiary() {
     return null;
   };
 
-  const processTranscript = async () => {
-    if (!transcript.trim()) {
+  const processTranscript = async (transcriptOverride) => {
+    const textToParse = (
+      transcriptOverride != null ? String(transcriptOverride) : transcript
+    ).trim();
+    if (!textToParse) {
       toast({
         title: "No transcript",
         description: "Please record or enter some text first",
@@ -460,7 +464,7 @@ export default function VoiceDiary() {
       const yesterdayDate = format(subDays(new Date(), 1), 'yyyy-MM-dd');
 
       const response = await api.integrations.Core.ParseVoiceDiary({
-        transcript: transcript.trim(),
+        transcript: textToParse,
         todayDate,
         yesterdayDate,
         treatmentsCatalog: treatmentCatalog.map((t) => ({
@@ -556,6 +560,8 @@ export default function VoiceDiary() {
       setProcessing(false);
     }
   };
+
+  processTranscriptRef.current = processTranscript;
 
   const applyChanges = async () => {
     if (!confirmedData) return;
@@ -961,7 +967,7 @@ export default function VoiceDiary() {
 
             <Button
               type="button"
-              onClick={() => setParseConfirmOpen(true)}
+              onClick={processTranscript}
               disabled={
                 processing ||
                 !transcript.trim() ||
@@ -985,38 +991,6 @@ export default function VoiceDiary() {
               )}
             </Button>
           </div>
-
-          <AlertDialog open={parseConfirmOpen} onOpenChange={setParseConfirmOpen}>
-            <AlertDialogContent className="max-w-md rounded-2xl border-[#ebe4d6] sm:max-w-lg">
-              <AlertDialogHeader>
-                <AlertDialogTitle className="font-serif text-xl text-[#1a2845]">
-                  Parse this diary?
-                </AlertDialogTitle>
-                <AlertDialogDescription className="text-left text-slate-600">
-                  We&apos;ll read your text and suggest updates to treatments,
-                  payments, and invoices. Please confirm you want to analyse
-                  what&apos;s shown below.
-                </AlertDialogDescription>
-              </AlertDialogHeader>
-              <div className="max-h-[min(40vh,220px)] overflow-y-auto rounded-xl border border-[#ebe4d6] bg-[#fffcf7] p-4 font-serif text-sm leading-relaxed text-[#1a2845] whitespace-pre-wrap shadow-inner">
-                {transcript.trim() || "—"}
-              </div>
-              <AlertDialogFooter className="gap-2 sm:gap-0">
-                <AlertDialogCancel className="rounded-xl border-[#e8dcc8]">
-                  Cancel
-                </AlertDialogCancel>
-                <AlertDialogAction
-                  className="rounded-xl border border-[#b8941f] bg-gradient-to-b from-[#d4af37] to-[#c9a227] font-semibold text-[#1a2845] hover:from-[#dfc15a] hover:to-[#d4af37]"
-                  onClick={() => {
-                    setParseConfirmOpen(false);
-                    processTranscript();
-                  }}
-                >
-                  Yes, parse it
-                </AlertDialogAction>
-              </AlertDialogFooter>
-            </AlertDialogContent>
-          </AlertDialog>
 
           <div className="mt-4 flex shrink-0 justify-center gap-6 pb-2 text-xs text-slate-400">
             <Link
