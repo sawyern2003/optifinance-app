@@ -719,12 +719,14 @@ export default function VoiceDiary() {
     !isWhisperTranscribing &&
     !processing;
 
-  const orbSize = "h-[min(70vw,16.5rem)] w-[min(70vw,16.5rem)] md:h-64 md:w-64";
-  const voiceShadow = `0 ${4 + micReactive * 28}px ${32 + micReactive * 48}px -${8 + micReactive * 8}px rgba(26, 40, 69, ${0.08 + micReactive * 0.22}), 0 0 0 1px rgba(201, 162, 39, ${0.18 + micReactive * 0.55})`;
+  const orbSize =
+    "h-[min(92vw,22rem)] w-[min(92vw,22rem)] sm:h-96 sm:w-96 md:h-[28rem] md:w-[28rem]";
+  const goldGlowOpacity = 0.2 + micReactive * 0.78;
+  const goldGlowScale = 1 + micReactive * 0.22;
 
   return (
     <>
-      <div className="mx-auto flex w-full max-w-xl flex-col px-4 md:px-6">
+      <div className="mx-auto flex w-full max-w-3xl flex-col px-3 sm:px-5 md:px-8">
         {/* Fill viewport minus mobile tab bar; centre the orb in the remaining space */}
         <div className="flex min-h-[calc(100dvh-5.75rem)] flex-col md:min-h-[calc(100dvh-2rem)]">
           <header className="flex shrink-0 items-center justify-between gap-3 pt-3 pb-2 md:pt-4">
@@ -758,33 +760,72 @@ export default function VoiceDiary() {
             </div>
           </header>
 
-          <div className="relative flex flex-1 flex-col items-center justify-center py-6 md:py-10">
+          <div className="relative flex flex-1 flex-col items-center justify-center py-4 md:py-6">
             <div
-              className={`relative flex ${orbSize} items-center justify-center`}
+              className={`relative flex ${orbSize} shrink-0 items-center justify-center`}
               style={{
                 transform: `scale(${orbScale})`,
                 transition: "transform 0.07s ease-out",
               }}
             >
-              {/* Single surface: white disc, navy rim, shadow responds to voice */}
+              {/* Navy depth glow */}
               <div
-                className={`absolute inset-0 rounded-full bg-white ${
-                  idleOrb && !isWhisperTranscribing ? "vd-orb-idle-shadow" : ""
-                }`}
+                className="pointer-events-none absolute inset-[-14%] rounded-full bg-[#1a2845] blur-[40px] md:blur-[52px]"
                 style={{
-                  border: "2px solid #1a2845",
-                  boxShadow: idleOrb ? undefined : voiceShadow,
-                  transition: "box-shadow 0.08s ease-out",
+                  opacity: 0.28 + micReactive * 0.35,
+                  transform: `scale(${1 + micReactive * 0.08})`,
+                  transition: "opacity 0.1s ease-out, transform 0.1s ease-out",
                 }}
                 aria-hidden
               />
-              {/* Hairline gold ring — tightens visually with input level */}
+              {/* Gold aura — idle breathe or voice-reactive */}
               <div
-                className="pointer-events-none absolute inset-[14px] rounded-full border border-[#c9a227]"
+                className={`pointer-events-none absolute rounded-full bg-[#d4a740] blur-[44px] md:blur-[60px] ${
+                  idleOrb && !isWhisperTranscribing ? "vd-orb-glow-idle" : ""
+                }`}
                 style={{
-                  opacity: 0.35 + micReactive * 0.65,
-                  transform: `scale(${1 + micReactive * 0.04})`,
-                  transition: "opacity 0.08s ease-out, transform 0.08s ease-out",
+                  inset: "-22%",
+                  ...(idleOrb && !isWhisperTranscribing
+                    ? {}
+                    : {
+                        opacity: goldGlowOpacity,
+                        transform: `scale(${goldGlowScale})`,
+                        transition:
+                          "opacity 0.09s ease-out, transform 0.09s ease-out",
+                      }),
+                }}
+                aria-hidden
+              />
+
+              {/* Main sphere — deep navy, not white */}
+              <div
+                className="pointer-events-none absolute inset-[5%] rounded-full"
+                style={{
+                  background:
+                    "radial-gradient(ellipse 115% 95% at 50% 8%, #3d5270 0%, #243652 18%, #1a2845 52%, #0f1622 100%)",
+                  boxShadow: `
+                    inset 0 2px 0 rgba(255, 253, 245, 0.12),
+                    inset 0 -28px 56px rgba(0, 0, 0, 0.5),
+                    inset 0 -8px 24px rgba(0, 0, 0, 0.35),
+                    0 0 0 1px rgba(212, 167, 64, ${0.35 + micReactive * 0.45}),
+                    0 ${8 + micReactive * 20}px ${40 + micReactive * 56}px -${6 + micReactive * 6}px rgba(212, 167, 64, ${0.15 + micReactive * 0.35})
+                  `,
+                  transition: "box-shadow 0.09s ease-out",
+                }}
+                aria-hidden
+              />
+              {/* Soft champagne highlight */}
+              <div
+                className="pointer-events-none absolute inset-[5%] rounded-full bg-[radial-gradient(circle_at_35%_22%,rgba(255,248,230,0.2),transparent_48%)]"
+                aria-hidden
+              />
+              {/* Inner gold ellipse */}
+              <div
+                className="pointer-events-none absolute inset-[10%] rounded-full border border-[#d4a740]/45"
+                style={{
+                  opacity: 0.45 + micReactive * 0.5,
+                  boxShadow: `inset 0 0 ${20 + micReactive * 24}px rgba(212, 167, 64, ${0.06 + micReactive * 0.12})`,
+                  transition: "opacity 0.08s ease-out, box-shadow 0.08s ease-out",
                 }}
                 aria-hidden
               />
@@ -795,21 +836,21 @@ export default function VoiceDiary() {
                 disabled={
                   isWhisperTranscribing || (processing && !isWhisperRecording)
                 }
-                className="relative z-10 rounded-full bg-[#1a2845] px-6 py-2.5 text-sm font-medium text-white transition hover:bg-[#243352] active:scale-[0.98] disabled:pointer-events-none disabled:opacity-40"
+                className="relative z-10 rounded-full bg-gradient-to-b from-[#f0d78c] via-[#d4a740] to-[#b8941f] px-8 py-3.5 text-[15px] font-semibold tracking-tight text-[#1a2845] shadow-[0_4px_24px_rgba(0,0,0,0.35),inset_0_1px_0_rgba(255,255,255,0.35)] transition hover:from-[#f5e0a0] hover:via-[#dfc15a] active:scale-[0.98] disabled:pointer-events-none disabled:opacity-45 md:px-10 md:py-4 md:text-base"
               >
                 {isWhisperTranscribing ? (
-                  <span className="flex items-center gap-2">
-                    <Loader2 className="h-4 w-4 animate-spin opacity-90" />
+                  <span className="flex items-center gap-2.5">
+                    <Loader2 className="h-[1.1rem] w-[1.1rem] animate-spin" />
                     Transcribing
                   </span>
                 ) : isWhisperRecording ? (
-                  <span className="flex items-center gap-2">
-                    <span className="h-2 w-2 rounded-full bg-[#d4a740]" />
+                  <span className="flex items-center gap-2.5">
+                    <span className="h-2.5 w-2.5 rounded-full bg-[#1a2845]/90 shadow-sm" />
                     Stop
                   </span>
                 ) : (
-                  <span className="flex items-center gap-2">
-                    <AudioLines className="h-4 w-4 opacity-90" />
+                  <span className="flex items-center gap-2.5">
+                    <AudioLines className="h-[1.1rem] w-[1.1rem]" />
                     Dictate
                   </span>
                 )}

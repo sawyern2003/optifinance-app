@@ -158,22 +158,20 @@ button:focus-visible {
   }
 }
 
-/* Voice diary — very subtle idle depth (no decorative “AI” bloom) */
+/* Voice diary — idle gold aura (subtle breathe when not speaking) */
 @layer utilities {
-  @keyframes vd-orb-idle-shadow {
+  @keyframes vd-orb-glow-idle {
     0%,
     100% {
-      box-shadow:
-        0 4px 24px -4px rgba(26, 40, 69, 0.07),
-        0 0 0 1px rgba(201, 162, 39, 0.12);
+      opacity: 0.22;
+      transform: scale(0.94);
     }
     50% {
-      box-shadow:
-        0 8px 32px -6px rgba(26, 40, 69, 0.1),
-        0 0 0 1px rgba(201, 162, 39, 0.22);
+      opacity: 0.38;
+      transform: scale(1.02);
     }
   }
-  .vd-orb-idle-shadow {
-    animation: vd-orb-idle-shadow 3.5s ease-in-out infinite;
+  .vd-orb-glow-idle {
+    animation: vd-orb-glow-idle 3.4s ease-in-out infinite;
   }
 }
