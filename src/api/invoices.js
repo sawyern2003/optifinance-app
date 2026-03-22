@@ -12,6 +12,50 @@ async function ensureSession() {
 }
 
 /**
+ * Invoke a Supabase Edge Function and surface JSON `{ error }` from non-2xx bodies.
+ */
+async function invokeEdgeFunction(functionName, body) {
+  await ensureSession();
+  const { data, error } = await supabase.functions.invoke(functionName, { body });
+  if (error) {
+    let msg = error.message;
+    if (error.context && typeof error.context.json === 'function') {
+      try {
+        const errBody = await error.context.json();
+        if (errBody?.error) msg = errBody.error;
+      } catch (_) { /* ignore */ }
+    }
+    throw new Error(msg);
+  }
+  if (data && typeof data === 'object' && data.error) {
+    throw new Error(String(data.error));
+  }
+  return data;
+}
+
+/**
+ * Human-readable outcome for send-invoice (handles SMS ok + email skipped when Resend unset).
+ * @param {'sms'|'email'|'both'} sendVia
+ * @param {Record<string, unknown>} data - response body from send-invoice
+ */
+export function summarizeSendInvoiceResults(sendVia, data) {
+  const r = data?.results || {};
+  const parts = [];
+  if (sendVia === 'sms' || sendVia === 'both') {
+    if (r.sms?.success) parts.push('SMS sent with link to the PDF.');
+  }
+  if (sendVia === 'email' || sendVia === 'both') {
+    if (r.email?.success) parts.push('Email sent with PDF attached.');
+    else if (r.email?.note) parts.push(`Email not sent: ${r.email.note}`);
+  }
+  const hasFailure = (sendVia === 'email' || sendVia === 'both') && r.email && r.email.success === false;
+  const hasSuccess =
+    ((sendVia === 'sms' || sendVia === 'both') && r.sms?.success) ||
+    ((sendVia === 'email' || sendVia === 'both') && r.email?.success);
+  return { parts, hasFailure, hasSuccess, description: parts.join(' ') };
+}
+
+/**
  * Invoice and Payment Reminder API
  */
 export class InvoicesAPI {
@@ -19,14 +63,7 @@ export class InvoicesAPI {
    * Send payment reminder via SMS
    */
   async sendPaymentReminder(invoiceId, includeReview = false) {
-    await ensureSession();
-
-    const { data, error } = await supabase.functions.invoke('send-payment-reminder', {
-      body: { invoiceId, includeReview }
-    });
-
-    if (error) throw error;
-    return data;
+    return invokeEdgeFunction('send-payment-reminder', { invoiceId, includeReview });
   }
 
   /**
@@ -56,14 +93,7 @@ export class InvoicesAPI {
    * Send invoice via SMS, email, or both
    */
   async sendInvoice(invoiceId, sendVia = 'both') {
-    await ensureSession();
-
-    const { data, error } = await supabase.functions.invoke('send-invoice', {
-      body: { invoiceId, sendVia }
-    });
-
-    if (error) throw error;
-    return data;
+    return invokeEdgeFunction('send-invoice', { invoiceId, sendVia });
   }
 
   /**

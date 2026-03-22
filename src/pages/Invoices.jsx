@@ -10,7 +10,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { FileText, Download, Trash2, Search, Mail, Loader2, Pencil, MessageSquare, Send } from "lucide-react";
 import { format } from "date-fns";
 import { useToast } from "@/components/ui/use-toast";
-import { invoicesAPI } from "@/api/invoices";
+import { invoicesAPI, summarizeSendInvoiceResults } from "@/api/invoices";
 
 export default function Invoices() {
   const { toast } = useToast();
@@ -173,13 +173,27 @@ export default function Invoices() {
         await invoicesAPI.generateInvoicePDF(invoice.id);
         await queryClient.invalidateQueries({ queryKey: ['invoices'] });
       }
-      await invoicesAPI.sendInvoice(invoice.id, sendVia);
-      const sentHow = sendVia === 'sms' ? 'Text message with link to PDF sent.' : 'Email with PDF attached sent.';
-      toast({
-        title: "Invoice sent",
-        description: sentHow,
-        className: "bg-green-50 border-green-200"
-      });
+      const sendData = await invoicesAPI.sendInvoice(invoice.id, sendVia);
+      const summary = summarizeSendInvoiceResults(sendVia, sendData);
+      if (!summary.hasSuccess && summary.hasFailure) {
+        toast({
+          title: "Could not send as requested",
+          description: summary.description,
+          variant: "destructive",
+        });
+      } else if (summary.hasSuccess && summary.hasFailure) {
+        toast({
+          title: "Sent with a note",
+          description: summary.description,
+          className: "bg-amber-50 border-amber-200",
+        });
+      } else {
+        toast({
+          title: "Invoice sent",
+          description: summary.description,
+          className: "bg-green-50 border-green-200",
+        });
+      }
       queryClient.invalidateQueries({ queryKey: ['invoices'] });
     } catch (error) {
       console.error('Failed to send invoice:', error);

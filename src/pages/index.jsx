@@ -7,6 +7,8 @@ import Catalogue from "./Catalogue";
 
 import Consultant from "./Consultant";
 
+import Communications from "./Communications";
+
 import Dashboard from "./Dashboard";
 
 import Home from "./Home";
@@ -42,6 +44,8 @@ const PAGES = {
     Catalogue: Catalogue,
     
     Consultant: Consultant,
+    
+    Communications: Communications,
     
     Dashboard: Dashboard,
     
@@ -169,6 +173,7 @@ function PagesContent() {
                             <Route path="/Dashboard" element={<Dashboard />} />
                             <Route path="/Home" element={<Home />} />
                             <Route path="/Invoices" element={<Invoices />} />
+                            <Route path="/Communications" element={<Communications />} />
                             <Route path="/Pricing" element={<Pricing />} />
                             <Route path="/QuickAdd" element={<QuickAdd />} />
                             <Route path="/VoiceDiary" element={<VoiceDiary />} />
