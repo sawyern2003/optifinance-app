@@ -17,6 +17,16 @@ function baseSlug(name: string): string {
   return s || "clinic";
 }
 
+/** First email in a string (handles "Jane jane@x.com" or extra whitespace). */
+function extractEmailAddress(raw: string): string | null {
+  const s = String(raw || "").trim();
+  if (!s) return null;
+  const m = s.match(
+    /[a-zA-Z0-9._%+-]+@[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?(?:\.[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?)+/,
+  );
+  return m ? m[0].trim().toLowerCase() : null;
+}
+
 /** SendGrid/local-part safe (RFC-ish); avoids "Invalid from email address" from bad slug chars */
 function sanitizeEmailLocalPart(local: string): string {
   let t = String(local || "")
@@ -130,8 +140,10 @@ serve(async (req) => {
 
     /** One contact field: "both" must not run Twilio with an email (Twilio fails → email never runs). */
     const patientContactStr = String(invoice.patient_contact || "").trim();
-    const contactIsEmail = patientContactStr.includes("@");
-    const contactIsPhone = patientContactStr.length > 0 && !contactIsEmail;
+    const extractedRoutingEmail = extractEmailAddress(patientContactStr);
+    const contactIsEmail = extractedRoutingEmail !== null;
+    const contactIsPhone =
+      patientContactStr.length > 0 && extractedRoutingEmail === null;
 
     let doSms = false;
     let doEmail = false;
@@ -222,10 +234,12 @@ serve(async (req) => {
 
     // Send via Email: SendGrid (Twilio SendGrid) if SENDGRID_API_KEY, else Resend if RESEND_API_KEY
     if (doEmail) {
-      const patientEmail = contactIsEmail ? patientContactStr : null;
+      const patientEmail = extractEmailAddress(patientContactStr);
 
       if (!patientEmail) {
-        throw new Error("Patient email address not found. Use Edit on the invoice to add the patient's email.");
+        throw new Error(
+          "Patient email address not found. Use Edit on the invoice to add the patient's email.",
+        );
       }
 
       const sendgridApiKey = Deno.env.get("SENDGRID_API_KEY");
@@ -276,7 +290,15 @@ serve(async (req) => {
         bankLines.length > 0
           ? `<p style="margin:16px 0 0;font-size:14px;line-height:1.5;color:#444;"><strong>Bank details</strong><br/>${bankLines.join("<br/>")}</p>`
           : "";
-      const pdfUrl = invoice.invoice_pdf_url || "";
+      // Re-fetch row so PDF URL exists right after generate-invoice-pdf on the client
+      const { data: invFresh } = await supabaseClient
+        .from("invoices")
+        .select("invoice_pdf_url")
+        .eq("id", invoiceId)
+        .eq("user_id", user.id)
+        .maybeSingle();
+      const pdfUrl =
+        (invFresh?.invoice_pdf_url as string) || invoice.invoice_pdf_url || "";
       const pdfUrlSafe = pdfUrl.replace(/"/g, "%22");
       const viewLink = pdfUrlSafe
         ? `<a href="${pdfUrlSafe}" style="display:inline-block;margin-top:20px;background:#1a1a1a;color:#fff!important;padding:12px 22px;text-decoration:none;border-radius:6px;font-size:14px;font-weight:600;">View invoice</a>`
@@ -301,9 +323,9 @@ ${viewLink}
       `.trim();
 
       const attachments: { filename: string; content: string }[] = [];
-      if (invoice.invoice_pdf_url) {
+      if (pdfUrl) {
         try {
-          const pdfRes = await fetch(invoice.invoice_pdf_url);
+          const pdfRes = await fetch(pdfUrl);
           if (pdfRes.ok) {
             const pdfBuf = await pdfRes.arrayBuffer();
             const bytes = new Uint8Array(pdfBuf);
@@ -405,19 +427,20 @@ ${viewLink}
         }
         results.email = { success: true, provider: "resend" };
       } else {
-        results.email = {
-          success: false,
-          note:
-            "Set SENDGRID_API_KEY or RESEND_API_KEY, and INVOICE_SEND_DOMAIN (e.g. mail.optimedix.ai) in Supabase Edge secrets. Verify that domain once in SendGrid.",
-        };
+        throw new Error(
+          "Email is not configured: add SENDGRID_API_KEY or RESEND_API_KEY to Supabase Edge Function secrets, plus INVOICE_SEND_DOMAIN (or clinic send-from email in Settings) and optionally SENDGRID_VERIFIED_FROM_EMAIL for SendGrid.",
+        );
       }
     }
 
-    // Update invoice status
-    await supabaseClient
-      .from("invoices")
-      .update({ status: "sent" })
-      .eq("id", invoiceId);
+    const delivered =
+      Boolean(results.sms?.success) || Boolean(results.email?.success);
+    if (delivered) {
+      await supabaseClient
+        .from("invoices")
+        .update({ status: "sent" })
+        .eq("id", invoiceId);
+    }
 
     return new Response(
       JSON.stringify({ success: true, results }),

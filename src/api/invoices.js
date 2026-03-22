@@ -118,7 +118,19 @@ export class InvoicesAPI {
    * Send invoice via SMS, email, or both
    */
   async sendInvoice(invoiceId, sendVia = 'both') {
-    return invokeEdgeFunction('send-invoice', { invoiceId, sendVia });
+    const data = await invokeEdgeFunction('send-invoice', { invoiceId, sendVia });
+    const r = data?.results;
+    // Legacy soft-fail (server now throws); keep so UI never shows "sent" if email skipped
+    if (
+      (sendVia === 'email' || sendVia === 'both') &&
+      r?.email &&
+      r.email.success === false
+    ) {
+      throw new Error(
+        r.email.note || 'Email was not sent. Check SendGrid/Resend secrets in Supabase.',
+      );
+    }
+    return data;
   }
 
   /**
