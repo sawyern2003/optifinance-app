@@ -11,13 +11,6 @@ import { createPageUrl } from "@/utils";
 import { friendsFamilyInvoiceFields } from "@/lib/invoiceFriendsFamily";
 import { Link } from "react-router-dom";
 
-/** Bar heights for the horizontal waveform (deterministic, not random per render). */
-const WAVE_HEIGHTS = Array.from({ length: 56 }, (_, i) => {
-  const wobble =
-    Math.sin(i * 0.51) * 10 + Math.cos(i * 0.19) * 7 + Math.sin(i * 0.11) * 4;
-  return Math.max(5, Math.round(12 + wobble + (i % 5) * 2));
-});
-
 export default function VoiceDiary() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
@@ -30,6 +23,55 @@ export default function VoiceDiary() {
   const mediaRecorderRef = useRef(null);
   const mediaChunksRef = useRef([]);
   const mediaStreamRef = useRef(null);
+  const audioContextRef = useRef(null);
+  const analyserRafRef = useRef(null);
+  const [pulseLevel, setPulseLevel] = useState(0);
+  const [browserSpeechActive, setBrowserSpeechActive] = useState(false);
+
+  const detachMicAnalyser = useCallback(() => {
+    if (analyserRafRef.current != null) {
+      cancelAnimationFrame(analyserRafRef.current);
+      analyserRafRef.current = null;
+    }
+    try {
+      audioContextRef.current?.close?.();
+    } catch {
+      /* ignore */
+    }
+    audioContextRef.current = null;
+    setPulseLevel(0);
+  }, []);
+
+  const attachMicAnalyser = useCallback(
+    (stream) => {
+      detachMicAnalyser();
+      const AC = window.AudioContext || window.webkitAudioContext;
+      if (!AC) return;
+      try {
+        const ctx = new AC();
+        const analyser = ctx.createAnalyser();
+        analyser.fftSize = 512;
+        analyser.smoothingTimeConstant = 0.88;
+        const source = ctx.createMediaStreamSource(stream);
+        source.connect(analyser);
+        audioContextRef.current = ctx;
+        const bins = new Uint8Array(analyser.frequencyBinCount);
+        const loop = () => {
+          analyser.getByteFrequencyData(bins);
+          let sum = 0;
+          for (let i = 0; i < bins.length; i++) sum += bins[i];
+          const raw = sum / bins.length / 255;
+          const norm = Math.min(1, raw * 2.4);
+          setPulseLevel((p) => p * 0.74 + norm * 0.26);
+          analyserRafRef.current = requestAnimationFrame(loop);
+        };
+        analyserRafRef.current = requestAnimationFrame(loop);
+      } catch (e) {
+        console.warn("Audio analyser unavailable:", e);
+      }
+    },
+    [detachMicAnalyser],
+  );
   const [reviewDialogOpen, setReviewDialogOpen] = useState(false);
   const [extractedData, setExtractedData] = useState(null);
   const [confirmedData, setConfirmedData] = useState(null);
@@ -96,7 +138,11 @@ export default function VoiceDiary() {
 
       recognitionInstance.onend = () => {
         setIsRecording(false);
+        setBrowserSpeechActive(false);
       };
+
+      recognitionInstance.onsoundstart = () => setBrowserSpeechActive(true);
+      recognitionInstance.onsoundend = () => setBrowserSpeechActive(false);
 
       setRecognition(recognitionInstance);
     }
@@ -168,6 +214,7 @@ export default function VoiceDiary() {
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       mediaStreamRef.current = stream;
+      attachMicAnalyser(stream);
       mediaChunksRef.current = [];
       const mime = pickRecorderMime();
       const mr = mime
@@ -181,6 +228,7 @@ export default function VoiceDiary() {
 
       mr.onstop = async () => {
         setIsWhisperRecording(false);
+        detachMicAnalyser();
         const streamDone = mediaStreamRef.current;
         mediaStreamRef.current = null;
         streamDone?.getTracks().forEach((t) => t.stop());
@@ -244,7 +292,14 @@ export default function VoiceDiary() {
         variant: "destructive",
       });
     }
-  }, [buildNameHint, isRecording, recognition, toast]);
+  }, [
+    attachMicAnalyser,
+    buildNameHint,
+    detachMicAnalyser,
+    isRecording,
+    recognition,
+    toast,
+  ]);
 
   const toggleWhisperRecording = useCallback(() => {
     if (isWhisperTranscribing) return;
@@ -262,6 +317,7 @@ export default function VoiceDiary() {
 
   useEffect(() => {
     return () => {
+      detachMicAnalyser();
       mediaStreamRef.current?.getTracks().forEach((t) => t.stop());
       if (
         mediaRecorderRef.current &&
@@ -274,7 +330,7 @@ export default function VoiceDiary() {
         }
       }
     };
-  }, []);
+  }, [detachMicAnalyser]);
 
   const generateInvoiceNumber = () => {
     const date = new Date();
@@ -645,161 +701,129 @@ export default function VoiceDiary() {
 
   const inputBusy =
     processing || isWhisperRecording || isWhisperTranscribing;
-  const orbEnergized =
-    isWhisperRecording || isRecording || isWhisperTranscribing;
+
+  const micReactive = isWhisperTranscribing
+    ? 0.22
+    : isWhisperRecording
+      ? pulseLevel
+      : isRecording && browserSpeechActive
+        ? Math.max(0.38, pulseLevel)
+        : isRecording
+          ? 0.1
+          : 0;
+
+  const orbScale = 1 + micReactive * 0.28;
+  const idleOrb =
+    !isWhisperRecording &&
+    !isRecording &&
+    !isWhisperTranscribing &&
+    !processing;
+
+  const orbSize = "h-[min(70vw,16.5rem)] w-[min(70vw,16.5rem)] md:h-64 md:w-64";
+  const voiceShadow = `0 ${4 + micReactive * 28}px ${32 + micReactive * 48}px -${8 + micReactive * 8}px rgba(26, 40, 69, ${0.08 + micReactive * 0.22}), 0 0 0 1px rgba(201, 162, 39, ${0.18 + micReactive * 0.55})`;
 
   return (
     <>
-      <div className="relative min-h-screen overflow-x-hidden bg-[#030708] text-white selection:bg-cyan-500/30">
-        {/* Atmosphere */}
-        <div
-          className="pointer-events-none absolute inset-0 bg-gradient-to-b from-[#071218] via-[#0d2529] to-[#050a0c]"
-          aria-hidden
-        />
-        <div
-          className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_90%_55%_at_50%_-15%,rgba(45,212,191,0.14),transparent_58%)]"
-          aria-hidden
-        />
-        <div
-          className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_50%_45%_at_100%_80%,rgba(56,189,248,0.08),transparent)]"
-          aria-hidden
-        />
-        <div
-          className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_40%_35%_at_0%_60%,rgba(99,102,241,0.06),transparent)]"
-          aria-hidden
-        />
+      <div className="mx-auto flex w-full max-w-xl flex-col px-4 md:px-6">
+        {/* Fill viewport minus mobile tab bar; centre the orb in the remaining space */}
+        <div className="flex min-h-[calc(100dvh-5.75rem)] flex-col md:min-h-[calc(100dvh-2rem)]">
+          <header className="flex shrink-0 items-center justify-between gap-3 pt-3 pb-2 md:pt-4">
+            <h1 className="text-lg font-semibold tracking-tight text-[#1a2845] md:text-xl">
+              Voice diary
+            </h1>
+            <div className="flex items-center gap-2">
+              {recognition ? (
+                <button
+                  type="button"
+                  onClick={toggleRecording}
+                  disabled={inputBusy && !isRecording}
+                  title="Live captions (browser)"
+                  className={`flex h-9 w-9 items-center justify-center rounded-full border border-[#e5dccf] bg-white text-[#1a2845] transition hover:border-[#c9a227]/50 disabled:opacity-40 ${
+                    isRecording ? "border-[#c9a227]" : ""
+                  }`}
+                >
+                  {isRecording ? (
+                    <MicOff className="h-4 w-4" />
+                  ) : (
+                    <Mic className="h-4 w-4" />
+                  )}
+                </button>
+              ) : null}
+              <Link
+                to={createPageUrl("Dashboard")}
+                className="rounded-full border border-[#e5dccf] bg-white px-3 py-1.5 text-xs font-medium text-[#1a2845] hover:bg-[#faf9f6]"
+              >
+                Back
+              </Link>
+            </div>
+          </header>
 
-        {/* Top bar */}
-        <header className="relative z-30 flex items-center justify-between px-5 pt-5 md:px-10 md:pt-8">
-          <span className="text-[11px] font-semibold uppercase tracking-[0.22em] text-white/45">
-            Voice
-          </span>
-          <div className="flex items-center gap-2">
-            {recognition ? (
+          <div className="relative flex flex-1 flex-col items-center justify-center py-6 md:py-10">
+            <div
+              className={`relative flex ${orbSize} items-center justify-center`}
+              style={{
+                transform: `scale(${orbScale})`,
+                transition: "transform 0.07s ease-out",
+              }}
+            >
+              {/* Single surface: white disc, navy rim, shadow responds to voice */}
+              <div
+                className={`absolute inset-0 rounded-full bg-white ${
+                  idleOrb && !isWhisperTranscribing ? "vd-orb-idle-shadow" : ""
+                }`}
+                style={{
+                  border: "2px solid #1a2845",
+                  boxShadow: idleOrb ? undefined : voiceShadow,
+                  transition: "box-shadow 0.08s ease-out",
+                }}
+                aria-hidden
+              />
+              {/* Hairline gold ring — tightens visually with input level */}
+              <div
+                className="pointer-events-none absolute inset-[14px] rounded-full border border-[#c9a227]"
+                style={{
+                  opacity: 0.35 + micReactive * 0.65,
+                  transform: `scale(${1 + micReactive * 0.04})`,
+                  transition: "opacity 0.08s ease-out, transform 0.08s ease-out",
+                }}
+                aria-hidden
+              />
+
               <button
                 type="button"
-                onClick={toggleRecording}
-                disabled={inputBusy && !isRecording}
-                title="Browser live captions — less accurate for names"
-                className={`flex h-9 w-9 items-center justify-center rounded-full border border-white/10 bg-white/5 text-white/70 transition hover:bg-white/10 hover:text-white disabled:opacity-30 ${
-                  isRecording ? "border-cyan-400/40 text-cyan-200" : ""
-                }`}
+                onClick={toggleWhisperRecording}
+                disabled={
+                  isWhisperTranscribing || (processing && !isWhisperRecording)
+                }
+                className="relative z-10 rounded-full bg-[#1a2845] px-6 py-2.5 text-sm font-medium text-white transition hover:bg-[#243352] active:scale-[0.98] disabled:pointer-events-none disabled:opacity-40"
               >
-                {isRecording ? (
-                  <MicOff className="h-4 w-4" />
+                {isWhisperTranscribing ? (
+                  <span className="flex items-center gap-2">
+                    <Loader2 className="h-4 w-4 animate-spin opacity-90" />
+                    Transcribing
+                  </span>
+                ) : isWhisperRecording ? (
+                  <span className="flex items-center gap-2">
+                    <span className="h-2 w-2 rounded-full bg-[#d4a740]" />
+                    Stop
+                  </span>
                 ) : (
-                  <Mic className="h-4 w-4" />
+                  <span className="flex items-center gap-2">
+                    <AudioLines className="h-4 w-4 opacity-90" />
+                    Dictate
+                  </span>
                 )}
               </button>
-            ) : null}
-            <Link
-              to={createPageUrl("Dashboard")}
-              className="rounded-full border border-white/10 bg-white/5 px-3 py-1.5 text-[11px] font-medium text-white/55 transition hover:border-white/20 hover:text-white/90"
-            >
-              Done
-            </Link>
-          </div>
-        </header>
-
-        {/* Waveform strip (crosses the stage) */}
-        <div
-          className={`pointer-events-none absolute left-0 right-0 top-[38%] z-10 flex h-16 -translate-y-1/2 items-end justify-center gap-[3px] px-6 opacity-90 md:top-[40%] md:px-16 ${
-            orbEnergized ? "" : "vd-wave-calm opacity-55"
-          }`}
-          aria-hidden
-        >
-          {WAVE_HEIGHTS.map((h, i) => (
-            <div
-              key={i}
-              className="vd-wave-bar w-[2px] shrink-0 rounded-full bg-gradient-to-t from-teal-300/25 via-cyan-200/80 to-white"
-              style={{
-                height: `${h}px`,
-                animationDelay: `${i * 0.035}s`,
-              }}
-            />
-          ))}
-        </div>
-
-        {/* Interactive orb */}
-        <div className="relative z-20 mx-auto flex max-w-lg flex-col items-center px-6 pt-4 pb-2 md:pt-10">
-          <div className="relative grid h-[min(72vw,17.5rem)] w-[min(72vw,17.5rem)] place-items-center md:h-[19rem] md:w-[19rem]">
-            <div
-              className={`absolute inset-[-22%] rounded-full blur-[56px] ${
-                isWhisperRecording
-                  ? "bg-rose-500/25 vd-orb-glow-intense"
-                  : "bg-cyan-400/20 vd-orb-glow"
-              }`}
-              aria-hidden
-            />
-            <div
-              className="vd-orb-ring absolute inset-[-8%] rounded-full opacity-[0.55]"
-              style={{
-                background:
-                  "conic-gradient(from 200deg, transparent 0%, rgba(34,211,238,0.35) 18%, transparent 38%, rgba(129,140,248,0.35) 58%, transparent 78%, rgba(45,212,191,0.2) 100%)",
-              }}
-              aria-hidden
-            />
-            <div
-              className="absolute inset-0 rounded-full border border-white/[0.09] bg-gradient-to-br from-cyan-500/[0.12] via-slate-950/50 to-[#020617]/95 shadow-[inset_0_1px_0_rgba(255,255,255,0.11),0_0_100px_-20px_rgba(34,211,238,0.35)] backdrop-blur-[2px]"
-              aria-hidden
-            >
-              <div className="absolute inset-0 rounded-full bg-[radial-gradient(circle_at_32%_28%,rgba(165,243,252,0.18),transparent_52%)]" />
-              <div className="absolute inset-0 rounded-full bg-[radial-gradient(circle_at_72%_68%,rgba(129,140,248,0.15),transparent_48%)]" />
-              <div
-                className="absolute inset-[12%] rounded-full opacity-40 mix-blend-screen"
-                style={{
-                  background:
-                    "radial-gradient(ellipse at 50% 50%, rgba(255,255,255,0.07), transparent 70%)",
-                }}
-              />
             </div>
-
-            <button
-              type="button"
-              onClick={toggleWhisperRecording}
-              disabled={isWhisperTranscribing || (processing && !isWhisperRecording)}
-              className="relative z-10 flex items-center gap-2 rounded-full bg-[#0a0a0a] px-5 py-2.5 text-[13px] font-medium tracking-tight text-white shadow-[0_12px_40px_rgba(0,0,0,0.65)] ring-1 ring-white/[0.12] transition hover:ring-white/25 active:scale-[0.98] disabled:pointer-events-none disabled:opacity-40"
-            >
-              {isWhisperTranscribing ? (
-                <>
-                  <Loader2 className="h-4 w-4 animate-spin text-cyan-300" />
-                  Working…
-                </>
-              ) : isWhisperRecording ? (
-                <>
-                  <span className="relative flex h-2 w-2">
-                    <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-rose-400 opacity-60" />
-                    <span className="relative inline-flex h-2 w-2 rounded-full bg-rose-400" />
-                  </span>
-                  Stop
-                </>
-              ) : (
-                <>
-                  <AudioLines className="h-4 w-4 text-cyan-300" />
-                  Dictate
-                </>
-              )}
-            </button>
           </div>
 
-          <p className="mt-7 max-w-[14rem] text-center text-[11px] leading-relaxed text-white/32">
-            {isWhisperTranscribing
-              ? "Transcribing…"
-              : isWhisperRecording
-                ? "Tap stop when finished"
-                : "Whisper + your patient names as hints"}
-          </p>
-        </div>
-
-        {/* Glass dock */}
-        <div className="relative z-20 mx-auto mt-6 w-full max-w-lg px-5 pb-10 md:px-6">
-          <div className="rounded-[1.25rem] border border-white/[0.08] bg-white/[0.04] p-4 shadow-[0_-8px_48px_-12px_rgba(0,0,0,0.55)] backdrop-blur-xl">
+          <div className="shrink-0 rounded-2xl border border-[#ebe4d6] bg-white p-4 shadow-sm">
             <Textarea
               id="voice-diary-input"
               value={transcript}
               onChange={(e) => setTranscript(e.target.value)}
-              placeholder="Your note appears here — or type directly."
-              className="min-h-[140px] resize-y rounded-xl border-white/10 bg-black/25 text-[14px] leading-relaxed text-white/90 placeholder:text-white/25 focus-visible:ring-1 focus-visible:ring-cyan-400/40"
+              placeholder="Notes appear here. You can edit before parsing."
+              className="min-h-[140px] resize-y rounded-xl border-[#e8dcc8] bg-[#fafaf9] text-sm text-[#1a2845] placeholder:text-slate-400 focus-visible:ring-[#c9a227]/40"
               disabled={processing}
             />
             <Button
@@ -812,12 +836,12 @@ export default function VoiceDiary() {
                 isWhisperRecording ||
                 isWhisperTranscribing
               }
-              className="mt-3 h-11 w-full rounded-xl border-0 bg-gradient-to-r from-teal-400 via-cyan-400 to-sky-400 text-[13px] font-semibold text-slate-950 shadow-[0_0_24px_-4px_rgba(34,211,238,0.45)] hover:from-teal-300 hover:via-cyan-300 hover:to-sky-300 disabled:from-white/10 disabled:via-white/10 disabled:to-white/10 disabled:text-white/25 disabled:shadow-none"
+              className="mt-3 h-11 w-full rounded-xl border border-[#b8941f] bg-gradient-to-b from-[#d4af37] to-[#c9a227] text-sm font-semibold text-[#1a2845] shadow-sm hover:from-[#dfc15a] hover:to-[#d4af37] disabled:border-slate-200 disabled:from-slate-100 disabled:to-slate-100 disabled:text-slate-400"
             >
               {processing ? (
                 <>
                   <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  Parse…
+                  Parsing…
                 </>
               ) : isRecording ? (
                 "Stop live mic first"
@@ -828,16 +852,17 @@ export default function VoiceDiary() {
               )}
             </Button>
           </div>
-          <div className="mt-4 flex justify-center gap-6 text-[11px] text-white/30">
+
+          <div className="mt-4 flex shrink-0 justify-center gap-6 pb-2 text-xs text-slate-400">
             <Link
               to={createPageUrl("Dashboard")}
-              className="hover:text-white/60"
+              className="hover:text-[#1a2845]"
             >
               Dashboard
             </Link>
             <Link
               to={createPageUrl("Records")}
-              className="hover:text-white/60"
+              className="hover:text-[#1a2845]"
             >
               Records
             </Link>
