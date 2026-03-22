@@ -7,8 +7,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Plus, Save, Sparkles, CreditCard, Loader2, AlertCircle, Check, Upload, FileText, HelpCircle } from "lucide-react";
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Plus, Save, Sparkles, CreditCard, Loader2, AlertCircle, Check, Upload, FileText } from "lucide-react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { format } from "date-fns";
 import { useToast } from "@/components/ui/use-toast";
@@ -514,64 +513,22 @@ export default function QuickAdd() {
       const currentDate = format(new Date(), 'yyyy-MM-dd');
       const currentYear = format(new Date(), 'yyyy');
 
-      const prompt = `TODAY'S DATE: ${currentDate}
+      const { expenses: extractedList } =
+        await api.integrations.Core.ParseBankStatementExpenses({
+          fileUrl: file_url,
+          todayDate: currentDate,
+          currentYear,
+        });
 
-    Extract ALL expenses from this bank statement. For each expense:
-
-    1. DATE: Extract the transaction date in YYYY-MM-DD format. Look for dates in ANY format (dd/mm/yyyy, dd-mm-yy, mmm dd, etc.) and convert to YYYY-MM-DD.
-    IMPORTANT: If the year is abbreviated (e.g., "25"), assume it's ${currentYear} (20${currentYear.slice(2)}). If only month/day is shown, assume the current year (${currentYear}).
-    2. DESCRIPTION: Extract the merchant/transaction description
-    3. AMOUNT: Extract the expense amount (positive number, ignore currency symbols)
-    4. CATEGORY: Intelligently categorize based on the description:
-    - "Rent" for property/lease/rent payments
-    - "Products" for supplies, inventory, stock purchases
-    - "Wages" for salaries, payroll, staff payments
-    - "Insurance" for insurance payments
-    - "Marketing" for advertising, social media, promotion costs
-    - "Utilities" for electricity, water, gas, internet, phone bills
-    - "Equipment" for tools, machines, furniture purchases
-    - "Other" if uncertain
-
-    Only extract OUTGOING expenses (debits), ignore incoming payments (credits).
-
-    Return in this exact JSON format:
-    {
-    "expenses": [
-    {
-    "date": "YYYY-MM-DD",
-    "description": "merchant name",
-    "amount": 123.45,
-    "category": "category name"
-    }
-    ]
-    }`;
-
-      const extractionResult = await api.integrations.Core.InvokeLLM({
-        prompt: prompt,
-        file_urls: [file_url],
-        response_json_schema: {
-          type: "object",
-          properties: {
-            expenses: {
-              type: "array",
-              items: {
-                type: "object",
-                properties: {
-                  date: { type: "string" },
-                  description: { type: "string" },
-                  amount: { type: "number" },
-                  category: { type: "string" }
-                },
-                required: ["date", "amount", "category"]
-              }
-            }
-          }
-        }
-      });
-
-      const expenses = extractionResult?.expenses || [];
+      const expenses = extractedList || [];
 
       if (expenses.length === 0) {
+        toast({
+          title: "No expenses found",
+          description:
+            "We couldn't extract debits from this file. Try a clearer PDF or screenshot (PNG/JPEG).",
+          variant: "destructive",
+        });
         setUploadingStatement(false);
         return;
       }
@@ -587,6 +544,11 @@ export default function QuickAdd() {
 
     } catch (error) {
       console.error('Bank statement processing failed:', error);
+      toast({
+        title: "Statement import failed",
+        description: error?.message || "Could not read this file. Use PDF or an image.",
+        variant: "destructive",
+      });
       setUploadingStatement(false);
     }
 
@@ -714,67 +676,29 @@ export default function QuickAdd() {
     
     setProcessingAI(true);
     
-    const treatmentsList = treatmentCatalog.map(t => 
-      `${t.treatment_name} (£${t.default_price}, ${t.duration_minutes || 'N/A'} min)`
-    ).join(', ');
-    
-    const practitionersList = practitioners.map(p => p.name).join(', ');
-    const patientsList = patients.map(p => p.name).join(', ');
-    
-    const prompt = `You are an assistant helping a beauty clinic log treatment entries. Parse the following natural language input and extract treatment information.
-
-AVAILABLE TREATMENTS: ${treatmentsList}
-AVAILABLE PRACTITIONERS: ${practitionersList}
-KNOWN PATIENTS: ${patientsList}
-
-USER INPUT: "${aiInput}"
-
-Extract ALL treatments mentioned. For each treatment, provide:
-- date (default to today if not specified: ${format(new Date(), 'yyyy-MM-dd')})
-- patient_name (extract from input, or use null if not mentioned)
-- treatment_name (match to available treatments list above)
-- price_paid (extract amount, or use default from treatment list if not mentioned)
-- payment_status (default to "paid" unless specified as pending/partial)
-- amount_paid (same as price_paid unless partially paid)
-- practitioner_name (extract from input or null if not specified)
-- duration_minutes (extract if mentioned, or use default from treatment list)
-- notes (any additional context or notes)
-
-If multiple treatments are mentioned for the same or different patients, return multiple entries.
-Be smart about matching treatment names to the available list even if wording is slightly different.
-Return an array of treatment objects, even if there's only one treatment.`;
-
     try {
-      const response = await api.integrations.Core.InvokeLLM({
-        prompt: prompt,
-        add_context_from_internet: false,
-        response_json_schema: {
-          type: "object",
-          properties: {
-            treatments: {
-              type: "array",
-              items: {
-                type: "object",
-                properties: {
-                  date: { type: "string" },
-                  patient_name: { type: ["string", "null"] },
-                  treatment_name: { type: "string" },
-                  price_paid: { type: "number" },
-                  payment_status: { type: "string" },
-                  amount_paid: { type: "number" },
-                  practitioner_name: { type: ["string", "null"] },
-                  duration_minutes: { type: ["number", "null"] },
-                  notes: { type: ["string", "null"] }
-                }
-              }
-            }
-          }
-        }
-      });
-      
-      const treatmentsToCreate = response.treatments || [];
+      const { treatments: parsedTreatments } =
+        await api.integrations.Core.ParseQuickAddTreatments({
+          userInput: aiInput.trim(),
+          todayDate: format(new Date(), 'yyyy-MM-dd'),
+          treatmentsCatalog: treatmentCatalog.map((t) => ({
+            treatment_name: t.treatment_name,
+            default_price: t.default_price ?? null,
+            duration_minutes: t.duration_minutes ?? null,
+          })),
+          practitionerNames: practitioners.map((p) => p.name),
+          patientNames: patients.map((p) => p.name),
+        });
+
+      const treatmentsToCreate = parsedTreatments || [];
 
       if (treatmentsToCreate.length === 0) {
+        toast({
+          title: "Nothing parsed",
+          description:
+            "Describe who came in, which treatment, and price — or add treatments to your catalogue first.",
+          variant: "destructive",
+        });
         setProcessingAI(false);
         return;
       }
@@ -839,6 +763,11 @@ Return an array of treatment objects, even if there's only one treatment.`;
       
     } catch (error) {
       console.error('AI processing failed:', error);
+      toast({
+        title: "AI parse failed",
+        description: error?.message || "Try again or add the treatment manually.",
+        variant: "destructive",
+      });
       setProcessingAI(false);
     }
   };
@@ -1259,32 +1188,11 @@ Return an array of treatment objects, even if there's only one treatment.`;
                   </div>
 
                   <div className="space-y-2">
-                    <div className="flex items-center gap-1.5">
-                      <Label htmlFor="price" className="text-sm font-medium text-gray-700">
-                        {treatmentForm.friends_family_discount_applied
-                          ? "Amount charged (£) *"
-                          : "Price (£) *"}
-                      </Label>
-                      {treatmentForm.friends_family_discount_applied && (
-                        <Popover>
-                          <PopoverTrigger asChild>
-                            <button
-                              type="button"
-                              className="text-gray-400 hover:text-gray-600 rounded-full p-0.5 -ml-0.5"
-                              aria-label="How amount charged is calculated"
-                            >
-                              <HelpCircle className="w-4 h-4" />
-                            </button>
-                          </PopoverTrigger>
-                          <PopoverContent className="text-sm space-y-2" align="start">
-                            <p className="font-medium text-gray-900">Amount charged</p>
-                            <p className="text-gray-600 leading-snug">
-                              Worked out automatically from this treatment&apos;s Catalogue price and your friends &amp; family settings. Uncheck &quot;Apply friends &amp; family discount&quot; below to type any amount yourself.
-                            </p>
-                          </PopoverContent>
-                        </Popover>
-                      )}
-                    </div>
+                    <Label htmlFor="price" className="text-sm font-medium text-gray-700">
+                      {treatmentForm.friends_family_discount_applied
+                        ? "Amount charged (£) *"
+                        : "Price (£) *"}
+                    </Label>
                     <Input
                       id="price"
                       type="number"
@@ -1299,31 +1207,9 @@ Return an array of treatment objects, even if there's only one treatment.`;
                   </div>
 
                   <div className="md:col-span-2 rounded-xl border border-indigo-100 bg-indigo-50/50 p-4 space-y-3">
-                    <div className="flex items-center gap-1.5">
-                      <p className="text-sm font-semibold text-gray-900">
-                        Friends &amp; family discount
-                      </p>
-                      <Popover>
-                        <PopoverTrigger asChild>
-                          <button
-                            type="button"
-                            className="text-gray-500 hover:text-gray-700 rounded-full p-0.5"
-                            aria-label="Friends and family discount help"
-                          >
-                            <HelpCircle className="w-4 h-4" />
-                          </button>
-                        </PopoverTrigger>
-                        <PopoverContent className="text-sm w-80 space-y-2" align="start">
-                          <p className="font-medium text-gray-900">Friends &amp; family</p>
-                          <ul className="text-gray-600 space-y-1.5 list-disc pl-4 leading-snug">
-                            <li>The charged amount updates automatically from the Catalogue price and the discount you enter.</li>
-                            <li>Leave discount blank to use the patient&apos;s default in Catalogue → Patients, if they have one.</li>
-                            <li>Each treatment needs a default price set in the Catalogue.</li>
-                            <li>Invoices can show the breakdown; dashboard revenue follows the charged amount.</li>
-                          </ul>
-                        </PopoverContent>
-                      </Popover>
-                    </div>
+                    <p className="text-sm font-semibold text-gray-900">
+                      Friends &amp; family discount
+                    </p>
                     <div className="flex items-start gap-3">
                       <input
                         type="checkbox"
@@ -1369,30 +1255,12 @@ Return an array of treatment objects, even if there's only one treatment.`;
                         </Label>
                         {treatmentForm.friends_family_discount_applied && (
                           <div className="space-y-2">
-                            <div className="flex items-center gap-1.5">
-                              <Label
-                                htmlFor="quickadd-ff-percent"
-                                className="text-xs font-medium text-gray-700"
-                              >
-                                Discount for this visit (%)
-                              </Label>
-                              <Popover>
-                                <PopoverTrigger asChild>
-                                  <button
-                                    type="button"
-                                    className="text-gray-500 hover:text-gray-700 rounded-full p-0.5"
-                                    aria-label="Discount percent help"
-                                  >
-                                    <HelpCircle className="w-3.5 h-3.5" />
-                                  </button>
-                                </PopoverTrigger>
-                                <PopoverContent className="text-sm space-y-1.5" align="start">
-                                  <p className="text-gray-600 leading-snug">
-                                    Leave blank to use the patient&apos;s saved default in Catalogue → Patients, if they have one.
-                                  </p>
-                                </PopoverContent>
-                              </Popover>
-                            </div>
+                            <Label
+                              htmlFor="quickadd-ff-percent"
+                              className="text-xs font-medium text-gray-700"
+                            >
+                              Discount for this visit (%)
+                            </Label>
                             <Input
                               id="quickadd-ff-percent"
                               type="number"

@@ -356,12 +356,11 @@ Please provide:
 Be specific, actionable, and focus on maximizing revenue while staying competitive.`;
 
     try {
-      const response = await api.integrations.Core.InvokeLLM({
-        prompt: prompt,
-        add_context_from_internet: false
+      const { insights } = await api.integrations.Core.AnalyzePricingInsights({
+        prompt,
       });
-      
-      setAiInsights(response);
+
+      setAiInsights(insights || "");
       toast({
         title: "Analysis complete",
         description: "AI recommendations generated",
@@ -371,12 +370,12 @@ Be specific, actionable, and focus on maximizing revenue while staying competiti
       console.error('AI analysis failed:', error);
       toast({
         title: "Analysis failed",
-        description: "Could not generate AI recommendations",
+        description: error?.message || "Could not generate AI recommendations",
         className: "bg-red-50 border-red-200"
       });
+    } finally {
+      setAnalyzingCompetitors(false);
     }
-    
-    setAnalyzingCompetitors(false);
   };
 
   const optimizerMetrics = calculateOptimizerMetrics();

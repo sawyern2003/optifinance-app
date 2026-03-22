@@ -1,19 +1,24 @@
 import React, { useState, useEffect } from "react";
 import { api } from "@/api/api";
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { Loader2, Mic, MicOff } from "lucide-react";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Card, CardContent } from "@/components/ui/card";
+import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from "@/components/ui/collapsible";
+import { Loader2, Mic, MicOff, Sparkles, ExternalLink, ChevronDown } from "lucide-react";
 import { format, subDays, parseISO } from "date-fns";
 import { useToast } from "@/components/ui/use-toast";
-import { useNavigate } from "react-router-dom";
 import { createPageUrl } from "@/utils";
 import { friendsFamilyInvoiceFields } from "@/lib/invoiceFriendsFamily";
+import { Link } from "react-router-dom";
 
 export default function VoiceDiary() {
   const { toast } = useToast();
-  const navigate = useNavigate();
   const queryClient = useQueryClient();
   const [transcript, setTranscript] = useState('');
   const [isRecording, setIsRecording] = useState(false);
@@ -197,180 +202,84 @@ export default function VoiceDiary() {
     setProcessing(true);
 
     try {
-      const treatmentsList = treatmentCatalog.map(t => 
-        `${t.treatment_name} (£${t.default_price || 0}, ${t.duration_minutes || 'N/A'} min)`
-      ).join(', ');
-
-      const practitionersList = practitioners.map(p => p.name).join(', ');
-      const patientsList = patients.map(p => p.name).join(', ');
       const todayDate = format(new Date(), 'yyyy-MM-dd');
+      const yesterdayDate = format(subDays(new Date(), 1), 'yyyy-MM-dd');
 
-      // Get recent pending treatments for context
-      const recentPendingTreatments = treatments
-        .filter(t => t.payment_status === 'pending')
-        .slice(0, 10)
-        .map(t => `${t.patient_name} - ${t.treatment_name} - £${t.price_paid} (${t.date})`)
-        .join(', ');
-
-      const prompt = `You are an assistant helping a beauty clinic manage their daily operations. Parse the following comprehensive voice diary entry and extract ALL relevant information.
-
-TODAY'S DATE: ${todayDate}
-
-AVAILABLE TREATMENTS: ${treatmentsList}
-AVAILABLE PRACTITIONERS: ${practitionersList}
-KNOWN PATIENTS: ${patientsList}
-RECENT PENDING TREATMENTS: ${recentPendingTreatments || 'None'}
-
-USER VOICE DIARY ENTRY: "${transcript}"
-
-Extract the following information:
-
-1. NEW TREATMENTS: Create treatment entries for patients seen today (or date mentioned)
-   - For each treatment, extract: date, patient_name, treatment_name, price_paid, payment_status (paid/pending/partially_paid), amount_paid, practitioner_name, duration_minutes, notes
-
-2. PAYMENT UPDATES: Identify payments received for EXISTING treatments
-   - Look for phrases like "paid", "payment received", "settled", "cleared"
-   - Extract: patient_name, treatment_name (or description), amount_paid, date_hint (last week, yesterday, etc.)
-   - Match to existing pending treatments
-
-3. INVOICES TO CREATE: Identify treatments that need invoices
-   - Any treatment with payment_status "pending"
-   - Extract: patient_name, treatment_name, amount, date
-
-4. NEW PATIENTS: Identify new patients mentioned
-   - Extract: name, contact (if mentioned), phone (if mentioned)
-
-For date parsing:
-- "today" = ${todayDate}
-- "yesterday" = ${format(subDays(new Date(), 1), 'yyyy-MM-dd')}
-- "last week" = approximately 7 days ago
-- Relative dates should be converted to actual dates
-
-Return in this JSON format:
-{
-  "treatments": [
-    {
-      "date": "YYYY-MM-DD",
-      "patient_name": "string",
-      "treatment_name": "string",
-      "price_paid": number,
-      "payment_status": "paid|pending|partially_paid",
-      "amount_paid": number,
-      "practitioner_name": "string or null",
-      "duration_minutes": number or null,
-      "notes": "string or null"
-    }
-  ],
-  "payment_updates": [
-    {
-      "patient_name": "string",
-      "treatment_name": "string or null",
-      "amount_paid": number,
-      "date_hint": "string or null"
-    }
-  ],
-  "invoices": [
-    {
-      "patient_name": "string",
-      "treatment_name": "string",
-      "amount": number,
-      "date": "YYYY-MM-DD"
-    }
-  ],
-  "patients": [
-    {
-      "name": "string",
-      "contact": "string or null",
-      "phone": "string or null"
-    }
-  ]
-}`;
-
-      const response = await api.integrations.Core.InvokeLLM({
-        prompt: prompt,
-        add_context_from_internet: false,
-        response_json_schema: {
-          type: "object",
-          properties: {
-            treatments: {
-              type: "array",
-              items: {
-                type: "object",
-                properties: {
-                  date: { type: "string" },
-                  patient_name: { type: "string" },
-                  treatment_name: { type: "string" },
-                  price_paid: { type: "number" },
-                  payment_status: { type: "string" },
-                  amount_paid: { type: "number" },
-                  practitioner_name: { type: ["string", "null"] },
-                  duration_minutes: { type: ["number", "null"] },
-                  notes: { type: ["string", "null"] }
-                },
-                required: ["date", "patient_name", "treatment_name", "price_paid", "payment_status"]
-              }
-            },
-            payment_updates: {
-              type: "array",
-              items: {
-                type: "object",
-                properties: {
-                  patient_name: { type: "string" },
-                  treatment_name: { type: ["string", "null"] },
-                  amount_paid: { type: "number" },
-                  date_hint: { type: ["string", "null"] }
-                },
-                required: ["patient_name", "amount_paid"]
-              }
-            },
-            invoices: {
-              type: "array",
-              items: {
-                type: "object",
-                properties: {
-                  patient_name: { type: "string" },
-                  treatment_name: { type: "string" },
-                  amount: { type: "number" },
-                  date: { type: "string" }
-                },
-                required: ["patient_name", "treatment_name", "amount"]
-              }
-            },
-            patients: {
-              type: "array",
-              items: {
-                type: "object",
-                properties: {
-                  name: { type: "string" },
-                  contact: { type: ["string", "null"] },
-                  phone: { type: ["string", "null"] }
-                },
-                required: ["name"]
-              }
-            }
-          }
-        }
+      const response = await api.integrations.Core.ParseVoiceDiary({
+        transcript: transcript.trim(),
+        todayDate,
+        yesterdayDate,
+        treatmentsCatalog: treatmentCatalog.map((t) => ({
+          treatment_name: t.treatment_name,
+          default_price: t.default_price ?? null,
+          duration_minutes: t.duration_minutes ?? null,
+        })),
+        practitionerNames: practitioners.map((p) => p.name),
+        patientNames: patients.map((p) => p.name),
+        recentPending: treatments
+          .filter((t) => t.payment_status === 'pending')
+          .slice(0, 10)
+          .map((t) => ({
+            patient_name: t.patient_name,
+            treatment_name: t.treatment_name,
+            price_paid: Number(t.price_paid) || 0,
+            date: t.date,
+          })),
       });
+
+      const rawTreatments = (response.treatments || []).filter(
+        (t) =>
+          String(t.patient_name || "").trim() &&
+          String(t.treatment_name || "").trim(),
+      );
+      const rawPatients = (response.patients || []).filter((p) =>
+        String(p.name || "").trim(),
+      );
+      const rawInvoices = (response.invoices || []).filter(
+        (i) =>
+          String(i.patient_name || "").trim() &&
+          String(i.treatment_name || "").trim(),
+      );
 
       // Process payment updates to match with existing treatments
-      const processedPaymentUpdates = (response.payment_updates || []).map(update => {
-        const matchedTreatment = matchTreatmentToExisting(
-          update.patient_name,
-          update.treatment_name,
-          update.date_hint,
-          update.amount_paid
-        );
-        return {
-          ...update,
-          matched_treatment: matchedTreatment
-        };
-      });
+      const processedPaymentUpdates = (response.payment_updates || [])
+        .filter(
+          (u) => String(u.patient_name || "").trim() && u.amount_paid != null,
+        )
+        .map((update) => {
+          const matchedTreatment = matchTreatmentToExisting(
+            update.patient_name,
+            update.treatment_name,
+            update.date_hint,
+            update.amount_paid,
+          );
+          return {
+            ...update,
+            matched_treatment: matchedTreatment,
+          };
+        });
+
+      if (
+        rawTreatments.length === 0 &&
+        processedPaymentUpdates.length === 0 &&
+        rawInvoices.length === 0 &&
+        rawPatients.length === 0
+      ) {
+        toast({
+          title: "Nothing extracted",
+          description:
+            "Try naming patients and treatments, amounts, and paid or pending. Check your catalogue has those treatments.",
+          variant: "destructive",
+        });
+        setProcessing(false);
+        return;
+      }
 
       const processedData = {
-        treatments: response.treatments || [],
+        treatments: rawTreatments,
         payment_updates: processedPaymentUpdates,
-        invoices: response.invoices || [],
-        patients: response.patients || []
+        invoices: rawInvoices,
+        patients: rawPatients,
       };
 
       setExtractedData(processedData);
@@ -552,7 +461,7 @@ Return in this JSON format:
 
       toast({
         title: "Changes applied",
-        description: "Successfully processed voice diary entry",
+        description: "Your diary entry is saved. Open the dashboard or records anytime.",
         className: "bg-green-50 border-green-200"
       });
 
@@ -561,8 +470,6 @@ Return in this JSON format:
       setExtractedData(null);
       setConfirmedData(null);
       setProcessing(false);
-
-      setTimeout(() => navigate(createPageUrl("Dashboard")), 1500);
 
     } catch (error) {
       console.error('Failed to apply changes:', error);
@@ -582,106 +489,172 @@ Return in this JSON format:
   };
 
   return (
-    <div className="p-6 md:p-10 bg-[#F5F6F8] min-h-screen">
-      <div className="max-w-4xl mx-auto">
-        <div className="mb-10">
-          <h1 className="text-3xl font-light tracking-tight text-[#1a2845] mb-2">Voice Diary</h1>
-          <p className="text-sm text-gray-500 font-light">Record your daily summary</p>
+    <div className="p-6 md:p-10 bg-gradient-to-b from-slate-50 to-slate-100/80 min-h-screen">
+      <div className="max-w-3xl mx-auto space-y-8">
+        <div>
+          <h1 className="text-3xl font-semibold tracking-tight text-[#1a2845]">
+            Voice diary
+          </h1>
+          <p className="mt-2 text-sm text-slate-600 max-w-xl">
+            Dictate your day with{" "}
+            <a
+              href="https://wisprflow.ai/"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="font-medium text-indigo-600 hover:text-indigo-700 underline underline-offset-2 inline-flex items-center gap-0.5"
+            >
+              Wispr Flow
+              <ExternalLink className="w-3 h-3 opacity-70" />
+            </a>
+            — focus this text box and speak. Then we parse visits, payments, and invoice requests in one step.
+          </p>
         </div>
 
-        <div className="bg-white rounded-lg border border-gray-200 p-8">
-          <div className="max-w-2xl mx-auto">
-            <div className="text-center mb-8">
-              <h2 className="text-xl font-light text-[#1a2845] mb-3 tracking-tight">
-                {isRecording ? 'Recording' : 'Daily Summary'}
-              </h2>
-              <p className="text-sm text-gray-500 font-light">
-                {isRecording 
-                  ? 'Speak naturally about your day'
-                  : 'Record treatments, payments, and invoices'
-                }
+        <Card className="border-slate-200/80 shadow-md shadow-slate-200/50 overflow-hidden rounded-2xl">
+          <div className="bg-gradient-to-r from-indigo-600 to-violet-600 px-5 py-4 text-white">
+            <div className="flex gap-3">
+              <div className="shrink-0 w-10 h-10 rounded-xl bg-white/15 flex items-center justify-center">
+                <Sparkles className="w-5 h-5" />
+              </div>
+              <div className="min-w-0 space-y-1">
+                <p className="font-semibold text-sm sm:text-base">
+                  Recommended: Wispr Flow for voice
+                </p>
+                <p className="text-xs sm:text-sm text-indigo-100 leading-snug">
+                  Install Flow on Mac, Windows, iPhone, or Android. Click inside the box below, use your Flow shortcut, and talk naturally—it writes clean text into Optifinance. No API key needed in the app.
+                </p>
+                <a
+                  href="https://wisprflow.ai/"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center gap-1 text-xs font-semibold text-white hover:underline mt-1"
+                >
+                  Download Wispr Flow
+                  <ExternalLink className="w-3 h-3" />
+                </a>
+              </div>
+            </div>
+          </div>
+
+          <CardContent className="p-6 md:p-8 space-y-5">
+            <div className="space-y-2">
+              <label
+                htmlFor="voice-diary-input"
+                className="text-sm font-medium text-slate-800"
+              >
+                Your diary entry
+              </label>
+              <Textarea
+                id="voice-diary-input"
+                value={transcript}
+                onChange={(e) => setTranscript(e.target.value)}
+                placeholder={`Example: Today I saw Sarah for Botox at £250, paid in full. Mark had filler at £200, paying next week. Please invoice Emma for Tuesday's facial.`}
+                className="rounded-xl border-slate-200 min-h-[220px] sm:min-h-[260px] text-[15px] leading-relaxed resize-y focus-visible:ring-indigo-500"
+                disabled={processing}
+              />
+              <p className="text-xs text-slate-500">
+                Say who you saw, which treatment, prices, and paid / pending. Ask to invoice in plain English—we&apos;ll match it in review.
               </p>
             </div>
 
-            <div className="space-y-4">
-              <div className="relative">
-                <Textarea
-                  value={transcript}
-                  onChange={(e) => setTranscript(e.target.value)}
-                  placeholder="Click the microphone to record, or type your summary here.
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+              <Collapsible className="group sm:max-w-md">
+                <CollapsibleTrigger asChild>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    className="text-slate-600 -ml-2 h-9 px-2"
+                  >
+                    <ChevronDown className="w-4 h-4 mr-1 opacity-70 transition-transform group-data-[state=open]:rotate-180" />
+                    Quick tips
+                  </Button>
+                </CollapsibleTrigger>
+                <CollapsibleContent className="pt-1 pb-2">
+                  <ul className="text-xs text-slate-600 space-y-1.5 pl-1 border-l-2 border-indigo-200 ml-1">
+                    <li className="pl-3">Use patient and treatment names from your catalogue when you can.</li>
+                    <li className="pl-3">Mention paid, pending, or partial and amounts.</li>
+                    <li className="pl-3">Several patients in one entry is fine.</li>
+                  </ul>
+                </CollapsibleContent>
+              </Collapsible>
 
-Example: Today I saw Sarah Johnson for botox at £250, she paid in full. Mark Davis came for dermal filler at £200, he'll pay next week. Emma Smith paid her outstanding invoice from last week - that was the botox treatment for £250."
-                  className="rounded-lg border-gray-300 min-h-48 text-sm leading-relaxed pr-20 font-light"
-                  disabled={processing}
-                />
-                <button
+              {recognition ? (
+                <Button
                   type="button"
+                  variant="outline"
+                  size="sm"
                   onClick={toggleRecording}
                   disabled={processing}
-                  className={`absolute right-4 bottom-4 w-12 h-12 rounded-full flex items-center justify-center transition-all ${
-                    isRecording 
-                      ? 'bg-red-600 hover:bg-red-700' 
-                      : 'bg-[#1a2845] hover:bg-[#0f1829]'
-                  } text-white shadow-md disabled:opacity-50`}
-                  title={isRecording ? 'Stop recording' : 'Start voice recording'}
+                  className={`shrink-0 rounded-xl border-slate-200 ${isRecording ? "border-red-200 bg-red-50 text-red-700" : ""}`}
                 >
                   {isRecording ? (
-                    <MicOff className="w-5 h-5" />
+                    <>
+                      <MicOff className="w-4 h-4 mr-2" />
+                      Stop browser mic
+                    </>
                   ) : (
-                    <Mic className="w-5 h-5" />
+                    <>
+                      <Mic className="w-4 h-4 mr-2" />
+                      Browser mic (fallback)
+                    </>
                   )}
-                </button>
-              </div>
+                </Button>
+              ) : null}
+            </div>
 
-              <div className="border border-gray-200 rounded-lg p-4 bg-gray-50/50">
-                <p className="text-xs font-medium text-gray-500 uppercase tracking-wide mb-2">Guidelines</p>
-                <ul className="text-sm text-gray-700 space-y-1.5 leading-relaxed">
-                  <li className="flex items-start">
-                    <span className="text-gray-400 mr-2">•</span>
-                    <span>Mention patient names, treatments, and amounts</span>
-                  </li>
-                  <li className="flex items-start">
-                    <span className="text-gray-400 mr-2">•</span>
-                    <span>State payment status (paid, pending, partial)</span>
-                  </li>
-                  <li className="flex items-start">
-                    <span className="text-gray-400 mr-2">•</span>
-                    <span>Reference existing treatments when updating payments</span>
-                  </li>
-                  <li className="flex items-start">
-                    <span className="text-gray-400 mr-2">•</span>
-                    <span>You can mention multiple patients and treatments in one recording</span>
-                  </li>
-                </ul>
-              </div>
-
+            <div className="space-y-2">
               <Button
                 onClick={processTranscript}
                 disabled={processing || !transcript.trim() || isRecording}
-                className="w-full bg-[#1a2845] hover:bg-[#0f1829] text-white rounded-lg h-11 text-sm font-light tracking-wide uppercase"
+                className="w-full rounded-xl h-12 text-sm font-semibold bg-[#1a2845] hover:bg-[#0f1829] text-white shadow-sm"
               >
                 {processing ? (
                   <>
                     <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                    Processing
+                    Understanding your entry…
                   </>
                 ) : isRecording ? (
-                  'Stop recording to continue'
+                  "Stop the browser mic to continue"
                 ) : (
-                  'Process & Review'
+                  "Parse & review"
                 )}
               </Button>
+              {processing && (
+                <p className="text-center text-xs text-slate-500">
+                  Matching patients, treatments, and invoices—usually a few seconds.
+                </p>
+              )}
             </div>
-          </div>
-        </div>
+
+            <div className="flex flex-wrap gap-x-4 gap-y-1 justify-center text-xs text-slate-500 pt-1">
+              <Link
+                to={createPageUrl("Dashboard")}
+                className="text-indigo-600 hover:underline"
+              >
+                Dashboard
+              </Link>
+              <span className="text-slate-300">·</span>
+              <Link
+                to={createPageUrl("Records")}
+                className="text-indigo-600 hover:underline"
+              >
+                Records
+              </Link>
+            </div>
+          </CardContent>
+        </Card>
 
         {/* Review Dialog */}
         <Dialog open={reviewDialogOpen} onOpenChange={setReviewDialogOpen}>
-          <DialogContent className="sm:max-w-4xl max-h-[80vh] overflow-y-auto">
+          <DialogContent className="sm:max-w-4xl max-h-[85vh] overflow-y-auto rounded-2xl border-slate-200">
             <DialogHeader>
-              <DialogTitle className="text-lg font-light text-[#1a2845] tracking-tight">
-                Review Extracted Data
+              <DialogTitle className="text-lg font-semibold text-[#1a2845] tracking-tight">
+                Review before saving
               </DialogTitle>
+              <DialogDescription className="text-sm text-slate-500 pt-1">
+                Toggle items off if something looks wrong, then apply.
+              </DialogDescription>
             </DialogHeader>
 
             {confirmedData && (

@@ -99,11 +99,30 @@ These can be implemented as:
 - External API endpoints
 - Serverless functions (Vercel, Netlify, etc.)
 
+## Clinic LLM (`clinic-llm` Edge Function)
+
+Structured and text AI features use one function with a **`task`** field (OpenAI `gpt-4o-mini`; bank **PDF** paths use `gpt-4o` for file input). Set **`OPENAI_API_KEY`** (same as `openai-consultant`).
+
+| Task | Client method | Purpose |
+|------|----------------|---------|
+| `voice_diary` | `ParseVoiceDiary` | Voice Diary → treatments, payments, invoices, patients |
+| `quickadd_treatments` | `ParseQuickAddTreatments` | Quick Add natural language → treatments |
+| `bank_expenses` | `ParseBankStatementExpenses` | Uploaded statement URL → expenses (PDF or image) |
+| `pricing_insights` | `AnalyzePricingInsights` | Pricing Intelligence → narrative recommendations |
+
+Deploy:
+
+```bash
+cd optifinance-app
+supabase secrets set OPENAI_API_KEY=sk-...
+supabase functions deploy clinic-llm --no-verify-jwt --project-ref YOUR_PROJECT_REF
+```
+
 ## Integrations
 
 The following integrations are placeholders and need to be configured:
 
-- **InvokeLLM**: LLM integration (OpenAI, Anthropic, etc.)
+- **InvokeLLM**: Deprecated — use **`ParseVoiceDiary`**, **`ParseQuickAddTreatments`**, **`ParseBankStatementExpenses`**, or **`AnalyzePricingInsights`** (all call **`clinic-llm`**)
 - **SendEmail**: Email service (Resend, SendGrid, etc.)
 - **GenerateImage**: Image generation (DALL-E, Midjourney API, etc.)
 

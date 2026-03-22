@@ -202,6 +202,10 @@ class Integrations {
   constructor() {
     this.Core = {
       InvokeLLM: this.InvokeLLM.bind(this),
+      ParseVoiceDiary: this.ParseVoiceDiary.bind(this),
+      ParseQuickAddTreatments: this.ParseQuickAddTreatments.bind(this),
+      ParseBankStatementExpenses: this.ParseBankStatementExpenses.bind(this),
+      AnalyzePricingInsights: this.AnalyzePricingInsights.bind(this),
       SendEmail: this.SendEmail.bind(this),
       UploadFile: this.UploadFile.bind(this),
       GenerateImage: this.GenerateImage.bind(this),
@@ -211,10 +215,51 @@ class Integrations {
     };
   }
 
-  async InvokeLLM({ prompt, add_context_from_internet = false }) {
-    // Optional: call openai-consultant Edge Function for one-off prompts
-    console.warn('InvokeLLM called; consider using the Consultant chat or wiring to openai-consultant.');
-    return `AI features for this action are not yet wired. Use the AI Consultant chat for advice. Original prompt: ${prompt.substring(0, 80)}...`;
+  async InvokeLLM(_args) {
+    throw new Error(
+      'InvokeLLM is not used. Use ParseVoiceDiary, ParseQuickAddTreatments, ParseBankStatementExpenses, or AnalyzePricingInsights (clinic-llm Edge Function).',
+    );
+  }
+
+  /**
+   * Unified clinic-llm Edge Function (task: voice_diary).
+   */
+  async _invokeClinicLlm(task, payload) {
+    const { data, error } = await supabase.functions.invoke('clinic-llm', {
+      body: { task, ...payload },
+    });
+    if (error) throw error;
+    if (data?.error) throw new Error(data.error);
+    return data;
+  }
+
+  /** Voice Diary: transcript → treatments, payment_updates, invoices, patients. */
+  async ParseVoiceDiary(payload) {
+    const data = await this._invokeClinicLlm('voice_diary', payload);
+    return {
+      treatments: data?.treatments ?? [],
+      payment_updates: data?.payment_updates ?? [],
+      invoices: data?.invoices ?? [],
+      patients: data?.patients ?? [],
+    };
+  }
+
+  /** Quick Add AI: natural language → treatment rows. */
+  async ParseQuickAddTreatments(payload) {
+    const data = await this._invokeClinicLlm('quickadd_treatments', payload);
+    return { treatments: data?.treatments ?? [] };
+  }
+
+  /** Bank statement file URL → expense rows. */
+  async ParseBankStatementExpenses(payload) {
+    const data = await this._invokeClinicLlm('bank_expenses', payload);
+    return { expenses: data?.expenses ?? [] };
+  }
+
+  /** Pricing page: long prompt → plain-text insights. */
+  async AnalyzePricingInsights(payload) {
+    const data = await this._invokeClinicLlm('pricing_insights', payload);
+    return { insights: data?.insights ?? '' };
   }
 
   async SendEmail({ from_name, to, subject, body }) {

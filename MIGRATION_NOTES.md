@@ -59,10 +59,10 @@ If you have existing data in Base44, you'll need to export and import it:
 
 The following are placeholders and need to be implemented:
 
-### 1. LLM Integration (`InvokeLLM`)
-**Current**: Returns placeholder text
-**Need**: Integrate with OpenAI, Anthropic, or similar
-**Location**: `src/api/backendClient.js` → `Integrations.InvokeLLM()`
+### 1. LLM Integration (`InvokeLLM` / `clinic-llm`)
+**Current**: `InvokeLLM` throws — use task-specific methods on `integrations.Core`.
+**Implemented**: Supabase Edge Function **`clinic-llm`** with tasks `voice_diary`, `quickadd_treatments`, `bank_expenses`, `pricing_insights` (OpenAI; `OPENAI_API_KEY` secret).
+**Location**: `src/api/backendClient.js` → `ParseVoiceDiary`, `ParseQuickAddTreatments`, `ParseBankStatementExpenses`, `AnalyzePricingInsights`
 
 ### 2. Email Service (`SendEmail`)
 **Current**: Console log only
