@@ -10,6 +10,9 @@ ALTER TABLE treatment_entries
 ALTER TABLE treatment_entries
   ADD COLUMN IF NOT EXISTS friends_family_discount_percent DECIMAL(5, 2) NULL;
 
+ALTER TABLE treatment_entries
+  ADD COLUMN IF NOT EXISTS friends_family_list_price DECIMAL(10, 2) NULL;
+
 ALTER TABLE invoices
   ADD COLUMN IF NOT EXISTS friends_family_discount_applied BOOLEAN NOT NULL DEFAULT false;
 

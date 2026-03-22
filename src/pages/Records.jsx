@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { api } from "@/api/api";
 import { invoicesAPI } from "@/api/invoices";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
@@ -16,6 +16,7 @@ import {
   patientEligibleForFriendsFamily,
   effectiveFriendsFamilyPercent,
 } from "@/lib/invoiceFriendsFamily";
+import { computeTreatmentFriendsFamilyPricing } from "@/lib/friendsFamilyPricing";
 
 export default function Records() {
   const { toast } = useToast();
@@ -40,8 +41,6 @@ export default function Records() {
   const [selectedTreatments, setSelectedTreatments] = useState([]);
   const [selectedExpenses, setSelectedExpenses] = useState([]);
   const [downloadingPdfId, setDownloadingPdfId] = useState(null);
-
-
 
   const { data: treatments, isLoading: loadingTreatments } = useQuery({
     queryKey: ['treatments'],
@@ -78,6 +77,56 @@ export default function Records() {
     queryFn: () => api.entities.Patient.list('name'),
     initialData: [],
   });
+
+  useEffect(() => {
+    if (!editDialogOpen || editingItem?.type !== "treatment") return;
+    if (!editForm.friends_family_discount_applied || !editForm.treatment_id) return;
+    const cat = treatmentCatalog.find((t) => t.id === editForm.treatment_id);
+    const pat =
+      editForm.patient_id && editForm.patient_id !== "none"
+        ? patients.find((p) => p.id === editForm.patient_id)
+        : null;
+    const pct = effectiveFriendsFamilyPercent(
+      editForm.friends_family_discount_percent,
+      pat,
+    );
+    if (pct == null) return;
+    const res = computeTreatmentFriendsFamilyPricing({
+      ffApplied: true,
+      effectivePct: pct,
+      catalogEntry: cat,
+      paymentStatus: editForm.payment_status,
+      currentAmountPaidInput: editForm.amount_paid,
+    });
+    if (!res.ok || res.chargedPrice == null) return;
+    const newPrice = String(res.chargedPrice);
+    const newAmt =
+      editForm.payment_status === "paid"
+        ? newPrice
+        : editForm.payment_status === "pending"
+          ? "0"
+          : String(res.amountPaid);
+    setEditForm((prev) => {
+      if (!prev.friends_family_discount_applied || !prev.treatment_id) return prev;
+      const samePrice =
+        Math.abs(parseFloat(prev.price_paid) - parseFloat(newPrice)) < 0.005;
+      const sameAmt =
+        Math.abs(parseFloat(prev.amount_paid) - parseFloat(newAmt)) < 0.005;
+      if (samePrice && sameAmt) return prev;
+      return { ...prev, price_paid: newPrice, amount_paid: newAmt };
+    });
+  }, [
+    editDialogOpen,
+    editingItem?.type,
+    editForm.friends_family_discount_applied,
+    editForm.friends_family_discount_percent,
+    editForm.treatment_id,
+    editForm.patient_id,
+    editForm.payment_status,
+    editForm.amount_paid,
+    treatmentCatalog,
+    patients,
+  ]);
 
   const { data: user } = useQuery({
     queryKey: ['currentUser'],
@@ -421,7 +470,10 @@ export default function Records() {
     e.preventDefault();
     
     if (editingItem.type === 'treatment') {
-      const earlyPatient = patients.find((p) => p.id === editForm.patient_id);
+      const earlyPatient =
+        editForm.patient_id && editForm.patient_id !== "none"
+          ? patients.find((p) => p.id === editForm.patient_id)
+          : null;
       if (editForm.friends_family_discount_applied) {
         const eff = effectiveFriendsFamilyPercent(
           editForm.friends_family_discount_percent,
@@ -432,6 +484,25 @@ export default function Records() {
             title: "Friends & family discount",
             description:
               "Enter a discount % between 0 and 100, or choose a patient with a default rate in Catalogue → Patients.",
+            variant: "destructive",
+          });
+          return;
+        }
+        const earlyCat = treatmentCatalog.find(
+          (t) => t.id === editForm.treatment_id,
+        );
+        const prEarly = computeTreatmentFriendsFamilyPricing({
+          ffApplied: true,
+          effectivePct: eff,
+          catalogEntry: earlyCat,
+          paymentStatus: editForm.payment_status,
+          currentAmountPaidInput: editForm.amount_paid,
+        });
+        if (!prEarly.ok) {
+          toast({
+            title: "Friends & family discount",
+            description:
+              "Set a default price on this treatment in Catalogue so we can calculate the discounted amount.",
             variant: "destructive",
           });
           return;
@@ -483,6 +554,30 @@ export default function Records() {
       const ffApplied =
         !!editForm.friends_family_discount_applied &&
         effectiveFfPct !== null;
+
+      const ffPricing = computeTreatmentFriendsFamilyPricing({
+        ffApplied,
+        effectivePct: effectiveFfPct,
+        catalogEntry: selectedTreatment,
+        paymentStatus: editForm.payment_status,
+        currentAmountPaidInput: editForm.amount_paid,
+      });
+      if (ffApplied && !ffPricing.ok) {
+        toast({
+          title: "Friends & family discount",
+          description:
+            "Set a default price on this treatment in Catalogue so we can calculate the discounted amount.",
+          variant: "destructive",
+        });
+        return;
+      }
+
+      let pricePaid = parsedPricePaid;
+      if (ffApplied && ffPricing.chargedPrice != null) {
+        pricePaid = ffPricing.chargedPrice;
+        amountPaid =
+          ffPricing.amountPaid != null ? ffPricing.amountPaid : amountPaid;
+      }
       
       const productCost = selectedTreatment?.typical_product_cost || 0;
       const profit = amountPaid - productCost;
@@ -497,7 +592,7 @@ export default function Records() {
           treatment_id: editForm.treatment_id,
           treatment_name: selectedTreatment?.treatment_name || editForm.treatment_name,
           duration_minutes: editForm.duration_minutes ? parseFloat(editForm.duration_minutes) : undefined,
-          price_paid: parsedPricePaid,
+          price_paid: pricePaid,
           payment_status: editForm.payment_status,
           amount_paid: amountPaid,
           product_cost: productCost,
@@ -507,6 +602,7 @@ export default function Records() {
           notes: editForm.notes,
           friends_family_discount_applied: ffApplied,
           friends_family_discount_percent: ffApplied ? effectiveFfPct : null,
+          friends_family_list_price: ffApplied ? ffPricing.listSnapshot : null,
         }
       });
     } else {
@@ -883,7 +979,22 @@ export default function Records() {
                       <td className="px-6 py-4 text-sm text-gray-900">
                         {treatment.duration_minutes ? `${treatment.duration_minutes} min` : '-'}
                       </td>
-                      <td className="px-6 py-4 text-sm font-semibold text-gray-900">£{treatment.price_paid?.toFixed(2)}</td>
+                      <td className="px-6 py-4 text-sm font-semibold text-gray-900">
+                        <div className="flex flex-col gap-0.5">
+                          <span>£{treatment.price_paid?.toFixed(2)}</span>
+                          {treatment.friends_family_discount_applied &&
+                            treatment.friends_family_list_price != null &&
+                            Number(treatment.friends_family_list_price) >
+                              Number(treatment.price_paid || 0) + 0.005 && (
+                              <span className="text-xs font-normal text-gray-500">
+                                List £
+                                {Number(treatment.friends_family_list_price).toFixed(2)} · −
+                                {treatment.friends_family_discount_percent ?? "?"}
+                                % F&amp;F
+                              </span>
+                            )}
+                        </div>
+                      </td>
                       <td className="px-6 py-4 text-sm font-semibold text-green-600">£{(treatment.amount_paid || 0).toFixed(2)}</td>
                       <td className="px-6 py-4">
                         <select
@@ -1163,11 +1274,22 @@ export default function Records() {
                       value={editForm.treatment_id} 
                       onValueChange={(value) => {
                         const treatment = treatmentCatalog.find(t => t.id === value);
+                        const list =
+                          treatment?.default_price != null
+                            ? String(treatment.default_price)
+                            : "";
+                        const ap =
+                          editForm.payment_status === "paid"
+                            ? list
+                            : editForm.payment_status === "pending"
+                              ? "0"
+                              : editForm.amount_paid;
                         setEditForm({
                           ...editForm,
                           treatment_id: value,
                           treatment_name: treatment?.treatment_name || "",
-                          price_paid: treatment?.default_price || editForm.price_paid,
+                          price_paid: list || editForm.price_paid,
+                          amount_paid: ap,
                         });
                       }}
                       required
@@ -1199,7 +1321,11 @@ export default function Records() {
 
                   <div className="grid grid-cols-2 gap-4">
                     <div className="space-y-2">
-                      <Label htmlFor="edit-price" className="text-sm font-medium text-gray-700">Price (£) *</Label>
+                      <Label htmlFor="edit-price" className="text-sm font-medium text-gray-700">
+                        {editForm.friends_family_discount_applied
+                          ? "Amount charged (£) *"
+                          : "Price (£) *"}
+                      </Label>
                       <Input
                         id="edit-price"
                         type="number"
@@ -1208,14 +1334,31 @@ export default function Records() {
                         onChange={(e) => setEditForm({...editForm, price_paid: e.target.value})}
                         className="rounded-xl border-gray-300 h-11"
                         required
+                        disabled={editForm.friends_family_discount_applied}
                       />
+                      {editForm.friends_family_discount_applied && (
+                        <p className="text-xs text-indigo-800 bg-indigo-50/80 rounded-lg px-3 py-2 border border-indigo-100">
+                          From catalogue list price minus friends &amp; family %. Turn off the discount below to set a custom price.
+                        </p>
+                      )}
                     </div>
 
                     <div className="space-y-2">
                       <Label htmlFor="edit-status" className="text-sm font-medium text-gray-700">Status *</Label>
                       <Select 
                         value={editForm.payment_status} 
-                        onValueChange={(value) => setEditForm({...editForm, payment_status: value})}
+                        onValueChange={(value) =>
+                          setEditForm({
+                            ...editForm,
+                            payment_status: value,
+                            amount_paid:
+                              value === "paid"
+                                ? editForm.price_paid
+                                : value === "pending"
+                                  ? "0"
+                                  : editForm.amount_paid,
+                          })
+                        }
                       >
                         <SelectTrigger className="rounded-xl border-gray-300 h-11">
                           <SelectValue />
@@ -1250,7 +1393,7 @@ export default function Records() {
                         Friends &amp; family discount
                       </p>
                       <p className="text-xs text-gray-600 mt-1">
-                        Optional. Enter the discount % for this visit, or leave blank to use the patient&apos;s default from Catalogue → Patients.
+                        Amount charged and revenue update from the catalogue list price. Invoices show list, discount, and amount charged.
                       </p>
                     </div>
                     <div className="flex items-start gap-3">
@@ -1258,15 +1401,33 @@ export default function Records() {
                         type="checkbox"
                         id="edit-friends-family"
                         checked={!!editForm.friends_family_discount_applied}
-                        onChange={(e) =>
+                        onChange={(e) => {
+                          const checked = e.target.checked;
+                          const cat = treatmentCatalog.find(
+                            (t) => t.id === editForm.treatment_id,
+                          );
+                          const list =
+                            cat?.default_price != null
+                              ? String(cat.default_price)
+                              : "";
                           setEditForm({
                             ...editForm,
-                            friends_family_discount_applied: e.target.checked,
-                            friends_family_discount_percent: e.target.checked
+                            friends_family_discount_applied: checked,
+                            friends_family_discount_percent: checked
                               ? editForm.friends_family_discount_percent
                               : "",
-                          })
-                        }
+                            price_paid:
+                              !checked && list ? list : editForm.price_paid,
+                            amount_paid:
+                              !checked && list
+                                ? editForm.payment_status === "paid"
+                                  ? list
+                                  : editForm.payment_status === "pending"
+                                    ? "0"
+                                    : editForm.amount_paid
+                                : editForm.amount_paid,
+                          });
+                        }}
                         className="w-4 h-4 text-indigo-600 border-gray-300 rounded mt-1 shrink-0"
                       />
                       <div className="flex-1 space-y-3 min-w-0">

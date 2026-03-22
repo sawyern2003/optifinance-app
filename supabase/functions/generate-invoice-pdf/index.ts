@@ -217,23 +217,6 @@ serve(async (req) => {
     }
     step(10);
 
-    // Service table header
-    const rowH = 34;
-    page.drawRectangle({ x: margin, y: y - rowH + 10, width: contentWidth, height: rowH, color: softBlue });
-    page.drawText("Product or Service", { x: margin + 8, y: y - 8, font: fontBold, size: 11, color: brand });
-    page.drawText("Date", { x: margin + 320, y: y - 8, font: fontBold, size: 11, color: brand });
-    page.drawText("Line Total", { x: margin + contentWidth - 74, y: y - 8, font: fontBold, size: 11, color: brand });
-    step(42);
-
-    // Service row
-    page.drawText(invoice.treatment_name || "Treatment", { x: margin + 8, y, font: fontBold, size: 12, color: textColor });
-    page.drawText(treatmentDate || "-", { x: margin + 320, y, font, size: 11, color: textColor });
-    page.drawText(amountStr, { x: margin + contentWidth - 58, y, font: fontBold, size: 12, color: textColor });
-    step(22);
-    page.drawLine({ start: { x: margin, y }, end: { x: margin + contentWidth, y }, color: line, thickness: 1 });
-    step(20);
-
-    // Friends & family discount disclosure (when applicable)
     const inv = invoice as Record<string, unknown>;
     const ffApplied =
       inv.friends_family_discount_applied === true ||
@@ -249,52 +232,72 @@ serve(async (req) => {
         ? Number(inv.friends_family_standard_price)
         : null;
     const invAmount = Number(invoice.amount);
+
+    // Service table header
+    const rowH = 34;
+    page.drawRectangle({ x: margin, y: y - rowH + 10, width: contentWidth, height: rowH, color: softBlue });
+    page.drawText("Product or Service", { x: margin + 8, y: y - 8, font: fontBold, size: 11, color: brand });
+    page.drawText("Date", { x: margin + 320, y: y - 8, font: fontBold, size: 11, color: brand });
+    page.drawText("Line Total", { x: margin + contentWidth - 74, y: y - 8, font: fontBold, size: 11, color: brand });
+    step(42);
+
+    // Service row (with friends & family breakdown under the line item when applicable)
+    page.drawText(invoice.treatment_name || "Treatment", { x: margin + 8, y, font: fontBold, size: 12, color: textColor });
+    page.drawText(treatmentDate || "-", { x: margin + 320, y, font, size: 11, color: textColor });
+    page.drawText(amountStr, { x: margin + contentWidth - 58, y, font: fontBold, size: 12, color: textColor });
+    step(16);
+
     if (ffApplied) {
-      page.drawText("Friends & family", { x: margin + 8, y, font: fontBold, size: 10, color: brand });
-      step(14);
-      if (
-        Number.isFinite(ffStd) &&
-        ffStd > invAmount + 0.005
-      ) {
-        page.drawText(`Standard list price: £${ffStd.toFixed(2)}`, {
+      if (Number.isFinite(ffStd) && ffStd > invAmount + 0.005) {
+        page.drawText(`  Standard list price: £${ffStd.toFixed(2)}`, {
           x: margin + 8,
           y,
           font,
-          size: 10,
-          color: textColor,
+          size: 9.5,
+          color: muted,
         });
-        step(14);
+        step(13);
         const disc = Math.max(0, ffStd - invAmount);
         const pctLabel =
-          Number.isFinite(ffPct) && ffPct > 0 ? ` (${ffPct}% rate)` : "";
-        page.drawText(`Friends & family discount${pctLabel}: -£${disc.toFixed(2)}`, {
+          Number.isFinite(ffPct) && ffPct > 0 ? ` (${ffPct}% off)` : "";
+        page.drawText(`  Friends & family discount${pctLabel}: -£${disc.toFixed(2)}`, {
           x: margin + 8,
           y,
           font,
-          size: 10,
-          color: textColor,
+          size: 9.5,
+          color: muted,
         });
-        step(14);
+        step(13);
       } else if (Number.isFinite(ffPct) && ffPct > 0) {
         page.drawText(
-          `Friends & family discount applied (${ffPct}% off standard list where offered)`,
-          { x: margin + 8, y, font, size: 10, color: textColor },
+          `  Friends & family rate (${ffPct}% off standard list)`,
+          { x: margin + 8, y, font, size: 9.5, color: muted },
         );
-        step(14);
+        step(13);
       } else {
-        page.drawText("Friends & family discount applied to this treatment.", {
+        page.drawText("  Friends & family pricing applied", {
           x: margin + 8,
           y,
           font,
-          size: 10,
-          color: textColor,
+          size: 9.5,
+          color: muted,
         });
-        step(14);
+        step(13);
       }
-      step(6);
+      page.drawText(`  Amount charged: ${amountStr}`, {
+        x: margin + 8,
+        y,
+        font: fontBold,
+        size: 10,
+        color: textColor,
+      });
+      step(14);
     } else {
-      step(8);
+      step(6);
     }
+
+    page.drawLine({ start: { x: margin, y }, end: { x: margin + contentWidth, y }, color: line, thickness: 1 });
+    step(16);
 
     // Totals block (right aligned)
     const totalsXLabel = margin + contentWidth - 210;

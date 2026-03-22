@@ -18,6 +18,7 @@ import {
   patientEligibleForFriendsFamily,
   effectiveFriendsFamilyPercent,
 } from "@/lib/invoiceFriendsFamily";
+import { computeTreatmentFriendsFamilyPricing } from "@/lib/friendsFamilyPricing";
 
 export default function QuickAdd() {
   const { toast } = useToast();
@@ -129,6 +130,53 @@ export default function QuickAdd() {
       }));
     }
   }, [practitioners, useLeadPractitioner, treatmentForm.practitioner_id]);
+
+  // When F&F is on, price charged = list price from catalogue × (1 − discount %). Updates Records & dashboard revenue.
+  useEffect(() => {
+    if (!treatmentForm.friends_family_discount_applied || !treatmentForm.treatment_id) {
+      return;
+    }
+    const cat = treatmentCatalog.find((t) => t.id === treatmentForm.treatment_id);
+    const pat = patients.find((p) => p.id === treatmentForm.patient_id);
+    const pct = effectiveFriendsFamilyPercent(
+      treatmentForm.friends_family_discount_percent,
+      pat,
+    );
+    if (pct == null) return;
+    const res = computeTreatmentFriendsFamilyPricing({
+      ffApplied: true,
+      effectivePct: pct,
+      catalogEntry: cat,
+      paymentStatus: treatmentForm.payment_status,
+      currentAmountPaidInput: treatmentForm.amount_paid,
+    });
+    if (!res.ok || res.chargedPrice == null) return;
+    const newPrice = String(res.chargedPrice);
+    const newAmt =
+      treatmentForm.payment_status === "paid"
+        ? newPrice
+        : treatmentForm.payment_status === "pending"
+          ? "0"
+          : String(res.amountPaid);
+    setTreatmentForm((prev) => {
+      if (!prev.friends_family_discount_applied || !prev.treatment_id) return prev;
+      const samePrice =
+        Math.abs(parseFloat(prev.price_paid) - parseFloat(newPrice)) < 0.005;
+      const sameAmt =
+        Math.abs(parseFloat(prev.amount_paid) - parseFloat(newAmt)) < 0.005;
+      if (samePrice && sameAmt) return prev;
+      return { ...prev, price_paid: newPrice, amount_paid: newAmt };
+    });
+  }, [
+    treatmentForm.friends_family_discount_applied,
+    treatmentForm.friends_family_discount_percent,
+    treatmentForm.treatment_id,
+    treatmentForm.patient_id,
+    treatmentForm.payment_status,
+    treatmentForm.amount_paid,
+    treatmentCatalog,
+    patients,
+  ]);
 
   const handleLeadPractitionerToggle = (checked) => {
     setUseLeadPractitioner(checked);
@@ -313,11 +361,32 @@ export default function QuickAdd() {
       const ffApplied =
         !!data.friends_family_discount_applied && effectiveFfPct !== null;
 
+      const ffPricing = computeTreatmentFriendsFamilyPricing({
+        ffApplied,
+        effectivePct: effectiveFfPct,
+        catalogEntry: treatment,
+        paymentStatus: data.payment_status,
+        currentAmountPaidInput: data.amount_paid,
+      });
+      if (ffApplied && !ffPricing.ok) {
+        throw new Error(
+          "Friends & family needs a default list price on this treatment in Catalogue.",
+        );
+      }
+
       const productCost = treatment?.typical_product_cost || 0;
-      const pricePaid = parseFloat(data.price_paid);
-      const amountPaid = data.payment_status === 'partially_paid' 
-        ? parseFloat(data.amount_paid) 
-        : (data.payment_status === 'paid' ? pricePaid : 0);
+      let pricePaid = parseFloat(data.price_paid);
+      let amountPaid =
+        data.payment_status === "partially_paid"
+          ? parseFloat(data.amount_paid)
+          : data.payment_status === "paid"
+            ? pricePaid
+            : 0;
+      if (ffApplied && ffPricing.chargedPrice != null) {
+        pricePaid = ffPricing.chargedPrice;
+        amountPaid =
+          ffPricing.amountPaid != null ? ffPricing.amountPaid : amountPaid;
+      }
       const profit = amountPaid - productCost;
 
       const createdTreatment = await api.entities.TreatmentEntry.create({
@@ -337,6 +406,7 @@ export default function QuickAdd() {
         notes: data.notes && data.notes !== '' ? data.notes : undefined,
         friends_family_discount_applied: ffApplied,
         friends_family_discount_percent: ffApplied ? effectiveFfPct : null,
+        friends_family_list_price: ffApplied ? ffPricing.listSnapshot : null,
       });
 
       // If sendInvoiceSMS is checked AND payment is pending, send it NOW
@@ -588,6 +658,23 @@ export default function QuickAdd() {
           title: "Friends & family discount",
           description:
             "Enter a discount % between 0 and 100, or choose a patient who has a default rate saved in Catalogue → Patients.",
+          variant: "destructive",
+        });
+        return;
+      }
+      const cat = treatmentCatalog.find((t) => t.id === treatmentForm.treatment_id);
+      const pr = computeTreatmentFriendsFamilyPricing({
+        ffApplied: true,
+        effectivePct: eff,
+        catalogEntry: cat,
+        paymentStatus: treatmentForm.payment_status,
+        currentAmountPaidInput: treatmentForm.amount_paid,
+      });
+      if (!pr.ok) {
+        toast({
+          title: "Friends & family discount",
+          description:
+            "Set a default price on this treatment in Catalogue so we can calculate the discounted amount.",
           variant: "destructive",
         });
         return;
@@ -866,11 +953,18 @@ Return an array of treatment objects, even if there's only one treatment.`;
 
   const handleTreatmentChange = (treatmentId) => {
     const treatment = treatmentCatalog.find(t => t.id === treatmentId);
+    const list = treatment?.default_price != null ? String(treatment.default_price) : "";
+    const ap =
+      treatmentForm.payment_status === "paid"
+        ? list
+        : treatmentForm.payment_status === "pending"
+          ? "0"
+          : treatmentForm.amount_paid;
     setTreatmentForm({
       ...treatmentForm,
       treatment_id: treatmentId,
-      price_paid: treatment?.default_price || '',
-      amount_paid: treatment?.default_price || '',
+      price_paid: list,
+      amount_paid: ap,
       duration_minutes: treatment?.duration_minutes || treatment?.default_duration_minutes || '',
     });
   };
@@ -1164,7 +1258,11 @@ Return an array of treatment objects, even if there's only one treatment.`;
                   </div>
 
                   <div className="space-y-2">
-                    <Label htmlFor="price" className="text-sm font-medium text-gray-700">Price (£) *</Label>
+                    <Label htmlFor="price" className="text-sm font-medium text-gray-700">
+                      {treatmentForm.friends_family_discount_applied
+                        ? "Amount charged (£) *"
+                        : "Price (£) *"}
+                    </Label>
                     <Input
                       id="price"
                       type="number"
@@ -1174,7 +1272,13 @@ Return an array of treatment objects, even if there's only one treatment.`;
                       onChange={(e) => setTreatmentForm({...treatmentForm, price_paid: e.target.value, amount_paid: treatmentForm.payment_status === 'paid' ? e.target.value : treatmentForm.amount_paid})}
                       className="rounded-xl border-gray-300 h-11"
                       required
+                      disabled={treatmentForm.friends_family_discount_applied}
                     />
+                    {treatmentForm.friends_family_discount_applied && (
+                      <p className="text-xs text-indigo-800 bg-indigo-50/80 rounded-lg px-3 py-2 border border-indigo-100">
+                        Calculated from the treatment&apos;s <strong>default list price</strong> in Catalogue minus your friends &amp; family %. Turn off the discount below to enter a custom price.
+                      </p>
+                    )}
                   </div>
 
                   <div className="md:col-span-2 rounded-xl border border-indigo-100 bg-indigo-50/50 p-4 space-y-3">
@@ -1183,7 +1287,7 @@ Return an array of treatment objects, even if there's only one treatment.`;
                         Friends &amp; family discount
                       </p>
                       <p className="text-xs text-gray-600 mt-1">
-                        Optional. Tick if this visit should show friends &amp; family pricing on invoice PDFs. Enter the discount % for this visit (or leave the field blank if the patient has a default saved under Catalogue → Patients).
+                        The <strong>amount charged</strong> and <strong>revenue</strong> update automatically from the catalogue list price. Invoices show list price, discount, and amount charged.
                       </p>
                     </div>
                     <div className="flex items-start gap-3">
@@ -1191,15 +1295,35 @@ Return an array of treatment objects, even if there's only one treatment.`;
                         type="checkbox"
                         id="quickadd-friends-family"
                         checked={!!treatmentForm.friends_family_discount_applied}
-                        onChange={(e) =>
+                        onChange={(e) => {
+                          const checked = e.target.checked;
+                          const cat = treatmentCatalog.find(
+                            (t) => t.id === treatmentForm.treatment_id,
+                          );
+                          const list =
+                            cat?.default_price != null
+                              ? String(cat.default_price)
+                              : "";
                           setTreatmentForm({
                             ...treatmentForm,
-                            friends_family_discount_applied: e.target.checked,
-                            friends_family_discount_percent: e.target.checked
+                            friends_family_discount_applied: checked,
+                            friends_family_discount_percent: checked
                               ? treatmentForm.friends_family_discount_percent
                               : "",
-                          })
-                        }
+                            price_paid:
+                              !checked && list
+                                ? list
+                                : treatmentForm.price_paid,
+                            amount_paid:
+                              !checked && list
+                                ? treatmentForm.payment_status === "paid"
+                                  ? list
+                                  : treatmentForm.payment_status === "pending"
+                                    ? "0"
+                                    : treatmentForm.amount_paid
+                                : treatmentForm.amount_paid,
+                          });
+                        }}
                         className="w-4 h-4 text-indigo-600 border-gray-300 rounded mt-1 shrink-0"
                       />
                       <div className="flex-1 space-y-3 min-w-0">
@@ -1234,7 +1358,7 @@ Return an array of treatment objects, even if there's only one treatment.`;
                               className="rounded-xl border-gray-300 h-11 max-w-[200px]"
                             />
                             <p className="text-xs text-gray-500">
-                              The amount in &quot;Price&quot; is what the patient pays. This % is disclosed on invoices. If you leave this blank, the patient&apos;s default % from the catalogue is used (if set).
+                              Charged amount = list price × (1 − %). Leave blank to use the patient&apos;s default % from Catalogue → Patients.
                             </p>
                           </div>
                         )}

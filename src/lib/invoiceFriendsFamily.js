@@ -65,11 +65,18 @@ export function friendsFamilyInvoiceFields(
 
   const cat =
     treatmentCatalog.find((t) => t.id === treatment.treatment_id) || null;
-  const stdRaw = cat?.default_price;
-  const std =
-    stdRaw != null && stdRaw !== "" && Number.isFinite(Number(stdRaw))
-      ? Number(stdRaw)
-      : null;
+  const listSnap = treatment?.friends_family_list_price;
+  let std = null;
+  if (listSnap != null && listSnap !== "") {
+    const n = Number(listSnap);
+    if (Number.isFinite(n)) std = n;
+  }
+  if (std == null && cat) {
+    const stdRaw = cat.default_price;
+    if (stdRaw != null && stdRaw !== "" && Number.isFinite(Number(stdRaw))) {
+      std = Number(stdRaw);
+    }
+  }
   return {
     friends_family_discount_applied: true,
     friends_family_discount_percent: pct,
