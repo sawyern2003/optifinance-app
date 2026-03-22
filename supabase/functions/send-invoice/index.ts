@@ -128,10 +128,36 @@ serve(async (req) => {
     if (accountNumber) bankLines.push(`Account: ${accountNumber}`);
     const bankDetailsText = bankLines.length > 0 ? bankLines.join(". ") : "See invoice for payment details.";
 
+    /** One contact field: "both" must not run Twilio with an email (Twilio fails → email never runs). */
+    const patientContactStr = String(invoice.patient_contact || "").trim();
+    const contactIsEmail = patientContactStr.includes("@");
+    const contactIsPhone = patientContactStr.length > 0 && !contactIsEmail;
+
+    let doSms = false;
+    let doEmail = false;
+    if (sendVia === "email") {
+      if (contactIsEmail) doEmail = true;
+      else if (contactIsPhone) doSms = true;
+    } else if (sendVia === "sms") {
+      if (contactIsPhone) doSms = true;
+      else if (contactIsEmail) doEmail = true;
+    } else if (sendVia === "both") {
+      if (contactIsEmail) doEmail = true;
+      else if (contactIsPhone) doSms = true;
+    }
+
+    if (!doSms && !doEmail) {
+      throw new Error(
+        patientContactStr.length === 0
+          ? "Patient contact is missing on the invoice."
+          : "Could not send: add an email address for email, or a phone number (no @) for SMS.",
+      );
+    }
+
     const invoiceSendDomain = Deno.env.get("INVOICE_SEND_DOMAIN")?.trim().toLowerCase() || "";
 
     let clinicFromForEmail = "";
-    if (sendVia === "email" || sendVia === "both") {
+    if (doEmail) {
       if (invoiceSendDomain) {
         clinicFromForEmail = await ensurePlatformInvoiceFrom(
           supabaseClient,
@@ -154,11 +180,7 @@ serve(async (req) => {
     const results: any = {};
 
     // Send via SMS (Twilio)
-    if (sendVia === "sms" || sendVia === "both") {
-      if (!invoice.patient_contact) {
-        throw new Error("Patient phone number not found");
-      }
-
+    if (doSms) {
       const twilioAccountSid = Deno.env.get("TWILIO_ACCOUNT_SID");
       const twilioAuthToken = Deno.env.get("TWILIO_AUTH_TOKEN");
       const twilioPhoneNumber = Deno.env.get("TWILIO_PHONE_NUMBER");
@@ -177,7 +199,7 @@ serve(async (req) => {
 
       const twilioUrl = `https://api.twilio.com/2010-04-01/Accounts/${twilioAccountSid}/Messages.json`;
       const formData = new URLSearchParams();
-      formData.append("To", invoice.patient_contact);
+      formData.append("To", patientContactStr);
       formData.append("From", twilioPhoneNumber);
       formData.append("Body", smsMessage);
 
@@ -199,10 +221,8 @@ serve(async (req) => {
     }
 
     // Send via Email: SendGrid (Twilio SendGrid) if SENDGRID_API_KEY, else Resend if RESEND_API_KEY
-    if (sendVia === "email" || sendVia === "both") {
-      const patientEmail = invoice.patient_contact?.includes("@")
-        ? invoice.patient_contact
-        : null;
+    if (doEmail) {
+      const patientEmail = contactIsEmail ? patientContactStr : null;
 
       if (!patientEmail) {
         throw new Error("Patient email address not found. Use Edit on the invoice to add the patient's email.");

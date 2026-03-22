@@ -565,7 +565,11 @@ export default function VoiceDiary() {
           ...i,
           send_after_create: Boolean(i.send_after_create),
           send_via:
-            i.send_via === "email" || i.send_via === "sms" ? i.send_via : "both",
+            i.send_via === "sms"
+              ? "sms"
+              : i.send_via === "both"
+                ? "both"
+                : "email",
           patient_contact: i.patient_contact || null,
           include: true,
         })),

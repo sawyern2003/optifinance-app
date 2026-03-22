@@ -234,7 +234,7 @@ Extract ALL relevant information:
    Fields per item:
    - patient_name, treatment_name, amount (number), date (YYYY-MM-DD of the treatment)
    - send_after_create (boolean)
-   - send_via: "email" if they specify email/mail; "sms" for text/SMS/message (not email); "both" if they want both channels or it is unclear
+   - send_via: "email" if they specify email/mail OR if they only say "send the invoice" without mentioning text/SMS; "sms" for text/SMS only; "both" ONLY if they explicitly ask for both email and text
    - patient_contact (string or null): ONLY if the entry gives an explicit email or phone for delivery (e.g. "send to jane@x.com"); otherwise null (the app will use the patient record)
 
 4) NEW PATIENTS — people not clearly in KNOWN PATIENTS with contact info if given.
@@ -328,9 +328,9 @@ async function handleVoiceDiary(
 
   const invoices = normalized.invoices.map((i) => {
     const sendViaRaw = String(i.send_via ?? "").toLowerCase().trim();
-    let send_via: "email" | "sms" | "both" = "both";
-    if (sendViaRaw === "email") send_via = "email";
-    else if (sendViaRaw === "sms") send_via = "sms";
+    let send_via: "email" | "sms" | "both" = "email";
+    if (sendViaRaw === "sms") send_via = "sms";
+    else if (sendViaRaw === "both") send_via = "both";
 
     const truthy = (v: unknown) =>
       v === true || v === "true" || v === "yes" || v === 1;
