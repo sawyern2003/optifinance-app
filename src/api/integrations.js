@@ -6,6 +6,7 @@ export const ParseVoiceDiary = backend.integrations.Core.ParseVoiceDiary;
 export const ParseQuickAddTreatments = backend.integrations.Core.ParseQuickAddTreatments;
 export const ParseBankStatementExpenses = backend.integrations.Core.ParseBankStatementExpenses;
 export const AnalyzePricingInsights = backend.integrations.Core.AnalyzePricingInsights;
+export const TranscribeAudio = backend.integrations.Core.TranscribeAudio;
 export const SendEmail = backend.integrations.Core.SendEmail;
 export const UploadFile = backend.integrations.Core.UploadFile;
 export const GenerateImage = backend.integrations.Core.GenerateImage;

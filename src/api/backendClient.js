@@ -206,6 +206,7 @@ class Integrations {
       ParseQuickAddTreatments: this.ParseQuickAddTreatments.bind(this),
       ParseBankStatementExpenses: this.ParseBankStatementExpenses.bind(this),
       AnalyzePricingInsights: this.AnalyzePricingInsights.bind(this),
+      TranscribeAudio: this.TranscribeAudio.bind(this),
       SendEmail: this.SendEmail.bind(this),
       UploadFile: this.UploadFile.bind(this),
       GenerateImage: this.GenerateImage.bind(this),
@@ -260,6 +261,16 @@ class Integrations {
   async AnalyzePricingInsights(payload) {
     const data = await this._invokeClinicLlm('pricing_insights', payload);
     return { insights: data?.insights ?? '' };
+  }
+
+  /** Voice: base64 audio → Whisper text (optional nameHint for patient names). */
+  async TranscribeAudio(payload) {
+    const { data, error } = await supabase.functions.invoke('transcribe-audio', {
+      body: payload,
+    });
+    if (error) throw error;
+    if (data?.error) throw new Error(data.error);
+    return { text: data?.text ?? '' };
   }
 
   async SendEmail({ from_name, to, subject, body }) {

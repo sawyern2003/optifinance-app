@@ -116,7 +116,10 @@ Deploy:
 cd optifinance-app
 supabase secrets set OPENAI_API_KEY=sk-...
 supabase functions deploy clinic-llm --no-verify-jwt --project-ref YOUR_PROJECT_REF
+supabase functions deploy transcribe-audio --no-verify-jwt --project-ref YOUR_PROJECT_REF
 ```
+
+**transcribe-audio** — Voice Diary “Record” uses OpenAI **Whisper** for accurate speech-to-text (optional `nameHint` from saved patients).
 
 ## Integrations
 

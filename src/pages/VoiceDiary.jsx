@@ -1,16 +1,11 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef, useCallback } from "react";
 import { api } from "@/api/api";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Card, CardContent } from "@/components/ui/card";
-import {
-  Collapsible,
-  CollapsibleContent,
-  CollapsibleTrigger,
-} from "@/components/ui/collapsible";
-import { Loader2, Mic, MicOff, Sparkles, ExternalLink, ChevronDown } from "lucide-react";
+import { Loader2, Mic, MicOff, AudioLines } from "lucide-react";
 import { format, subDays, parseISO } from "date-fns";
 import { useToast } from "@/components/ui/use-toast";
 import { createPageUrl } from "@/utils";
@@ -22,8 +17,13 @@ export default function VoiceDiary() {
   const queryClient = useQueryClient();
   const [transcript, setTranscript] = useState('');
   const [isRecording, setIsRecording] = useState(false);
+  const [isWhisperRecording, setIsWhisperRecording] = useState(false);
+  const [isWhisperTranscribing, setIsWhisperTranscribing] = useState(false);
   const [processing, setProcessing] = useState(false);
   const [recognition, setRecognition] = useState(null);
+  const mediaRecorderRef = useRef(null);
+  const mediaChunksRef = useRef([]);
+  const mediaStreamRef = useRef(null);
   const [reviewDialogOpen, setReviewDialogOpen] = useState(false);
   const [extractedData, setExtractedData] = useState(null);
   const [confirmedData, setConfirmedData] = useState(null);
@@ -50,12 +50,6 @@ export default function VoiceDiary() {
     queryKey: ['treatments'],
     queryFn: () => api.entities.TreatmentEntry.list('-date'),
     initialData: [],
-  });
-
-  const { data: user } = useQuery({
-    queryKey: ['currentUser'],
-    queryFn: () => api.auth.me(),
-    initialData: null,
   });
 
   useEffect(() => {
@@ -103,10 +97,11 @@ export default function VoiceDiary() {
   }, [toast]);
 
   const toggleRecording = () => {
+    if (isWhisperRecording || isWhisperTranscribing) return;
     if (!recognition) {
       toast({
-        title: "Speech recognition not available",
-        description: "Your browser doesn't support speech recognition",
+        title: "Speech not available",
+        description: "Use Record (accurate) or try Chrome on desktop.",
         variant: "destructive"
       });
       return;
@@ -120,6 +115,160 @@ export default function VoiceDiary() {
       setIsRecording(true);
     }
   };
+
+  const pickRecorderMime = () => {
+    if (typeof MediaRecorder === "undefined") return "";
+    const c = [
+      "audio/webm;codecs=opus",
+      "audio/webm",
+      "audio/mp4",
+    ];
+    for (const t of c) {
+      if (MediaRecorder.isTypeSupported(t)) return t;
+    }
+    return "";
+  };
+
+  const buildNameHint = useCallback(() => {
+    const names = (patients || [])
+      .map((p) => p.name)
+      .filter(Boolean)
+      .slice(0, 24);
+    const tail = names.length
+      ? `Likely patient names: ${names.join(", ")}.`
+      : "";
+    return `UK aesthetic clinic diary. ${tail}`.trim().slice(0, 220);
+  }, [patients]);
+
+  const stopWhisperAndTranscribe = useCallback(async () => {
+    const rec = mediaRecorderRef.current;
+    if (!rec || rec.state === "inactive") return;
+    rec.stop();
+  }, []);
+
+  const startWhisperRecording = useCallback(async () => {
+    if (isRecording) {
+      recognition?.stop?.();
+      setIsRecording(false);
+    }
+    if (!navigator.mediaDevices?.getUserMedia) {
+      toast({
+        title: "Microphone not supported",
+        description: "Try another browser or device.",
+        variant: "destructive",
+      });
+      return;
+    }
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      mediaStreamRef.current = stream;
+      mediaChunksRef.current = [];
+      const mime = pickRecorderMime();
+      const mr = mime
+        ? new MediaRecorder(stream, { mimeType: mime })
+        : new MediaRecorder(stream);
+      mediaRecorderRef.current = mr;
+
+      mr.ondataavailable = (e) => {
+        if (e.data.size > 0) mediaChunksRef.current.push(e.data);
+      };
+
+      mr.onstop = async () => {
+        setIsWhisperRecording(false);
+        const streamDone = mediaStreamRef.current;
+        mediaStreamRef.current = null;
+        streamDone?.getTracks().forEach((t) => t.stop());
+
+        const blob = new Blob(mediaChunksRef.current, {
+          type: mr.mimeType || "audio/webm",
+        });
+        mediaChunksRef.current = [];
+        mediaRecorderRef.current = null;
+
+        if (blob.size < 200) {
+          toast({
+            title: "Too short",
+            description: "Hold Record and speak, then tap Stop.",
+            variant: "destructive",
+          });
+          return;
+        }
+
+        setIsWhisperTranscribing(true);
+        try {
+          const dataUrl = await new Promise((resolve, reject) => {
+            const r = new FileReader();
+            r.onloadend = () => resolve(r.result);
+            r.onerror = () => reject(new Error("read failed"));
+            r.readAsDataURL(blob);
+          });
+          const base64 = String(dataUrl).split(",")[1];
+          if (!base64) throw new Error("Could not read audio");
+
+          const { text } = await api.integrations.Core.TranscribeAudio({
+            audioBase64: base64,
+            mimeType: blob.type || "audio/webm",
+            nameHint: buildNameHint(),
+          });
+
+          if (text) {
+            setTranscript((prev) =>
+              (prev ? `${prev.trimEnd()} ` : "") + text.trim(),
+            );
+          }
+        } catch (err) {
+          console.error(err);
+          toast({
+            title: "Transcription failed",
+            description: err?.message || "Try again or type instead.",
+            variant: "destructive",
+          });
+        } finally {
+          setIsWhisperTranscribing(false);
+        }
+      };
+
+      mr.start(250);
+      setIsWhisperRecording(true);
+    } catch (e) {
+      console.error(e);
+      toast({
+        title: "Microphone blocked",
+        description: "Allow mic access for this site and try again.",
+        variant: "destructive",
+      });
+    }
+  }, [buildNameHint, isRecording, recognition, toast]);
+
+  const toggleWhisperRecording = useCallback(() => {
+    if (isWhisperTranscribing) return;
+    if (isWhisperRecording) {
+      stopWhisperAndTranscribe();
+    } else {
+      startWhisperRecording();
+    }
+  }, [
+    isWhisperRecording,
+    isWhisperTranscribing,
+    startWhisperRecording,
+    stopWhisperAndTranscribe,
+  ]);
+
+  useEffect(() => {
+    return () => {
+      mediaStreamRef.current?.getTracks().forEach((t) => t.stop());
+      if (
+        mediaRecorderRef.current &&
+        mediaRecorderRef.current.state !== "inactive"
+      ) {
+        try {
+          mediaRecorderRef.current.stop();
+        } catch {
+          /* ignore */
+        }
+      }
+    };
+  }, []);
 
   const generateInvoiceNumber = () => {
     const date = new Date();
@@ -488,156 +637,120 @@ export default function VoiceDiary() {
     setConfirmedData(newData);
   };
 
+  const inputBusy =
+    processing || isWhisperRecording || isWhisperTranscribing;
+
   return (
-    <div className="p-6 md:p-10 bg-gradient-to-b from-slate-50 to-slate-100/80 min-h-screen">
-      <div className="max-w-3xl mx-auto space-y-8">
-        <div>
-          <h1 className="text-3xl font-semibold tracking-tight text-[#1a2845]">
+    <div className="p-6 md:p-10 bg-[#f4f5f7] min-h-screen">
+      <div className="max-w-2xl mx-auto space-y-6">
+        <header>
+          <h1 className="text-2xl font-semibold text-[#1a2845] tracking-tight">
             Voice diary
           </h1>
-          <p className="mt-2 text-sm text-slate-600 max-w-xl">
-            Dictate your day with{" "}
-            <a
-              href="https://wisprflow.ai/"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="font-medium text-indigo-600 hover:text-indigo-700 underline underline-offset-2 inline-flex items-center gap-0.5"
-            >
-              Wispr Flow
-              <ExternalLink className="w-3 h-3 opacity-70" />
-            </a>
-            — focus this text box and speak. Then we parse visits, payments, and invoice requests in one step.
+          <p className="mt-1 text-sm text-slate-500">
+            Type or record, then parse to update visits and invoices.
           </p>
-        </div>
+        </header>
 
-        <Card className="border-slate-200/80 shadow-md shadow-slate-200/50 overflow-hidden rounded-2xl">
-          <div className="bg-gradient-to-r from-indigo-600 to-violet-600 px-5 py-4 text-white">
-            <div className="flex gap-3">
-              <div className="shrink-0 w-10 h-10 rounded-xl bg-white/15 flex items-center justify-center">
-                <Sparkles className="w-5 h-5" />
-              </div>
-              <div className="min-w-0 space-y-1">
-                <p className="font-semibold text-sm sm:text-base">
-                  Recommended: Wispr Flow for voice
-                </p>
-                <p className="text-xs sm:text-sm text-indigo-100 leading-snug">
-                  Install Flow on Mac, Windows, iPhone, or Android. Click inside the box below, use your Flow shortcut, and talk naturally—it writes clean text into Optifinance. No API key needed in the app.
-                </p>
-                <a
-                  href="https://wisprflow.ai/"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="inline-flex items-center gap-1 text-xs font-semibold text-white hover:underline mt-1"
-                >
-                  Download Wispr Flow
-                  <ExternalLink className="w-3 h-3" />
-                </a>
-              </div>
-            </div>
-          </div>
+        <Card className="border border-slate-200/90 shadow-sm rounded-2xl bg-white">
+          <CardContent className="p-5 md:p-6 space-y-4">
+            <Textarea
+              id="voice-diary-input"
+              value={transcript}
+              onChange={(e) => setTranscript(e.target.value)}
+              placeholder="e.g. Today: Sarah — Botox £250 paid. Mark — filler £200 pending."
+              className="rounded-xl border-slate-200 min-h-[200px] text-[15px] leading-relaxed resize-y focus-visible:ring-[#1a2845]/20"
+              disabled={processing}
+            />
 
-          <CardContent className="p-6 md:p-8 space-y-5">
-            <div className="space-y-2">
-              <label
-                htmlFor="voice-diary-input"
-                className="text-sm font-medium text-slate-800"
+            <div className="flex flex-wrap items-center gap-2">
+              <Button
+                type="button"
+                variant="default"
+                size="sm"
+                className="rounded-lg bg-[#1a2845] hover:bg-[#0f1829]"
+                onClick={toggleWhisperRecording}
+                disabled={processing || isWhisperTranscribing}
+                title="Accurate transcription — we send audio to be transcribed (OpenAI Whisper). Patient names from your list are used as hints."
               >
-                Your diary entry
-              </label>
-              <Textarea
-                id="voice-diary-input"
-                value={transcript}
-                onChange={(e) => setTranscript(e.target.value)}
-                placeholder={`Example: Today I saw Sarah for Botox at £250, paid in full. Mark had filler at £200, paying next week. Please invoice Emma for Tuesday's facial.`}
-                className="rounded-xl border-slate-200 min-h-[220px] sm:min-h-[260px] text-[15px] leading-relaxed resize-y focus-visible:ring-indigo-500"
-                disabled={processing}
-              />
-              <p className="text-xs text-slate-500">
-                Say who you saw, which treatment, prices, and paid / pending. Ask to invoice in plain English—we&apos;ll match it in review.
-              </p>
-            </div>
-
-            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-              <Collapsible className="group sm:max-w-md">
-                <CollapsibleTrigger asChild>
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="sm"
-                    className="text-slate-600 -ml-2 h-9 px-2"
-                  >
-                    <ChevronDown className="w-4 h-4 mr-1 opacity-70 transition-transform group-data-[state=open]:rotate-180" />
-                    Quick tips
-                  </Button>
-                </CollapsibleTrigger>
-                <CollapsibleContent className="pt-1 pb-2">
-                  <ul className="text-xs text-slate-600 space-y-1.5 pl-1 border-l-2 border-indigo-200 ml-1">
-                    <li className="pl-3">Use patient and treatment names from your catalogue when you can.</li>
-                    <li className="pl-3">Mention paid, pending, or partial and amounts.</li>
-                    <li className="pl-3">Several patients in one entry is fine.</li>
-                  </ul>
-                </CollapsibleContent>
-              </Collapsible>
-
+                {isWhisperTranscribing ? (
+                  <>
+                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                    Transcribing…
+                  </>
+                ) : isWhisperRecording ? (
+                  <>
+                    <MicOff className="w-4 h-4 mr-2" />
+                    Stop & transcribe
+                  </>
+                ) : (
+                  <>
+                    <AudioLines className="w-4 h-4 mr-2" />
+                    Record
+                  </>
+                )}
+              </Button>
               {recognition ? (
                 <Button
                   type="button"
                   variant="outline"
                   size="sm"
+                  className="rounded-lg border-slate-200 text-slate-600"
                   onClick={toggleRecording}
-                  disabled={processing}
-                  className={`shrink-0 rounded-xl border-slate-200 ${isRecording ? "border-red-200 bg-red-50 text-red-700" : ""}`}
+                  disabled={inputBusy || isWhisperRecording}
+                  title="Live captions in the browser — often mishears names. Prefer Record for accuracy."
                 >
                   {isRecording ? (
                     <>
-                      <MicOff className="w-4 h-4 mr-2" />
-                      Stop browser mic
+                      <MicOff className="w-3.5 h-3.5 mr-1.5" />
+                      Stop live mic
                     </>
                   ) : (
                     <>
-                      <Mic className="w-4 h-4 mr-2" />
-                      Browser mic (fallback)
+                      <Mic className="w-3.5 h-3.5 mr-1.5" />
+                      Live mic
                     </>
                   )}
                 </Button>
               ) : null}
             </div>
 
-            <div className="space-y-2">
-              <Button
-                onClick={processTranscript}
-                disabled={processing || !transcript.trim() || isRecording}
-                className="w-full rounded-xl h-12 text-sm font-semibold bg-[#1a2845] hover:bg-[#0f1829] text-white shadow-sm"
-              >
-                {processing ? (
-                  <>
-                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                    Understanding your entry…
-                  </>
-                ) : isRecording ? (
-                  "Stop the browser mic to continue"
-                ) : (
-                  "Parse & review"
-                )}
-              </Button>
-              {processing && (
-                <p className="text-center text-xs text-slate-500">
-                  Matching patients, treatments, and invoices—usually a few seconds.
-                </p>
+            <Button
+              onClick={processTranscript}
+              disabled={
+                processing ||
+                !transcript.trim() ||
+                isRecording ||
+                isWhisperRecording ||
+                isWhisperTranscribing
+              }
+              className="w-full rounded-xl h-11 text-sm font-medium bg-[#1a2845] hover:bg-[#0f1829] text-white"
+            >
+              {processing ? (
+                <>
+                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                  Parsing…
+                </>
+              ) : isRecording ? (
+                "Stop live mic to parse"
+              ) : isWhisperRecording ? (
+                "Stop recording to parse"
+              ) : (
+                "Parse & review"
               )}
-            </div>
+            </Button>
 
-            <div className="flex flex-wrap gap-x-4 gap-y-1 justify-center text-xs text-slate-500 pt-1">
+            <div className="flex justify-center gap-3 text-xs text-slate-400 pt-1">
               <Link
                 to={createPageUrl("Dashboard")}
-                className="text-indigo-600 hover:underline"
+                className="text-slate-600 hover:text-[#1a2845]"
               >
                 Dashboard
               </Link>
-              <span className="text-slate-300">·</span>
+              <span>·</span>
               <Link
                 to={createPageUrl("Records")}
-                className="text-indigo-600 hover:underline"
+                className="text-slate-600 hover:text-[#1a2845]"
               >
                 Records
               </Link>
