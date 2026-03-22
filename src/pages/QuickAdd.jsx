@@ -16,6 +16,7 @@ import { createPageUrl } from "@/utils";
 import {
   friendsFamilyInvoiceFields,
   patientEligibleForFriendsFamily,
+  effectiveFriendsFamilyPercent,
 } from "@/lib/invoiceFriendsFamily";
 
 export default function QuickAdd() {
@@ -115,6 +116,7 @@ export default function QuickAdd() {
     duration_minutes: '',
     notes: '',
     friends_family_discount_applied: false,
+    friends_family_discount_percent: '',
   });
 
   // Auto-select lead practitioner when component mounts or practitioners change
@@ -299,7 +301,17 @@ export default function QuickAdd() {
       const treatment = treatmentCatalog.find(t => t.id === data.treatment_id);
       const resolvedPatient =
         patientId && patients.find((p) => p.id === patientId);
-      const ffPatientOk = patientEligibleForFriendsFamily(resolvedPatient);
+      const effectiveFfPct = effectiveFriendsFamilyPercent(
+        data.friends_family_discount_percent,
+        resolvedPatient,
+      );
+      if (data.friends_family_discount_applied && effectiveFfPct === null) {
+        throw new Error(
+          "Enter a friends & family discount % (0–100), or pick a patient with a default rate in Catalogue.",
+        );
+      }
+      const ffApplied =
+        !!data.friends_family_discount_applied && effectiveFfPct !== null;
 
       const productCost = treatment?.typical_product_cost || 0;
       const pricePaid = parseFloat(data.price_paid);
@@ -323,8 +335,8 @@ export default function QuickAdd() {
         practitioner_id: practitionerId && practitionerId !== '' ? practitionerId : undefined,
         practitioner_name: practitionerName ?? undefined,
         notes: data.notes && data.notes !== '' ? data.notes : undefined,
-        friends_family_discount_applied:
-          ffPatientOk && !!data.friends_family_discount_applied,
+        friends_family_discount_applied: ffApplied,
+        friends_family_discount_percent: ffApplied ? effectiveFfPct : null,
       });
 
       // If sendInvoiceSMS is checked AND payment is pending, send it NOW
@@ -346,6 +358,7 @@ export default function QuickAdd() {
       const leadPractitioner = practitioners.find(p => p.is_lead);
       setTreatmentForm({
         date: format(new Date(), 'yyyy-MM-dd'),
+        patient_id: '',
         patient_name: '',
         treatment_id: '',
         price_paid: '',
@@ -355,6 +368,7 @@ export default function QuickAdd() {
         duration_minutes: '',
         notes: '',
         friends_family_discount_applied: false,
+        friends_family_discount_percent: '',
       });
       setNewPatientName(null);
       setNewPractitionerName(null);
@@ -561,6 +575,25 @@ export default function QuickAdd() {
     e.preventDefault();
 
     const selectedTreatment = treatmentCatalog.find(t => t.id === treatmentForm.treatment_id);
+    const pat = treatmentForm.patient_id
+      ? patients.find((p) => p.id === treatmentForm.patient_id)
+      : null;
+    if (treatmentForm.friends_family_discount_applied) {
+      const eff = effectiveFriendsFamilyPercent(
+        treatmentForm.friends_family_discount_percent,
+        pat,
+      );
+      if (eff === null) {
+        toast({
+          title: "Friends & family discount",
+          description:
+            "Enter a discount % between 0 and 100, or choose a patient who has a default rate saved in Catalogue → Patients.",
+          variant: "destructive",
+        });
+        return;
+      }
+    }
+
     const formData = {
       ...treatmentForm,
       price_paid: treatmentForm.price_paid || selectedTreatment?.default_price || 0,
@@ -757,7 +790,9 @@ Return an array of treatment objects, even if there's only one treatment.`;
           profit: profit,
           practitioner_id: practitioner?.id,
           practitioner_name: practitioner?.name || treatmentData.practitioner_name,
-          notes: treatmentData.notes
+          notes: treatmentData.notes,
+          friends_family_discount_applied: false,
+          friends_family_discount_percent: "",
         });
       }
 
@@ -1058,6 +1093,7 @@ Return an array of treatment objects, even if there's only one treatment.`;
                               patient_id: '',
                               patient_name: '',
                               friends_family_discount_applied: false,
+                              friends_family_discount_percent: '',
                             });
                           }}
                           className="px-4 py-2 rounded-xl border border-gray-300 hover:bg-gray-50 transition-colors"
@@ -1076,17 +1112,18 @@ Return an array of treatment objects, even if there's only one treatment.`;
                               patient_id: '',
                               patient_name: '',
                               friends_family_discount_applied: false,
+                              friends_family_discount_percent: '',
                             });
                           } else {
                             const patient = patients.find(p => p.id === value);
-                            const ffOk = patientEligibleForFriendsFamily(patient);
+                            const defaultFf = patientEligibleForFriendsFamily(patient)
+                              ? String(patient.friends_family_discount_percent)
+                              : "";
                             setTreatmentForm({
                               ...treatmentForm,
                               patient_id: value,
                               patient_name: patient?.name,
-                              friends_family_discount_applied: ffOk
-                                ? treatmentForm.friends_family_discount_applied
-                                : false,
+                              friends_family_discount_percent: defaultFf,
                             });
                           }
                         }}
@@ -1140,36 +1177,70 @@ Return an array of treatment objects, even if there's only one treatment.`;
                     />
                   </div>
 
-                  {(() => {
-                    const pat = patients.find(
-                      (p) => p.id === treatmentForm.patient_id,
-                    );
-                    if (!patientEligibleForFriendsFamily(pat)) return null;
-                    return (
-                      <div className="flex items-start gap-3 rounded-xl border border-indigo-100 bg-indigo-50/50 p-3 md:col-span-2">
-                        <input
-                          type="checkbox"
-                          id="quickadd-friends-family"
-                          checked={!!treatmentForm.friends_family_discount_applied}
-                          onChange={(e) =>
-                            setTreatmentForm({
-                              ...treatmentForm,
-                              friends_family_discount_applied: e.target.checked,
-                            })
-                          }
-                          className="w-4 h-4 text-indigo-600 border-gray-300 rounded mt-0.5"
-                        />
-                        <div>
-                          <Label htmlFor="quickadd-friends-family" className="text-sm font-medium text-gray-900 cursor-pointer">
-                            Friends &amp; family discount applied
-                          </Label>
-                          <p className="text-xs text-gray-600 mt-0.5">
-                            This patient has a {pat.friends_family_discount_percent}% friends &amp; family rate on file. The price above is what you charge; tick this so invoices show the disclosure.
-                          </p>
-                        </div>
+                  <div className="md:col-span-2 rounded-xl border border-indigo-100 bg-indigo-50/50 p-4 space-y-3">
+                    <div>
+                      <p className="text-sm font-semibold text-gray-900">
+                        Friends &amp; family discount
+                      </p>
+                      <p className="text-xs text-gray-600 mt-1">
+                        Optional. Tick if this visit should show friends &amp; family pricing on invoice PDFs. Enter the discount % for this visit (or leave the field blank if the patient has a default saved under Catalogue → Patients).
+                      </p>
+                    </div>
+                    <div className="flex items-start gap-3">
+                      <input
+                        type="checkbox"
+                        id="quickadd-friends-family"
+                        checked={!!treatmentForm.friends_family_discount_applied}
+                        onChange={(e) =>
+                          setTreatmentForm({
+                            ...treatmentForm,
+                            friends_family_discount_applied: e.target.checked,
+                            friends_family_discount_percent: e.target.checked
+                              ? treatmentForm.friends_family_discount_percent
+                              : "",
+                          })
+                        }
+                        className="w-4 h-4 text-indigo-600 border-gray-300 rounded mt-1 shrink-0"
+                      />
+                      <div className="flex-1 space-y-3 min-w-0">
+                        <Label
+                          htmlFor="quickadd-friends-family"
+                          className="text-sm font-medium text-gray-900 cursor-pointer"
+                        >
+                          Apply friends &amp; family discount to this visit
+                        </Label>
+                        {treatmentForm.friends_family_discount_applied && (
+                          <div className="space-y-2">
+                            <Label
+                              htmlFor="quickadd-ff-percent"
+                              className="text-xs font-medium text-gray-700"
+                            >
+                              Discount for this visit (%)
+                            </Label>
+                            <Input
+                              id="quickadd-ff-percent"
+                              type="number"
+                              min={0}
+                              max={100}
+                              step={0.01}
+                              placeholder="e.g. 10"
+                              value={treatmentForm.friends_family_discount_percent}
+                              onChange={(e) =>
+                                setTreatmentForm({
+                                  ...treatmentForm,
+                                  friends_family_discount_percent: e.target.value,
+                                })
+                              }
+                              className="rounded-xl border-gray-300 h-11 max-w-[200px]"
+                            />
+                            <p className="text-xs text-gray-500">
+                              The amount in &quot;Price&quot; is what the patient pays. This % is disclosed on invoices. If you leave this blank, the patient&apos;s default % from the catalogue is used (if set).
+                            </p>
+                          </div>
+                        )}
                       </div>
-                    );
-                  })()}
+                    </div>
+                  </div>
 
                   <div className="space-y-2">
                     <Label htmlFor="duration" className="text-sm font-medium text-gray-700">Duration (minutes)</Label>

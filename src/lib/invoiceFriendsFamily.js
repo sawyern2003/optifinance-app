@@ -1,5 +1,5 @@
 /**
- * Patient is eligible for friends & family pricing when a discount % is set on their record.
+ * Patient has a default friends & family rate on file (Catalogue → Patients).
  */
 export function patientEligibleForFriendsFamily(patient) {
   if (!patient) return false;
@@ -9,12 +9,29 @@ export function patientEligibleForFriendsFamily(patient) {
   return Number.isFinite(n) && n >= 0 && n <= 100;
 }
 
+/** Parse discount % from form input; null if empty/invalid */
+export function parseFriendsFamilyPercentInput(value) {
+  if (value == null || String(value).trim() === "") return null;
+  const n = parseFloat(String(value).trim(), 10);
+  if (!Number.isFinite(n) || n < 0 || n > 100) return null;
+  return n;
+}
+
+/**
+ * Discount % for this visit: typed amount wins, else patient's catalogue default.
+ */
+export function effectiveFriendsFamilyPercent(formPercentStr, patient) {
+  const fromForm = parseFriendsFamilyPercentInput(formPercentStr);
+  if (fromForm !== null) return fromForm;
+  if (patientEligibleForFriendsFamily(patient)) {
+    return Number(patient.friends_family_discount_percent);
+  }
+  return null;
+}
+
 /**
  * Snapshot friends & family discount fields for invoices (PDF / history).
- * Discount % comes from the patient; standard list price from the treatment catalogue.
- * @param {object} treatment - treatment_entries row
- * @param {Array<object>} treatmentCatalog - treatment_catalog list
- * @param {Array<object>} patients - patients list
+ * Uses visit-level % on treatment entry first, then patient default.
  */
 export function friendsFamilyInvoiceFields(
   treatment,
@@ -31,11 +48,21 @@ export function friendsFamilyInvoiceFields(
   }
   const patient =
     patients.find((p) => p.id === treatment.patient_id) || null;
-  const pctRaw = patient?.friends_family_discount_percent;
-  const pct =
-    pctRaw != null && pctRaw !== "" && Number.isFinite(Number(pctRaw))
-      ? Number(pctRaw)
-      : null;
+
+  let pct = null;
+  const tRaw = treatment?.friends_family_discount_percent;
+  if (tRaw != null && tRaw !== "") {
+    const n = Number(tRaw);
+    if (Number.isFinite(n)) pct = n;
+  }
+  if (pct == null && patient) {
+    const pRaw = patient.friends_family_discount_percent;
+    if (pRaw != null && pRaw !== "") {
+      const n = Number(pRaw);
+      if (Number.isFinite(n)) pct = n;
+    }
+  }
+
   const cat =
     treatmentCatalog.find((t) => t.id === treatment.treatment_id) || null;
   const stdRaw = cat?.default_price;

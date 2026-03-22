@@ -14,6 +14,7 @@ import { useToast } from "@/components/ui/use-toast";
 import {
   friendsFamilyInvoiceFields,
   patientEligibleForFriendsFamily,
+  effectiveFriendsFamilyPercent,
 } from "@/lib/invoiceFriendsFamily";
 
 export default function Records() {
@@ -392,6 +393,18 @@ export default function Records() {
         practitioner_name: item.practitioner_name || '',
         notes: item.notes || '',
         friends_family_discount_applied: !!item.friends_family_discount_applied,
+        friends_family_discount_percent: (() => {
+          if (
+            item.friends_family_discount_percent != null &&
+            item.friends_family_discount_percent !== ""
+          ) {
+            return String(item.friends_family_discount_percent);
+          }
+          const p = patients.find((x) => x.id === patient?.id);
+          return patientEligibleForFriendsFamily(p)
+            ? String(p.friends_family_discount_percent)
+            : "";
+        })(),
       });
     } else {
       setEditForm({
@@ -408,6 +421,23 @@ export default function Records() {
     e.preventDefault();
     
     if (editingItem.type === 'treatment') {
+      const earlyPatient = patients.find((p) => p.id === editForm.patient_id);
+      if (editForm.friends_family_discount_applied) {
+        const eff = effectiveFriendsFamilyPercent(
+          editForm.friends_family_discount_percent,
+          earlyPatient,
+        );
+        if (eff === null) {
+          toast({
+            title: "Friends & family discount",
+            description:
+              "Enter a discount % between 0 and 100, or choose a patient with a default rate in Catalogue → Patients.",
+            variant: "destructive",
+          });
+          return;
+        }
+      }
+
       let finalPractitionerId = editForm.practitioner_id;
       let finalPractitionerName = editForm.practitioner_name;
       
@@ -446,7 +476,13 @@ export default function Records() {
       
       const selectedTreatment = treatmentCatalog.find(t => t.id === editForm.treatment_id);
       const selectedPatient = patients.find(p => p.id === editForm.patient_id);
-      const ffPatientOk = patientEligibleForFriendsFamily(selectedPatient);
+      const effectiveFfPct = effectiveFriendsFamilyPercent(
+        editForm.friends_family_discount_percent,
+        selectedPatient,
+      );
+      const ffApplied =
+        !!editForm.friends_family_discount_applied &&
+        effectiveFfPct !== null;
       
       const productCost = selectedTreatment?.typical_product_cost || 0;
       const profit = amountPaid - productCost;
@@ -469,8 +505,8 @@ export default function Records() {
           practitioner_id: finalPractitionerId,
           practitioner_name: finalPractitionerName,
           notes: editForm.notes,
-          friends_family_discount_applied:
-            ffPatientOk && !!editForm.friends_family_discount_applied,
+          friends_family_discount_applied: ffApplied,
+          friends_family_discount_percent: ffApplied ? effectiveFfPct : null,
         }
       });
     } else {
@@ -1093,14 +1129,17 @@ export default function Records() {
                       onValueChange={(value) => {
                         const patient =
                           value === "none" ? null : patients.find((p) => p.id === value);
-                        const ffOk = patientEligibleForFriendsFamily(patient);
+                        const defaultFf =
+                          value === "none"
+                            ? ""
+                            : patientEligibleForFriendsFamily(patient)
+                              ? String(patient.friends_family_discount_percent)
+                              : "";
                         setEditForm({
                           ...editForm,
                           patient_id: value,
                           patient_name: patient?.name || "",
-                          friends_family_discount_applied: ffOk
-                            ? editForm.friends_family_discount_applied
-                            : false,
+                          friends_family_discount_percent: defaultFf,
                         });
                       }}
                     >
@@ -1205,34 +1244,67 @@ export default function Records() {
                     </div>
                   )}
 
-                  {(() => {
-                    const pat = patients.find((p) => p.id === editForm.patient_id);
-                    if (!patientEligibleForFriendsFamily(pat)) return null;
-                    return (
-                      <div className="flex items-start gap-3 rounded-xl border border-indigo-100 bg-indigo-50/50 p-3">
-                        <input
-                          type="checkbox"
-                          id="edit-friends-family"
-                          checked={!!editForm.friends_family_discount_applied}
-                          onChange={(e) =>
-                            setEditForm({
-                              ...editForm,
-                              friends_family_discount_applied: e.target.checked,
-                            })
-                          }
-                          className="w-4 h-4 text-indigo-600 border-gray-300 rounded mt-0.5"
-                        />
-                        <div>
-                          <Label htmlFor="edit-friends-family" className="text-sm font-medium text-gray-900 cursor-pointer">
-                            Friends &amp; family discount applied
-                          </Label>
-                          <p className="text-xs text-gray-600 mt-0.5">
-                            This patient&apos;s rate is {pat.friends_family_discount_percent}% — disclosed on invoice PDFs when ticked.
-                          </p>
-                        </div>
+                  <div className="rounded-xl border border-indigo-100 bg-indigo-50/50 p-4 space-y-3">
+                    <div>
+                      <p className="text-sm font-semibold text-gray-900">
+                        Friends &amp; family discount
+                      </p>
+                      <p className="text-xs text-gray-600 mt-1">
+                        Optional. Enter the discount % for this visit, or leave blank to use the patient&apos;s default from Catalogue → Patients.
+                      </p>
+                    </div>
+                    <div className="flex items-start gap-3">
+                      <input
+                        type="checkbox"
+                        id="edit-friends-family"
+                        checked={!!editForm.friends_family_discount_applied}
+                        onChange={(e) =>
+                          setEditForm({
+                            ...editForm,
+                            friends_family_discount_applied: e.target.checked,
+                            friends_family_discount_percent: e.target.checked
+                              ? editForm.friends_family_discount_percent
+                              : "",
+                          })
+                        }
+                        className="w-4 h-4 text-indigo-600 border-gray-300 rounded mt-1 shrink-0"
+                      />
+                      <div className="flex-1 space-y-3 min-w-0">
+                        <Label
+                          htmlFor="edit-friends-family"
+                          className="text-sm font-medium text-gray-900 cursor-pointer"
+                        >
+                          Apply friends &amp; family discount to this visit
+                        </Label>
+                        {editForm.friends_family_discount_applied && (
+                          <div className="space-y-2">
+                            <Label
+                              htmlFor="edit-ff-percent"
+                              className="text-xs font-medium text-gray-700"
+                            >
+                              Discount for this visit (%)
+                            </Label>
+                            <Input
+                              id="edit-ff-percent"
+                              type="number"
+                              min={0}
+                              max={100}
+                              step={0.01}
+                              placeholder="e.g. 10"
+                              value={editForm.friends_family_discount_percent}
+                              onChange={(e) =>
+                                setEditForm({
+                                  ...editForm,
+                                  friends_family_discount_percent: e.target.value,
+                                })
+                              }
+                              className="rounded-xl border-gray-300 h-11 max-w-[200px]"
+                            />
+                          </div>
+                        )}
                       </div>
-                    );
-                  })()}
+                    </div>
+                  </div>
 
                   <div className="space-y-3 pt-2 border-t border-gray-100">
                     <div className="flex items-center gap-3">

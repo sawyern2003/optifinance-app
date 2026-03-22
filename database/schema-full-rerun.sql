@@ -82,6 +82,7 @@ CREATE TABLE IF NOT EXISTS treatment_entries (
   profit DECIMAL(10, 2),
   notes TEXT,
   friends_family_discount_applied BOOLEAN NOT NULL DEFAULT false,
+  friends_family_discount_percent DECIMAL(5, 2),
   created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
   updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
