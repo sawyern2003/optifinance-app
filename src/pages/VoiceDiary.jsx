@@ -4,6 +4,16 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { Loader2, Mic, MicOff, AudioLines } from "lucide-react";
 import { format, subDays, parseISO } from "date-fns";
 import { useToast } from "@/components/ui/use-toast";
@@ -75,6 +85,39 @@ export default function VoiceDiary() {
   const [reviewDialogOpen, setReviewDialogOpen] = useState(false);
   const [extractedData, setExtractedData] = useState(null);
   const [confirmedData, setConfirmedData] = useState(null);
+  /** Read-only typewriter view vs plain textarea */
+  const [diaryEditing, setDiaryEditing] = useState(false);
+  const [revealText, setRevealText] = useState("");
+  const [parseConfirmOpen, setParseConfirmOpen] = useState(false);
+
+  // Keep typewriter display in sync; animate only when not editing
+  useEffect(() => {
+    if (diaryEditing) {
+      setRevealText(transcript);
+      return;
+    }
+    if (!transcript) {
+      setRevealText("");
+      return;
+    }
+    setRevealText((prev) => {
+      if (transcript.length < prev.length) return transcript;
+      if (prev.length > 0 && !transcript.startsWith(prev)) return transcript;
+      return prev;
+    });
+  }, [transcript, diaryEditing]);
+
+  useEffect(() => {
+    if (diaryEditing) return;
+    if (!transcript) return;
+    if (revealText.length >= transcript.length) return;
+    const t = setTimeout(() => {
+      const behind = transcript.length - revealText.length;
+      const chunk = Math.min(Math.max(1, Math.ceil(behind / 8)), 4);
+      setRevealText((prev) => transcript.slice(0, prev.length + chunk));
+    }, 28);
+    return () => clearTimeout(t);
+  }, [revealText, transcript, diaryEditing]);
 
   const { data: treatmentCatalog } = useQuery({
     queryKey: ['treatmentCatalog'],
@@ -858,18 +901,67 @@ export default function VoiceDiary() {
             </div>
           </div>
 
-          <div className="shrink-0 rounded-2xl border border-[#ebe4d6] bg-white p-4 shadow-sm">
-            <Textarea
-              id="voice-diary-input"
-              value={transcript}
-              onChange={(e) => setTranscript(e.target.value)}
-              placeholder="Notes appear here. You can edit before parsing."
-              className="min-h-[140px] resize-y rounded-xl border-[#e8dcc8] bg-[#fafaf9] text-sm text-[#1a2845] placeholder:text-slate-400 focus-visible:ring-[#c9a227]/40"
-              disabled={processing}
-            />
+          <div className="shrink-0 rounded-2xl border border-[#ebe4d6] bg-gradient-to-b from-white to-[#faf8f4] p-5 shadow-sm">
+            <p className="mb-3 text-[11px] font-medium uppercase tracking-[0.2em] text-[#1a2845]/45">
+              Today&apos;s diary
+            </p>
+
+            {diaryEditing ? (
+              <Textarea
+                id="voice-diary-input"
+                value={transcript}
+                onChange={(e) => setTranscript(e.target.value)}
+                placeholder="Your notes…"
+                className="min-h-[160px] resize-y rounded-xl border-[#e8dcc8] bg-white/90 text-sm text-[#1a2845] placeholder:text-slate-400 focus-visible:ring-[#c9a227]/40"
+                disabled={processing}
+                autoFocus
+              />
+            ) : (
+              <div
+                className="relative min-h-[160px] rounded-xl border border-[#ebe4d6]/80 bg-[#fffcf7] px-4 py-4 shadow-[inset_0_1px_0_rgba(255,255,255,0.85)]"
+                aria-live="polite"
+                aria-label="Diary transcript"
+              >
+                <div
+                  className="pointer-events-none absolute left-0 top-3 bottom-3 w-px bg-gradient-to-b from-[#c9a227]/0 via-[#c9a227]/55 to-[#c9a227]/0"
+                  aria-hidden
+                />
+                {transcript.trim() || revealText ? (
+                  <p className="pl-3 font-serif text-[15px] leading-[1.75] tracking-[0.01em] text-[#1a2845] whitespace-pre-wrap">
+                    {revealText}
+                    <span
+                      className={`ml-0.5 inline-block h-[1.1em] w-[2px] translate-y-[0.08em] bg-[#c9a227] align-middle shadow-[0_0_8px_rgba(201,162,39,0.45)] ${
+                        revealText.length >= transcript.length
+                          ? "animate-pulse"
+                          : ""
+                      }`}
+                      aria-hidden
+                    />
+                  </p>
+                ) : (
+                  <p className="pl-3 font-serif text-[15px] leading-[1.75] text-slate-400 italic">
+                    Speak or dictate — your words will appear here as you go.
+                  </p>
+                )}
+              </div>
+            )}
+
+            <div className="mt-3 flex flex-wrap items-center gap-2">
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => setDiaryEditing((e) => !e)}
+                disabled={processing}
+                className="rounded-lg border-[#e8dcc8] text-xs font-medium text-[#1a2845] hover:bg-[#faf8f4]"
+              >
+                {diaryEditing ? "Done editing" : "Edit text"}
+              </Button>
+            </div>
+
             <Button
               type="button"
-              onClick={processTranscript}
+              onClick={() => setParseConfirmOpen(true)}
               disabled={
                 processing ||
                 !transcript.trim() ||
@@ -893,6 +985,38 @@ export default function VoiceDiary() {
               )}
             </Button>
           </div>
+
+          <AlertDialog open={parseConfirmOpen} onOpenChange={setParseConfirmOpen}>
+            <AlertDialogContent className="max-w-md rounded-2xl border-[#ebe4d6] sm:max-w-lg">
+              <AlertDialogHeader>
+                <AlertDialogTitle className="font-serif text-xl text-[#1a2845]">
+                  Parse this diary?
+                </AlertDialogTitle>
+                <AlertDialogDescription className="text-left text-slate-600">
+                  We&apos;ll read your text and suggest updates to treatments,
+                  payments, and invoices. Please confirm you want to analyse
+                  what&apos;s shown below.
+                </AlertDialogDescription>
+              </AlertDialogHeader>
+              <div className="max-h-[min(40vh,220px)] overflow-y-auto rounded-xl border border-[#ebe4d6] bg-[#fffcf7] p-4 font-serif text-sm leading-relaxed text-[#1a2845] whitespace-pre-wrap shadow-inner">
+                {transcript.trim() || "—"}
+              </div>
+              <AlertDialogFooter className="gap-2 sm:gap-0">
+                <AlertDialogCancel className="rounded-xl border-[#e8dcc8]">
+                  Cancel
+                </AlertDialogCancel>
+                <AlertDialogAction
+                  className="rounded-xl border border-[#b8941f] bg-gradient-to-b from-[#d4af37] to-[#c9a227] font-semibold text-[#1a2845] hover:from-[#dfc15a] hover:to-[#d4af37]"
+                  onClick={() => {
+                    setParseConfirmOpen(false);
+                    processTranscript();
+                  }}
+                >
+                  Yes, parse it
+                </AlertDialogAction>
+              </AlertDialogFooter>
+            </AlertDialogContent>
+          </AlertDialog>
 
           <div className="mt-4 flex shrink-0 justify-center gap-6 pb-2 text-xs text-slate-400">
             <Link
