@@ -313,6 +313,20 @@ async function handleVoiceDiary(
     notes: t.notes != null && String(t.notes).length ? String(t.notes) : null,
   }));
 
+  const transcriptLower = transcript.toLowerCase();
+  const suppressSend =
+    /\b(don't|do not|dont)\s+send\b/.test(transcriptLower) ||
+    /\bwithout\s+sending\b/.test(transcriptLower);
+  const boostSend =
+    !suppressSend &&
+    (/\b(send|email|text|sms)\b[^.]{0,100}\b(invoice|invoices|bill)\b/.test(
+      transcriptLower,
+    ) ||
+      /\b(invoice|invoices|bill)\b[^.]{0,100}\b(send|email|text)\b/.test(
+        transcriptLower,
+      ) ||
+      /\bplease\s+send\s+(an?\s+)?(invoice|bill)\b/.test(transcriptLower));
+
   const payment_updates = normalized.payment_updates.map((u) => ({
     patient_name: String(u.patient_name ?? ""),
     treatment_name:
@@ -334,8 +348,9 @@ async function handleVoiceDiary(
 
     const truthy = (v: unknown) =>
       v === true || v === "true" || v === "yes" || v === 1;
-    const send_after_create =
+    let send_after_create =
       truthy(i.send_after_create) || truthy(i.send_invoice);
+    if (boostSend) send_after_create = true;
 
     const patient_contact =
       i.patient_contact != null && String(i.patient_contact).trim().length > 0

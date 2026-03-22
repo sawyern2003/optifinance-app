@@ -13,6 +13,38 @@ import { resolveInvoiceSendVia } from "@/lib/contactGuards";
 import { invoicesAPI, summarizeSendInvoiceResults } from "@/api/invoices";
 import { Link } from "react-router-dom";
 
+/** Match voice invoice rows to treatments (same session or DB). */
+function normalizeDiaryDate(d) {
+  if (d == null || d === "") return "";
+  const s = String(d);
+  if (/^\d{4}-\d{2}-\d{2}/.test(s)) return s.slice(0, 10);
+  try {
+    return format(parseISO(s), "yyyy-MM-dd");
+  } catch {
+    return s.slice(0, 10);
+  }
+}
+
+function diaryTreatmentLookupKey(patientName, treatmentName, date) {
+  return `${String(patientName || "").trim().toLowerCase()}|${String(treatmentName || "").trim().toLowerCase()}|${normalizeDiaryDate(date)}`;
+}
+
+/** Model often returns only treatments[]; user said "send invoice" → still need an invoice row to run PDF/send. */
+function transcriptImpliesInvoiceSend(text) {
+  const s = String(text || "").toLowerCase();
+  if (
+    /\b(don't|do not|dont)\s+send\b/.test(s) ||
+    /\bwithout\s+sending\b/.test(s)
+  ) {
+    return false;
+  }
+  return (
+    /\b(send|email|text|sms)\b[^.]{0,100}\b(invoice|invoices|bill)\b/.test(s) ||
+    /\b(invoice|invoices|bill)\b[^.]{0,100}\b(send|email|text)\b/.test(s) ||
+    /\bplease\s+send\s+(an?\s+)?(invoice|bill)\b/.test(s)
+  );
+}
+
 export default function VoiceDiary() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
@@ -510,11 +542,33 @@ export default function VoiceDiary() {
       const rawPatients = (response.patients || []).filter((p) =>
         String(p.name || "").trim(),
       );
-      const rawInvoices = (response.invoices || []).filter(
+      let invoiceRows = (response.invoices || []).filter(
         (i) =>
           String(i.patient_name || "").trim() &&
           String(i.treatment_name || "").trim(),
       );
+
+      if (
+        invoiceRows.length === 0 &&
+        transcriptImpliesInvoiceSend(textToParse) &&
+        rawTreatments.some(
+          (t) => String(t.payment_status || "").toLowerCase() === "pending",
+        )
+      ) {
+        invoiceRows = rawTreatments
+          .filter(
+            (t) => String(t.payment_status || "").toLowerCase() === "pending",
+          )
+          .map((t) => ({
+            patient_name: t.patient_name,
+            treatment_name: t.treatment_name,
+            amount: Number(t.price_paid) || 0,
+            date: t.date,
+            send_after_create: true,
+            send_via: "email",
+            patient_contact: null,
+          }));
+      }
 
       // Process payment updates to match with existing treatments
       const processedPaymentUpdates = (response.payment_updates || [])
@@ -537,7 +591,7 @@ export default function VoiceDiary() {
       if (
         rawTreatments.length === 0 &&
         processedPaymentUpdates.length === 0 &&
-        rawInvoices.length === 0 &&
+        invoiceRows.length === 0 &&
         rawPatients.length === 0
       ) {
         toast({
@@ -553,7 +607,7 @@ export default function VoiceDiary() {
       const processedData = {
         treatments: rawTreatments,
         payment_updates: processedPaymentUpdates,
-        invoices: rawInvoices,
+        invoices: invoiceRows,
         patients: rawPatients,
       };
 
@@ -561,18 +615,24 @@ export default function VoiceDiary() {
       setConfirmedData({
         treatments: processedData.treatments.map(t => ({ ...t, include: true })),
         payment_updates: processedPaymentUpdates.map(u => ({ ...u, include: true })),
-        invoices: processedData.invoices.map((i) => ({
-          ...i,
-          send_after_create: Boolean(i.send_after_create),
-          send_via:
-            i.send_via === "sms"
-              ? "sms"
-              : i.send_via === "both"
-                ? "both"
-                : "email",
-          patient_contact: i.patient_contact || null,
-          include: true,
-        })),
+        invoices: processedData.invoices.map((i) => {
+          const explicitNoSend =
+            i.send_after_create === false ||
+            String(i.send_after_create).toLowerCase() === "false";
+          return {
+            ...i,
+            // Default ON: LLM often omits send_after_create; user can turn off in review.
+            send_after_create: explicitNoSend ? false : true,
+            send_via:
+              i.send_via === "sms"
+                ? "sms"
+                : i.send_via === "both"
+                  ? "both"
+                  : "email",
+            patient_contact: i.patient_contact || null,
+            include: true,
+          };
+        }),
         patients: processedData.patients.map(p => ({ ...p, include: true }))
       });
       setReviewDialogOpen(true);
@@ -670,7 +730,14 @@ export default function VoiceDiary() {
             notes: treatmentData.notes || null
           });
 
-          treatmentMap.set(`${treatmentData.patient_name}-${treatmentData.treatment_name}-${treatmentData.date}`, createdTreatment);
+          treatmentMap.set(
+            diaryTreatmentLookupKey(
+              treatmentData.patient_name,
+              treatmentData.treatment_name,
+              treatmentData.date,
+            ),
+            createdTreatment,
+          );
         } catch (error) {
           console.error('Failed to create treatment:', error);
         }
@@ -700,6 +767,7 @@ export default function VoiceDiary() {
 
       /** After voice diary apply: PDF + send-invoice when send_after_create */
       const invoiceSendOutcomes = [];
+      const invoiceSkipped = [];
 
       // Create invoices for pending treatments
       for (const invoiceData of confirmedData.invoices.filter(i => i.include)) {
@@ -708,17 +776,42 @@ export default function VoiceDiary() {
             p.name.toLowerCase() === invoiceData.patient_name.toLowerCase()
           ) || patientMap.get(invoiceData.patient_name.toLowerCase());
 
-          if (!patient) continue;
+          if (!patient) {
+            invoiceSkipped.push(
+              `${invoiceData.patient_name}: no patient match (check spelling or add patient first).`,
+            );
+            continue;
+          }
 
-          // Find the treatment
-          const treatment = treatments.find(t => 
-            t.patient_id === patient.id &&
-            t.treatment_name.toLowerCase() === invoiceData.treatment_name.toLowerCase() &&
-            t.date === invoiceData.date &&
-            t.payment_status === 'pending'
-          ) || treatmentMap.get(`${invoiceData.patient_name}-${invoiceData.treatment_name}-${invoiceData.date}`);
+          const invKey = diaryTreatmentLookupKey(
+            invoiceData.patient_name,
+            invoiceData.treatment_name,
+            invoiceData.date,
+          );
 
-          if (!treatment) continue;
+          // Find the treatment (DB or just created this run; case-insensitive names + normalized dates)
+          const treatment =
+            treatments.find((t) => {
+              if (t.patient_id !== patient.id) return false;
+              if (t.payment_status !== "pending") return false;
+              if (
+                String(t.treatment_name || "").toLowerCase() !==
+                String(invoiceData.treatment_name || "").toLowerCase()
+              ) {
+                return false;
+              }
+              return (
+                normalizeDiaryDate(t.date) ===
+                normalizeDiaryDate(invoiceData.date)
+              );
+            }) || treatmentMap.get(invKey);
+
+          if (!treatment) {
+            invoiceSkipped.push(
+              `${invoiceData.patient_name} — ${invoiceData.treatment_name} (${normalizeDiaryDate(invoiceData.date)}): no matching pending treatment. Create the visit in this diary or check the date matches.`,
+            );
+            continue;
+          }
 
           const finalContact =
             (invoiceData.patient_contact &&
@@ -794,18 +887,27 @@ export default function VoiceDiary() {
       if (sendBad.length) {
         description += ` Could not send: ${sendBad.map((o) => `${o.patient} (${o.text})`).join("; ")}.`;
       }
+      if (invoiceSkipped.length) {
+        description += ` Invoice not created: ${invoiceSkipped.join(" ")}`;
+      }
 
       toast({
         title: "Changes applied",
         description,
         className:
-          invoiceSendOutcomes.length > 0 &&
-          sendBad.length &&
-          !sendOk.length
+          (invoiceSendOutcomes.length > 0 &&
+            sendBad.length &&
+            !sendOk.length) ||
+          (invoiceSkipped.length > 0 &&
+            !sendOk.length &&
+            confirmedData.invoices.some((i) => i.include))
             ? undefined
             : "bg-green-50 border-green-200",
         variant:
-          sendBad.length && !sendOk.length && invoiceSendOutcomes.length > 0
+          (sendBad.length && !sendOk.length && invoiceSendOutcomes.length > 0) ||
+          (invoiceSkipped.length > 0 &&
+            confirmedData.invoices.filter((i) => i.include).length > 0 &&
+            !sendOk.length)
             ? "destructive"
             : undefined,
       });
