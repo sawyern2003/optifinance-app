@@ -286,7 +286,17 @@ serve(async (req) => {
       const clinicFromSafe = esc(clinicFrom);
       const footerContactSafe = esc((replyTo || clinicFrom).trim());
       const invNumSafe = esc(String(invoice.invoice_number));
-      const notesRaw = String(invoice.notes || "").trim();
+      const notesRaw = String(invoice.notes || "")
+        .split("\n")
+        .map((lineItem) => String(lineItem || "").trim())
+        .filter(Boolean)
+        .filter(
+          (lineItem) =>
+            !lineItem.toLowerCase().startsWith("batch treatment ids:"),
+        )
+        .map((lineItem) => lineItem.replace(/\s*\[id:[^\]]+\]\s*/g, "").trim())
+        .join("\n")
+        .trim();
       const notesHtml = notesRaw
         ? `<div style="margin:16px 0;padding:12px 14px;background:#fafafa;border-radius:8px;border:1px solid #f1f1f2;"><p style="margin:0 0 6px;font-size:13px;color:#52525b;"><strong>Treatment details</strong></p><p style="margin:0;font-size:13px;line-height:1.5;color:#52525b;white-space:pre-line;">${esc(notesRaw)}</p></div>`
         : "";
@@ -319,7 +329,7 @@ serve(async (req) => {
 </div>
 ${notesHtml}
 ${bankHtml}
-<p style="margin:20px 0 0;font-size:14px;line-height:1.5;color:#52525b;">Please find your invoice attached. We hope to see you again soon.</p>
+<p style="margin:20px 0 0;font-size:14px;line-height:1.5;color:#52525b;">Thank you for your visit to <strong>${clinicNameSafe}</strong>. Please make your payment to the bank details above at your earliest convenience. We hope to see you again soon.</p>
 ${viewLink}
 <p style="margin:28px 0 0;font-size:14px;line-height:1.5;color:#18181b;">Best regards,<br/><strong>${senderDisplaySafe}</strong><br/><span style="color:#71717a;font-size:13px;">${clinicNameSafe}</span></p>
 <p style="margin:24px 0 0;padding-top:16px;border-top:1px solid #e4e4e7;font-size:12px;color:#a1a1aa;">Questions? Reply to this email or contact <a href="mailto:${footerContactSafe}" style="color:#52525b;">${footerContactSafe}</a>.</p>

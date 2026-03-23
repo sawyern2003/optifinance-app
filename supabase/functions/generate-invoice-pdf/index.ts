@@ -232,6 +232,34 @@ serve(async (req) => {
         ? Number(inv.friends_family_standard_price)
         : null;
     const invAmount = Number(invoice.amount);
+    const notesRaw = String(invoice.notes || "");
+    const notesLinesAll = notesRaw.split("\n").map((l) => String(l || "").trim());
+    const cleanedNotesLines = notesLinesAll
+      .filter((lineItem) => lineItem.length > 0)
+      .filter(
+        (lineItem) => !lineItem.toLowerCase().startsWith("batch treatment ids:"),
+      )
+      .map((lineItem) => lineItem.replace(/\s*\[id:[^\]]+\]\s*/g, "").trim());
+    const batchItems = cleanedNotesLines
+      .filter((lineItem) => lineItem.startsWith("- "))
+      .map((lineItem) => {
+        const m = lineItem.match(
+          /^-\s*([^|]+)\|\s*([^|]+)\|\s*£?([0-9.]+)(?:\s*\|\s*Notes:\s*(.*))?$/i,
+        );
+        if (!m) return null;
+        return {
+          date: String(m[1] || "").trim(),
+          treatment: String(m[2] || "").trim(),
+          amount: Number(m[3] || 0),
+          note: String(m[4] || "").trim(),
+        };
+      })
+      .filter(Boolean) as Array<{
+        date: string;
+        treatment: string;
+        amount: number;
+        note: string;
+      }>;
 
     // Service table header
     const rowH = 34;
@@ -241,13 +269,61 @@ serve(async (req) => {
     page.drawText("Line Total", { x: margin + contentWidth - 74, y: y - 8, font: fontBold, size: 11, color: brand });
     step(42);
 
-    // Service row (with friends & family breakdown under the line item when applicable)
-    page.drawText(invoice.treatment_name || "Treatment", { x: margin + 8, y, font: fontBold, size: 12, color: textColor });
-    page.drawText(treatmentDate || "-", { x: margin + 320, y, font, size: 11, color: textColor });
-    page.drawText(amountStr, { x: margin + contentWidth - 58, y, font: fontBold, size: 12, color: textColor });
-    step(16);
+    const renderedItems =
+      batchItems.length > 0
+        ? batchItems
+        : [
+            {
+              date: treatmentDate || "-",
+              treatment: String(invoice.treatment_name || "Treatment"),
+              amount: invAmount,
+              note: "",
+            },
+          ];
+    for (const item of renderedItems) {
+      const itemAmount = Number(item.amount || 0);
+      page.drawText(item.treatment || "Treatment", {
+        x: margin + 8,
+        y,
+        font: fontBold,
+        size: 12,
+        color: textColor,
+      });
+      page.drawText(item.date || "-", {
+        x: margin + 320,
+        y,
+        font,
+        size: 11,
+        color: textColor,
+      });
+      page.drawText(`£${itemAmount.toFixed(2)}`, {
+        x: margin + contentWidth - 58,
+        y,
+        font: fontBold,
+        size: 12,
+        color: textColor,
+      });
+      step(15);
+      if (item.note) {
+        page.drawText(`  Note: ${item.note}`.substring(0, 110), {
+          x: margin + 8,
+          y,
+          font,
+          size: 9.5,
+          color: muted,
+        });
+        step(12);
+      }
+      page.drawLine({
+        start: { x: margin, y },
+        end: { x: margin + contentWidth, y },
+        color: line,
+        thickness: 1,
+      });
+      step(13);
+    }
 
-    if (ffApplied) {
+    if (ffApplied && renderedItems.length === 1) {
       if (Number.isFinite(ffStd) && ffStd > invAmount + 0.005) {
         page.drawText(`  Standard list price: £${ffStd.toFixed(2)}`, {
           x: margin + 8,
@@ -296,14 +372,16 @@ serve(async (req) => {
       step(6);
     }
 
-    page.drawLine({ start: { x: margin, y }, end: { x: margin + contentWidth, y }, color: line, thickness: 1 });
-    step(16);
-
     // Totals block (right aligned)
     const totalsXLabel = margin + contentWidth - 210;
     const totalsXValue = margin + contentWidth - 20;
+    const subtotal = renderedItems.reduce(
+      (sum, item) => sum + Number(item.amount || 0),
+      0,
+    );
+    const subtotalStr = `£${subtotal.toFixed(2)}`;
     page.drawText("Subtotal", { x: totalsXLabel, y, font: fontBold, size: 11, color: textColor });
-    page.drawText(amountStr, { x: totalsXValue - 34, y, font: fontBold, size: 11, color: textColor });
+    page.drawText(subtotalStr, { x: totalsXValue - 34, y, font: fontBold, size: 11, color: textColor });
     step(18);
     page.drawText("Invoice Total", { x: totalsXLabel, y, font: fontBold, size: 11, color: textColor });
     page.drawText(amountStr, { x: totalsXValue - 34, y, font: fontBold, size: 11, color: textColor });
@@ -327,11 +405,18 @@ serve(async (req) => {
       y = boxY - 18;
     }
 
-    // Optional notes
-    if (invoice.notes) {
+    // Optional notes (exclude technical metadata and batch item lines already rendered above)
+    const additionalNotes = batchItems.length > 0
+      ? cleanedNotesLines.filter(
+          (lineItem) =>
+            !lineItem.toLowerCase().startsWith("batch invoice items:") &&
+            !lineItem.startsWith("- "),
+        )
+      : cleanedNotesLines;
+    if (additionalNotes.length > 0) {
       page.drawText("Notes", { x: margin, y, font: fontBold, size: 11, color: muted });
       step(16);
-      const notesLines = (invoice.notes as string).split("\n").slice(0, 12);
+      const notesLines = additionalNotes.slice(0, 12);
       for (const lineItem of notesLines) {
         page.drawText(lineItem.substring(0, 110), { x: margin, y, font, size: 10.5, color: textColor });
         step(13);
@@ -342,7 +427,14 @@ serve(async (req) => {
     // Footer
     const footerY = 40;
     page.drawLine({ start: { x: margin, y: footerY + 18 }, end: { x: margin + contentWidth, y: footerY + 18 }, color: line, thickness: 1 });
-    page.drawText("Thank you for your business.", { x: margin, y: footerY, font, size: 10.5, color: muted });
+    page.drawText(
+      `Thank you for your visit to ${clinicName}. Please make your payment to the`,
+      { x: margin, y: footerY + 2, font, size: 10, color: muted },
+    );
+    page.drawText(
+      "bank details above at your earliest convenience. We hope to see you again soon.",
+      { x: margin, y: footerY - 11, font, size: 10, color: muted },
+    );
 
     const pdfBytes = await pdfDoc.save();
 

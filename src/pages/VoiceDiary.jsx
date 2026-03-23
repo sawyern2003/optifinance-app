@@ -1021,8 +1021,13 @@ export default function VoiceDiary() {
             0,
           );
           const earliestDate = invoiceItems[0]?.date || invoiceData.date;
+          const uniqueNames = Array.from(
+            new Set(invoiceItems.map((t) => String(t.treatment_name || "").trim()).filter(Boolean)),
+          );
           const treatmentLabel = isBatch
-            ? `Multiple treatments (${invoiceItems.length})`
+            ? uniqueNames.length <= 2
+              ? uniqueNames.join(" + ")
+              : `${uniqueNames.slice(0, 2).join(" + ")} +${uniqueNames.length - 2} more`
             : invoiceData.treatment_name;
           const batchNotes = isBatch
             ? [
@@ -1030,8 +1035,9 @@ export default function VoiceDiary() {
                 ...invoiceItems.map((t) => {
                   const note = String(t.notes || "").trim();
                   const notePart = note ? ` | Notes: ${note}` : "";
-                  return `- ${t.date} | ${t.treatment_name} | £${Number(t.price_paid || 0).toFixed(2)}${notePart} [id:${t.id}]`;
+                  return `- ${t.date} | ${t.treatment_name} | £${Number(t.price_paid || 0).toFixed(2)}${notePart}`;
                 }),
+                `Batch treatment IDs: ${invoiceItems.map((t) => t.id).filter(Boolean).join(",")}`,
               ].join("\n")
             : (treatment.notes || "");
 

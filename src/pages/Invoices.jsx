@@ -293,9 +293,18 @@ ${clinicName}
     try {
       // Manual "mark paid" should also settle the linked treatment so Dashboard revenue/profit updates.
       if (newStatus === 'paid') {
-        const batchIds = Array.from(
-          String(invoice.notes || "").matchAll(/\[id:([^\]]+)\]/g),
+        const notesStr = String(invoice.notes || "");
+        const hiddenIdsLine = notesStr
+          .split("\n")
+          .find((line) => line.trim().toLowerCase().startsWith("batch treatment ids:"));
+        const batchIdsFromLine = hiddenIdsLine
+          ? hiddenIdsLine.split(":").slice(1).join(":").split(",").map((s) => s.trim()).filter(Boolean)
+          : [];
+        // Backward compatibility for previously generated invoices.
+        const batchIdsFromLegacyTags = Array.from(
+          notesStr.matchAll(/\[id:([^\]]+)\]/g),
         ).map((m) => String(m[1]).trim()).filter(Boolean);
+        const batchIds = Array.from(new Set([...batchIdsFromLine, ...batchIdsFromLegacyTags]));
 
         if (batchIds.length > 0) {
           for (const treatmentId of batchIds) {
