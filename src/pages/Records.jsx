@@ -587,6 +587,14 @@ export default function Records() {
         editForm.treatment_name ||
         editingItem?.treatment_name ||
         "";
+      const finalPatientId =
+        editForm.patient_id && editForm.patient_id !== "none"
+          ? editForm.patient_id
+          : null;
+      const finalPractitionerIdNormalized =
+        finalPractitionerId && String(finalPractitionerId).trim() !== ""
+          ? finalPractitionerId
+          : null;
       const selectedPatient = patients.find(p => p.id === editForm.patient_id);
       const effectiveFfPct = effectiveFriendsFamilyPercent(
         editForm.friends_family_discount_percent,
@@ -627,7 +635,7 @@ export default function Records() {
         id: editingItem.id,
         data: {
           date: editForm.date,
-          patient_id: editForm.patient_id === 'none' ? null : editForm.patient_id,
+          patient_id: finalPatientId,
           patient_name: selectedPatient?.name || editForm.patient_name,
           treatment_id: finalTreatmentId,
           treatment_name: finalTreatmentName,
@@ -637,7 +645,7 @@ export default function Records() {
           amount_paid: amountPaid,
           product_cost: productCost,
           profit: profit,
-          practitioner_id: finalPractitionerId,
+          practitioner_id: finalPractitionerIdNormalized,
           practitioner_name: finalPractitionerName,
           notes: composeNotesWithCourse(
             editForm.notes,
