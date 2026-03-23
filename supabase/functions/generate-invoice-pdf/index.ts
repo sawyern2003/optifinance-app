@@ -264,6 +264,12 @@ serve(async (req) => {
           treatment: String(m[2] || "").trim(),
           amount: Number(m[3] || 0),
           amountMeta: String(m[4] || "").trim(),
+          listAmount: (() => {
+            const meta = String(m[4] || "").trim();
+            const fromArrow = meta.match(/£?\s*([0-9.]+)\s*->/i);
+            if (fromArrow?.[1]) return Number(fromArrow[1]);
+            return null;
+          })(),
           note: String(m[5] || "").trim(),
         };
       })
@@ -272,6 +278,7 @@ serve(async (req) => {
         treatment: string;
         amount: number;
         amountMeta: string;
+        listAmount: number | null;
         note: string;
       }>;
 
@@ -292,6 +299,7 @@ serve(async (req) => {
               treatment: String(invoice.treatment_name || "Treatment"),
               amount: invAmount,
               amountMeta: "",
+              listAmount: null,
               note: "",
             },
           ];
@@ -319,16 +327,6 @@ serve(async (req) => {
         color: textColor,
       });
       step(15);
-      if (item.amountMeta) {
-        page.drawText(`  ${item.amountMeta}`.substring(0, 38), {
-          x: margin + contentWidth - 120,
-          y,
-          font,
-          size: 9.5,
-          color: muted,
-        });
-        step(11);
-      }
       if (item.note) {
         page.drawText(`  Note: ${item.note}`.substring(0, 110), {
           x: margin + 8,
@@ -400,16 +398,38 @@ serve(async (req) => {
     // Totals block (right aligned)
     const totalsXLabel = margin + contentWidth - 210;
     const totalsXValue = margin + contentWidth - 20;
-    const subtotal = renderedItems.reduce(
+    const subtotalCharged = renderedItems.reduce(
       (sum, item) => sum + Number(item.amount || 0),
       0,
     );
-    const subtotalStr = `£${subtotal.toFixed(2)}`;
+    const subtotalBeforeDiscount = renderedItems.reduce(
+      (sum, item) => {
+        const listVal =
+          item.listAmount != null && Number.isFinite(item.listAmount)
+            ? Number(item.listAmount)
+            : Number(item.amount || 0);
+        return sum + listVal;
+      },
+      0,
+    );
+    const discountTotal = Math.max(0, subtotalBeforeDiscount - subtotalCharged);
+    const subtotalStr = `£${subtotalBeforeDiscount.toFixed(2)}`;
+    const chargedTotalStr = `£${subtotalCharged.toFixed(2)}`;
     page.drawText("Subtotal", { x: totalsXLabel, y, font: fontBold, size: 11, color: textColor });
     page.drawText(subtotalStr, { x: totalsXValue - 34, y, font: fontBold, size: 11, color: textColor });
     step(18);
+    if (discountTotal > 0.005) {
+      page.drawText("Discount", { x: totalsXLabel, y, font, size: 11, color: textColor });
+      page.drawText(`-£${discountTotal.toFixed(2)}`, { x: totalsXValue - 38, y, font, size: 11, color: textColor });
+      step(18);
+    }
+    page.drawText("Taxes", { x: totalsXLabel, y, font, size: 11, color: textColor });
+    page.drawText("£0.00", { x: totalsXValue - 25, y, font, size: 11, color: textColor });
+    step(18);
+    page.drawLine({ start: { x: totalsXLabel - 4, y }, end: { x: margin + contentWidth, y }, color: line, thickness: 1 });
+    step(18);
     page.drawText("Invoice Total", { x: totalsXLabel, y, font: fontBold, size: 11, color: textColor });
-    page.drawText(amountStr, { x: totalsXValue - 34, y, font: fontBold, size: 11, color: textColor });
+    page.drawText(chargedTotalStr, { x: totalsXValue - 34, y, font: fontBold, size: 11, color: textColor });
     step(26);
 
     // Bank details box
