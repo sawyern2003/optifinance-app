@@ -626,7 +626,6 @@ export default function Records() {
       updateTreatmentMutation.mutate({
         id: editingItem.id,
         data: {
-          ...editingItem,
           date: editForm.date,
           patient_id: editForm.patient_id === 'none' ? null : editForm.patient_id,
           patient_name: selectedPatient?.name || editForm.patient_name,
@@ -653,7 +652,6 @@ export default function Records() {
       updateExpenseMutation.mutate({
         id: editingItem.id,
         data: {
-          ...editingItem,
           date: editForm.date,
           category: editForm.category,
           amount: parseFloat(editForm.amount),
