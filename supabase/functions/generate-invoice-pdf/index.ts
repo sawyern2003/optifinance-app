@@ -331,10 +331,10 @@ serve(async (req) => {
     if (invoice.notes) {
       page.drawText("Notes", { x: margin, y, font: fontBold, size: 11, color: muted });
       step(16);
-      const notesLines = (invoice.notes as string).split("\n").slice(0, 4);
+      const notesLines = (invoice.notes as string).split("\n").slice(0, 12);
       for (const lineItem of notesLines) {
-        page.drawText(lineItem.substring(0, 95), { x: margin, y, font, size: 10.5, color: textColor });
-        step(14);
+        page.drawText(lineItem.substring(0, 110), { x: margin, y, font, size: 10.5, color: textColor });
+        step(13);
       }
       step(8);
     }

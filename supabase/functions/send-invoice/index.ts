@@ -286,6 +286,10 @@ serve(async (req) => {
       const clinicFromSafe = esc(clinicFrom);
       const footerContactSafe = esc((replyTo || clinicFrom).trim());
       const invNumSafe = esc(String(invoice.invoice_number));
+      const notesRaw = String(invoice.notes || "").trim();
+      const notesHtml = notesRaw
+        ? `<div style="margin:16px 0;padding:12px 14px;background:#fafafa;border-radius:8px;border:1px solid #f1f1f2;"><p style="margin:0 0 6px;font-size:13px;color:#52525b;"><strong>Treatment details</strong></p><p style="margin:0;font-size:13px;line-height:1.5;color:#52525b;white-space:pre-line;">${esc(notesRaw)}</p></div>`
+        : "";
       const bankHtml =
         bankLines.length > 0
           ? `<p style="margin:16px 0 0;font-size:14px;line-height:1.5;color:#444;"><strong>Bank details</strong><br/>${bankLines.join("<br/>")}</p>`
@@ -313,6 +317,7 @@ serve(async (req) => {
 <p style="margin:0;font-size:13px;color:#52525b;"><strong>Invoice number</strong> ${invNumSafe}</p>
 <p style="margin:8px 0 0;font-size:13px;color:#52525b;"><strong>Amount</strong> ${amountStr}</p>
 </div>
+${notesHtml}
 ${bankHtml}
 <p style="margin:20px 0 0;font-size:14px;line-height:1.5;color:#52525b;">Please find your invoice attached. We hope to see you again soon.</p>
 ${viewLink}

@@ -625,19 +625,48 @@ export default function Records() {
     const patient = patients.find((p) => p.id === treatment.patient_id);
 
     try {
+      const pendingForPatient = (treatments || [])
+        .filter(
+          (t) =>
+            t.patient_id === treatment.patient_id &&
+            t.payment_status === "pending",
+        )
+        .sort((a, b) => String(a.date || "").localeCompare(String(b.date || "")));
+      const invoiceItems =
+        pendingForPatient.length > 0 ? pendingForPatient : [treatment];
+      const isBatch = invoiceItems.length > 1;
+      const totalAmount = invoiceItems.reduce(
+        (sum, t) => sum + Number(t.price_paid || 0),
+        0,
+      );
+      const earliestDate = invoiceItems[0]?.date || treatment.date;
+      const treatmentLabel = isBatch
+        ? `Multiple treatments (${invoiceItems.length})`
+        : treatment.treatment_name;
+      const batchNotes = isBatch
+        ? [
+            "Batch invoice items:",
+            ...invoiceItems.map((t) => {
+              const note = String(t.notes || "").trim();
+              const notePart = note ? ` | Notes: ${note}` : "";
+              return `- ${t.date} | ${t.treatment_name} | £${Number(t.price_paid || 0).toFixed(2)}${notePart} [id:${t.id}]`;
+            }),
+          ].join("\n")
+        : (treatment.notes || "");
+
       // Create invoice record first (no PDF yet)
       const createdInvoice = await api.entities.Invoice.create({
         invoice_number: invoiceNumber,
-        treatment_entry_id: treatment.id,
+        treatment_entry_id: invoiceItems[0]?.id || treatment.id,
         patient_name: treatment.patient_name || 'Patient',
         patient_contact: patient?.contact || '',
-        treatment_name: treatment.treatment_name,
-        treatment_date: treatment.date,
-        amount: treatment.price_paid,
+        treatment_name: treatmentLabel,
+        treatment_date: earliestDate,
+        amount: totalAmount,
         practitioner_name: treatment.practitioner_name || '',
         issue_date: format(new Date(), 'yyyy-MM-dd'),
         status: treatment.payment_status === 'paid' ? 'paid' : 'draft',
-        notes: treatment.notes || '',
+        notes: batchNotes,
         ...friendsFamilyInvoiceFields(treatment, treatmentCatalog, patients),
       });
 
@@ -650,7 +679,9 @@ export default function Records() {
       }
       toast({
         title: 'Invoice PDF ready',
-        description: 'A proper PDF with your clinic name, patient, amount and bank details has been generated.',
+        description: isBatch
+          ? `Batch invoice created for ${invoiceItems.length} pending treatments.`
+          : 'A proper PDF with your clinic name, patient, amount and bank details has been generated.',
         className: 'bg-green-50 border-green-200',
       });
     } catch (error) {
@@ -1049,7 +1080,7 @@ export default function Records() {
                            onClick={() => generateInvoice(treatment)}
                            disabled={generatingInvoice === treatment.id}
                            className="p-2 hover:bg-[#fef9f0] rounded-lg text-gray-400 hover:text-[#1a2845] transition-colors disabled:opacity-50"
-                           title="Generate Invoice"
+                          title="Generate invoice (batches all pending treatments for this patient)"
                          >
                            {generatingInvoice === treatment.id ? (
                              <Loader2 className="w-4 h-4 animate-spin" />

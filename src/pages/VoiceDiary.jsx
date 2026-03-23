@@ -923,6 +923,7 @@ export default function VoiceDiary() {
       /** After voice diary apply: PDF + send-invoice when send_after_create */
       const invoiceSendOutcomes = [];
       const invoiceSkipped = [];
+      const batchedPatients = new Set();
 
       // Create invoices for pending treatments
       for (const invoiceData of confirmedData.invoices.filter(i => i.include)) {
@@ -987,25 +988,73 @@ export default function VoiceDiary() {
             patient.phone ||
             "";
 
+          if (batchedPatients.has(patient.id)) {
+            continue;
+          }
+
+          const pendingDb = (treatments || [])
+            .filter(
+              (t) =>
+                t.patient_id === patient.id &&
+                t.payment_status === "pending",
+            );
+          const pendingCreated = Array.from(treatmentMap.values()).filter(
+            (t) =>
+              t.patient_id === patient.id &&
+              t.payment_status === "pending",
+          );
+          const pendingAll = [...pendingDb, ...pendingCreated].sort((a, b) =>
+            String(a.date || "").localeCompare(String(b.date || "")),
+          );
+          const dedup = [];
+          const seen = new Set();
+          for (const p of pendingAll) {
+            const k = String(p.id || `${p.patient_id}|${p.treatment_name}|${p.date}`);
+            if (seen.has(k)) continue;
+            seen.add(k);
+            dedup.push(p);
+          }
+          const invoiceItems = dedup.length > 0 ? dedup : [treatment];
+          const isBatch = invoiceItems.length > 1;
+          const totalAmount = invoiceItems.reduce(
+            (sum, t) => sum + Number(t.price_paid || 0),
+            0,
+          );
+          const earliestDate = invoiceItems[0]?.date || invoiceData.date;
+          const treatmentLabel = isBatch
+            ? `Multiple treatments (${invoiceItems.length})`
+            : invoiceData.treatment_name;
+          const batchNotes = isBatch
+            ? [
+                "Batch invoice items:",
+                ...invoiceItems.map((t) => {
+                  const note = String(t.notes || "").trim();
+                  const notePart = note ? ` | Notes: ${note}` : "";
+                  return `- ${t.date} | ${t.treatment_name} | £${Number(t.price_paid || 0).toFixed(2)}${notePart} [id:${t.id}]`;
+                }),
+              ].join("\n")
+            : (treatment.notes || "");
+
           const invoiceNumber = generateInvoiceNumber();
           const createdInvoice = await api.entities.Invoice.create({
             invoice_number: invoiceNumber,
-            treatment_entry_id: treatment.id,
+            treatment_entry_id: invoiceItems[0]?.id || treatment.id,
             patient_name: invoiceData.patient_name,
             patient_contact: finalContact,
-            treatment_name: invoiceData.treatment_name,
-            treatment_date: invoiceData.date,
-            amount: invoiceData.amount,
+            treatment_name: treatmentLabel,
+            treatment_date: earliestDate,
+            amount: totalAmount > 0 ? totalAmount : invoiceData.amount,
             practitioner_name: treatment.practitioner_name || '',
             issue_date: format(new Date(), 'yyyy-MM-dd'),
             status: 'pending',
-            notes: '',
+            notes: batchNotes,
             ...friendsFamilyInvoiceFields(
               treatment,
               catalogLookup,
               patientsForFf,
             ),
           });
+          if (isBatch) batchedPatients.add(patient.id);
 
           if (invoiceData.send_after_create && createdInvoice?.id) {
             const sendVia = resolveInvoiceSendVia(

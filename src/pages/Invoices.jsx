@@ -292,18 +292,38 @@ ${clinicName}
   const updateStatus = async (invoice, newStatus) => {
     try {
       // Manual "mark paid" should also settle the linked treatment so Dashboard revenue/profit updates.
-      if (newStatus === 'paid' && invoice.treatment_entry_id) {
-        const linked = await api.entities.TreatmentEntry.filter({ id: invoice.treatment_entry_id });
-        const t = Array.isArray(linked) ? linked[0] : null;
-        if (t) {
-          const fullAmount = Number(t.price_paid || invoice.amount || 0);
-          const productCost = Number(t.product_cost || 0);
-          await api.entities.TreatmentEntry.update(t.id, {
-            payment_status: 'paid',
-            amount_paid: fullAmount,
-            profit: fullAmount - productCost,
-          });
+      if (newStatus === 'paid') {
+        const batchIds = Array.from(
+          String(invoice.notes || "").matchAll(/\[id:([^\]]+)\]/g),
+        ).map((m) => String(m[1]).trim()).filter(Boolean);
+
+        if (batchIds.length > 0) {
+          for (const treatmentId of batchIds) {
+            const linked = await api.entities.TreatmentEntry.filter({ id: treatmentId });
+            const t = Array.isArray(linked) ? linked[0] : null;
+            if (!t) continue;
+            const fullAmount = Number(t.price_paid || 0);
+            const productCost = Number(t.product_cost || 0);
+            await api.entities.TreatmentEntry.update(t.id, {
+              payment_status: 'paid',
+              amount_paid: fullAmount,
+              profit: fullAmount - productCost,
+            });
+          }
           queryClient.invalidateQueries({ queryKey: ['treatments'] });
+        } else if (invoice.treatment_entry_id) {
+          const linked = await api.entities.TreatmentEntry.filter({ id: invoice.treatment_entry_id });
+          const t = Array.isArray(linked) ? linked[0] : null;
+          if (t) {
+            const fullAmount = Number(t.price_paid || invoice.amount || 0);
+            const productCost = Number(t.product_cost || 0);
+            await api.entities.TreatmentEntry.update(t.id, {
+              payment_status: 'paid',
+              amount_paid: fullAmount,
+              profit: fullAmount - productCost,
+            });
+            queryClient.invalidateQueries({ queryKey: ['treatments'] });
+          }
         }
       }
       updateInvoiceMutation.mutate({
