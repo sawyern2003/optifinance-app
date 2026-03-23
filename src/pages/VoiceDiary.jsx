@@ -1036,7 +1036,7 @@ export default function VoiceDiary() {
           ? 0.1
           : 0;
 
-  const orbScale = 1 + micReactive * 0.28;
+  const orbScale = 1 + micReactive * 0.2;
   const idleOrb =
     !isWhisperRecording &&
     !isRecording &&
@@ -1045,8 +1045,8 @@ export default function VoiceDiary() {
 
   const orbSize =
     "h-[min(92vw,22rem)] w-[min(92vw,22rem)] sm:h-96 sm:w-96 md:h-[28rem] md:w-[28rem]";
-  const goldGlowOpacity = 0.2 + micReactive * 0.78;
-  const goldGlowScale = 1 + micReactive * 0.22;
+  const goldGlowOpacity = 0.1 + micReactive * 0.45;
+  const goldGlowScale = 1 + micReactive * 0.14;
 
   return (
     <>
@@ -1054,7 +1054,7 @@ export default function VoiceDiary() {
         {/* Fill viewport minus mobile tab bar; centre the orb in the remaining space */}
         <div className="flex min-h-[calc(100dvh-5.75rem)] flex-col md:min-h-[calc(100dvh-2rem)]">
           <header className="flex shrink-0 items-center justify-between gap-3 pt-3 pb-2 md:pt-4">
-            <h1 className="text-lg font-semibold tracking-tight text-[#1a2845] md:text-xl">
+            <h1 className="text-lg font-medium tracking-tight text-[#2f415a] md:text-xl">
               Voice diary
             </h1>
             <div className="flex items-center gap-2">
@@ -1064,8 +1064,8 @@ export default function VoiceDiary() {
                   onClick={toggleRecording}
                   disabled={inputBusy && !isRecording}
                   title="Live captions (browser)"
-                  className={`flex h-9 w-9 items-center justify-center rounded-full border border-[#e5dccf] bg-white text-[#1a2845] transition hover:border-[#c9a227]/50 disabled:opacity-40 ${
-                    isRecording ? "border-[#c9a227]" : ""
+                  className={`flex h-9 w-9 items-center justify-center rounded-full border border-[#dde3ea] bg-white text-[#334866] transition hover:border-[#b9c4d2] disabled:opacity-40 ${
+                    isRecording ? "border-[#9aaec5]" : ""
                   }`}
                 >
                   {isRecording ? (
@@ -1077,7 +1077,7 @@ export default function VoiceDiary() {
               ) : null}
               <Link
                 to={createPageUrl("Dashboard")}
-                className="rounded-full border border-[#e5dccf] bg-white px-3 py-1.5 text-xs font-medium text-[#1a2845] hover:bg-[#faf9f6]"
+                className="rounded-full border border-[#dde3ea] bg-white px-3 py-1.5 text-xs font-medium text-[#334866] hover:bg-[#f8fafc]"
               >
                 Back
               </Link>
@@ -1092,19 +1092,19 @@ export default function VoiceDiary() {
                 transition: "transform 0.07s ease-out",
               }}
             >
-              {/* Navy depth glow */}
+              {/* Soft depth glow */}
               <div
-                className="pointer-events-none absolute inset-[-14%] rounded-full bg-[#1a2845] blur-[40px] md:blur-[52px]"
+                className="pointer-events-none absolute inset-[-14%] rounded-full bg-[#5f7492] blur-[40px] md:blur-[52px]"
                 style={{
-                  opacity: 0.28 + micReactive * 0.35,
+                  opacity: 0.14 + micReactive * 0.22,
                   transform: `scale(${1 + micReactive * 0.08})`,
                   transition: "opacity 0.1s ease-out, transform 0.1s ease-out",
                 }}
                 aria-hidden
               />
-              {/* Gold aura — idle breathe or voice-reactive */}
+              {/* Muted linen aura — idle breathe or voice-reactive */}
               <div
-                className={`pointer-events-none absolute rounded-full bg-[#d4a740] blur-[44px] md:blur-[60px] ${
+                className={`pointer-events-none absolute rounded-full bg-[#c7b79d] blur-[44px] md:blur-[60px] ${
                   idleOrb && !isWhisperTranscribing ? "vd-orb-glow-idle" : ""
                 }`}
                 style={{
@@ -1121,34 +1121,34 @@ export default function VoiceDiary() {
                 aria-hidden
               />
 
-              {/* Main sphere — deep navy, not white */}
+              {/* Main sphere — muted slate */}
               <div
                 className="pointer-events-none absolute inset-[5%] rounded-full"
                 style={{
                   background:
-                    "radial-gradient(ellipse 115% 95% at 50% 8%, #3d5270 0%, #243652 18%, #1a2845 52%, #0f1622 100%)",
+                    "radial-gradient(ellipse 115% 95% at 50% 8%, #7f91aa 0%, #647b98 20%, #4d647f 56%, #3b4f67 100%)",
                   boxShadow: `
-                    inset 0 2px 0 rgba(255, 253, 245, 0.12),
-                    inset 0 -28px 56px rgba(0, 0, 0, 0.5),
-                    inset 0 -8px 24px rgba(0, 0, 0, 0.35),
-                    0 0 0 1px rgba(212, 167, 64, ${0.35 + micReactive * 0.45}),
-                    0 ${8 + micReactive * 20}px ${40 + micReactive * 56}px -${6 + micReactive * 6}px rgba(212, 167, 64, ${0.15 + micReactive * 0.35})
+                    inset 0 1px 0 rgba(255, 255, 255, 0.2),
+                    inset 0 -24px 50px rgba(37, 52, 72, 0.35),
+                    inset 0 -8px 20px rgba(37, 52, 72, 0.22),
+                    0 0 0 1px rgba(195, 183, 156, ${0.28 + micReactive * 0.25}),
+                    0 ${8 + micReactive * 14}px ${34 + micReactive * 40}px -${8}px rgba(90, 108, 132, ${0.16 + micReactive * 0.16})
                   `,
                   transition: "box-shadow 0.09s ease-out",
                 }}
                 aria-hidden
               />
-              {/* Soft champagne highlight */}
+              {/* Soft cool highlight */}
               <div
-                className="pointer-events-none absolute inset-[5%] rounded-full bg-[radial-gradient(circle_at_35%_22%,rgba(255,248,230,0.2),transparent_48%)]"
+                className="pointer-events-none absolute inset-[5%] rounded-full bg-[radial-gradient(circle_at_35%_22%,rgba(245,249,255,0.22),transparent_48%)]"
                 aria-hidden
               />
-              {/* Inner gold ellipse */}
+              {/* Inner muted ring */}
               <div
-                className="pointer-events-none absolute inset-[10%] rounded-full border border-[#d4a740]/45"
+                className="pointer-events-none absolute inset-[10%] rounded-full border border-[#c7b79d]/45"
                 style={{
-                  opacity: 0.45 + micReactive * 0.5,
-                  boxShadow: `inset 0 0 ${20 + micReactive * 24}px rgba(212, 167, 64, ${0.06 + micReactive * 0.12})`,
+                  opacity: 0.35 + micReactive * 0.36,
+                  boxShadow: `inset 0 0 ${20 + micReactive * 20}px rgba(199, 183, 157, ${0.05 + micReactive * 0.08})`,
                   transition: "opacity 0.08s ease-out, box-shadow 0.08s ease-out",
                 }}
                 aria-hidden
@@ -1160,7 +1160,7 @@ export default function VoiceDiary() {
                 disabled={
                   isWhisperTranscribing || (processing && !isWhisperRecording)
                 }
-                className="relative z-10 rounded-full bg-gradient-to-b from-[#f0d78c] via-[#d4a740] to-[#b8941f] px-8 py-3.5 text-[15px] font-semibold tracking-tight text-[#1a2845] shadow-[0_4px_24px_rgba(0,0,0,0.35),inset_0_1px_0_rgba(255,255,255,0.35)] transition hover:from-[#f5e0a0] hover:via-[#dfc15a] active:scale-[0.98] disabled:pointer-events-none disabled:opacity-45 md:px-10 md:py-4 md:text-base"
+                className="relative z-10 rounded-full bg-gradient-to-b from-[#e8dfd1] via-[#d8cbb7] to-[#c7b79d] px-8 py-3.5 text-[15px] font-medium tracking-tight text-[#2f415a] shadow-[0_4px_18px_rgba(35,50,72,0.2),inset_0_1px_0_rgba(255,255,255,0.45)] transition hover:from-[#ece3d6] hover:via-[#ddd0bd] hover:to-[#cdbda4] active:scale-[0.98] disabled:pointer-events-none disabled:opacity-45 md:px-10 md:py-4 md:text-base"
               >
                 {isWhisperTranscribing ? (
                   <span className="flex items-center gap-2.5">
@@ -1169,7 +1169,7 @@ export default function VoiceDiary() {
                   </span>
                 ) : isWhisperRecording ? (
                   <span className="flex items-center gap-2.5">
-                    <span className="h-2.5 w-2.5 rounded-full bg-[#1a2845]/90 shadow-sm" />
+                    <span className="h-2.5 w-2.5 rounded-full bg-[#3f5778]/85 shadow-sm" />
                     Stop
                   </span>
                 ) : (
