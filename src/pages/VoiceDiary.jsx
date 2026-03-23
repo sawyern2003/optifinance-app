@@ -1045,8 +1045,8 @@ export default function VoiceDiary() {
 
   const orbSize =
     "h-[min(92vw,22rem)] w-[min(92vw,22rem)] sm:h-96 sm:w-96 md:h-[28rem] md:w-[28rem]";
-  const goldGlowOpacity = 0.14 + micReactive * 0.62;
-  const goldGlowScale = 1 + micReactive * 0.2;
+  const goldGlowOpacity = 0.2 + micReactive * 0.95;
+  const goldGlowScale = 1 + micReactive * 0.28;
 
   return (
     <>
@@ -1102,13 +1102,13 @@ export default function VoiceDiary() {
                 }}
                 aria-hidden
               />
-              {/* Muted linen aura — idle breathe or voice-reactive */}
+              {/* Warm gold aura behind orb — clearly reacts while speaking */}
               <div
-                className={`pointer-events-none absolute rounded-full bg-[#c7b79d] blur-[44px] md:blur-[60px] ${
+                className={`pointer-events-none absolute rounded-full bg-[#d6b164] blur-[52px] md:blur-[72px] ${
                   idleOrb && !isWhisperTranscribing ? "vd-orb-glow-idle" : ""
                 }`}
                 style={{
-                  inset: "-22%",
+                  inset: "-26%",
                   ...(idleOrb && !isWhisperTranscribing
                     ? {}
                     : {
@@ -1117,19 +1117,6 @@ export default function VoiceDiary() {
                         transition:
                           "opacity 0.09s ease-out, transform 0.09s ease-out",
                       }),
-                }}
-                aria-hidden
-              />
-              {/* Visible warm outer ring while speaking */}
-              <div
-                className="pointer-events-none absolute inset-[1.5%] rounded-full border-2 border-[#c8a96a]"
-                style={{
-                  opacity: 0.16 + micReactive * 0.78,
-                  boxShadow: `
-                    0 0 ${10 + micReactive * 26}px rgba(200, 169, 106, ${0.12 + micReactive * 0.38}),
-                    inset 0 0 ${6 + micReactive * 12}px rgba(200, 169, 106, ${0.08 + micReactive * 0.22})
-                  `,
-                  transition: "opacity 0.08s ease-out, box-shadow 0.08s ease-out",
                 }}
                 aria-hidden
               />
@@ -1144,7 +1131,7 @@ export default function VoiceDiary() {
                     inset 0 1px 0 rgba(255, 255, 255, 0.2),
                     inset 0 -24px 50px rgba(37, 52, 72, 0.35),
                     inset 0 -8px 20px rgba(37, 52, 72, 0.22),
-                    0 0 0 1px rgba(195, 183, 156, ${0.38 + micReactive * 0.42}),
+                    0 0 0 1px rgba(214, 177, 100, ${0.22 + micReactive * 0.22}),
                     0 ${8 + micReactive * 14}px ${34 + micReactive * 40}px -${8}px rgba(90, 108, 132, ${0.16 + micReactive * 0.16})
                   `,
                   transition: "box-shadow 0.09s ease-out",
