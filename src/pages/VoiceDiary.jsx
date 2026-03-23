@@ -45,23 +45,16 @@ function batchInvoicePriceLabel(treatment) {
   const ffApplied =
     treatment?.friends_family_discount_applied === true ||
     treatment?.friends_family_discount_applied === "true";
-  const ffPct =
-    treatment?.friends_family_discount_percent != null &&
-    treatment?.friends_family_discount_percent !== ""
-      ? Number(treatment.friends_family_discount_percent)
-      : null;
   const listPrice =
     treatment?.friends_family_list_price != null &&
     treatment?.friends_family_list_price !== ""
       ? Number(treatment.friends_family_list_price)
       : null;
   if (ffApplied && Number.isFinite(listPrice) && listPrice > charged + 0.005) {
-    const pctPart =
-      Number.isFinite(ffPct) && ffPct > 0 ? `, F&F -${ffPct}%` : "";
-    return `£${charged.toFixed(2)} (was £${listPrice.toFixed(2)}${pctPart})`;
+    return `£${charged.toFixed(2)} (£${listPrice.toFixed(2)} -> £${charged.toFixed(2)} after discount)`;
   }
-  if (ffApplied && Number.isFinite(ffPct) && ffPct > 0) {
-    return `£${charged.toFixed(2)} (F&F -${ffPct}%)`;
+  if (ffApplied) {
+    return `£${charged.toFixed(2)} (after discount)`;
   }
   return `£${charged.toFixed(2)}`;
 }
