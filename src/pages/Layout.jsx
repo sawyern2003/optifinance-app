@@ -7,6 +7,11 @@ import { api } from "@/api/api";
 
 const navigationItems = [
   {
+    title: "Voice Diary",
+    url: createPageUrl("VoiceDiary"),
+    icon: CircleDot,
+  },
+  {
     title: "Dashboard",
     url: createPageUrl("Dashboard"),
     icon: LayoutDashboard,
@@ -20,11 +25,6 @@ const navigationItems = [
     title: "Quick Add",
     url: createPageUrl("QuickAdd"),
     icon: Plus,
-  },
-  {
-    title: "Voice Diary",
-    url: createPageUrl("VoiceDiary"),
-    icon: CircleDot,
   },
   {
     title: "Records",

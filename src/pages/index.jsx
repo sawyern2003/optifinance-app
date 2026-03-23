@@ -166,7 +166,7 @@ function PagesContent() {
                 <ProtectedRoute>
                     <Layout currentPageName={currentPage}>
                         <Routes>
-                            <Route path="/" element={<Catalog />} />
+                            <Route path="/" element={<VoiceDiary />} />
                             <Route path="/Catalog" element={<Catalog />} />
                             <Route path="/Catalogue" element={<Catalogue />} />
                             <Route path="/Consultant" element={<Consultant />} />
