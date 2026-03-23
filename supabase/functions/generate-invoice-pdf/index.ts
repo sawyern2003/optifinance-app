@@ -413,13 +413,21 @@ serve(async (req) => {
       0,
     );
     const discountTotal = Math.max(0, subtotalBeforeDiscount - subtotalCharged);
+    const discountPct =
+      subtotalBeforeDiscount > 0.005
+        ? (discountTotal / subtotalBeforeDiscount) * 100
+        : 0;
+    const discountPctLabel =
+      discountPct > 0.005
+        ? `${Number(discountPct.toFixed(2)).toString()}%`
+        : "0%";
     const subtotalStr = `£${subtotalBeforeDiscount.toFixed(2)}`;
     const chargedTotalStr = `£${subtotalCharged.toFixed(2)}`;
     page.drawText("Subtotal", { x: totalsXLabel, y, font: fontBold, size: 11, color: textColor });
     page.drawText(subtotalStr, { x: totalsXValue - 34, y, font: fontBold, size: 11, color: textColor });
     step(18);
     if (discountTotal > 0.005) {
-      page.drawText("Discount", { x: totalsXLabel, y, font, size: 11, color: textColor });
+      page.drawText(`Discount (${discountPctLabel})`, { x: totalsXLabel, y, font, size: 11, color: textColor });
       page.drawText(`-£${discountTotal.toFixed(2)}`, { x: totalsXValue - 38, y, font, size: 11, color: textColor });
       step(18);
     }
