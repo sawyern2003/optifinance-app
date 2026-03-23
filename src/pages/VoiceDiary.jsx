@@ -1138,6 +1138,19 @@ export default function VoiceDiary() {
                 }}
                 aria-hidden
               />
+              {/* Outer gold ring — explicitly visible while speaking */}
+              <div
+                className="pointer-events-none absolute inset-[2%] rounded-full border border-[#c9a85f]"
+                style={{
+                  opacity: 0.42 + micReactive * 0.5,
+                  boxShadow: `
+                    0 0 ${14 + micReactive * 22}px rgba(201, 168, 95, ${0.2 + micReactive * 0.34}),
+                    inset 0 0 ${10 + micReactive * 16}px rgba(201, 168, 95, ${0.12 + micReactive * 0.2})
+                  `,
+                  transition: "opacity 0.08s ease-out, box-shadow 0.08s ease-out",
+                }}
+                aria-hidden
+              />
               {/* Soft cool highlight */}
               <div
                 className="pointer-events-none absolute inset-[5%] rounded-full bg-[radial-gradient(circle_at_35%_22%,rgba(245,249,255,0.22),transparent_48%)]"
