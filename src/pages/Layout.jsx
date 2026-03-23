@@ -183,7 +183,9 @@ export default function Layout({ children, currentPageName }) {
             />
             {clinicName ? (
               <p className="text-sm text-[#24364f] font-bold text-center tracking-tight">
-                {`Welcome back, ${clinicName}.`}
+                <span className="text-[#24364f]">Welcome back, </span>
+                <span className="text-[#c7a86a]">{clinicName}</span>
+                <span className="text-[#24364f]">.</span>
               </p>
             ) : null}
           </div>
@@ -238,7 +240,9 @@ export default function Layout({ children, currentPageName }) {
               />
               {clinicName ? (
                 <p className="text-sm text-[#24364f] font-bold tracking-tight">
-                  {`Welcome back, ${clinicName}.`}
+                  <span className="text-[#24364f]">Welcome back, </span>
+                  <span className="text-[#c7a86a]">{clinicName}</span>
+                  <span className="text-[#24364f]">.</span>
                 </p>
               ) : null}
             </div>
