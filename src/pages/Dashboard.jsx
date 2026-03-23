@@ -451,7 +451,7 @@ export default function Dashboard() {
         <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-8 gap-4">
           <div>
             <h1 className="text-3xl font-medium tracking-tight text-[#24364f] mb-2">Dashboard</h1>
-            <p className="text-base font-semibold text-[#3d5575]">
+            <p className="text-base font-bold text-[#24364f]">
               {clinicName ? `Welcome back, ${clinicName}.` : "Welcome back."}
             </p>
           </div>

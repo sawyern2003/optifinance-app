@@ -181,7 +181,9 @@ export default function Layout({ children, currentPageName }) {
               alt="OptiFinance Logo"
               className="w-24 h-24 object-contain mb-0.5"
             />
-            <p className="text-[10px] text-[#d4a740] font-light text-center">{clinicName || "Your Clinic"}</p>
+            <p className="text-sm text-[#24364f] font-bold text-center tracking-tight">
+              {clinicName || "Your Clinic"}
+            </p>
           </div>
           
           <nav className="flex-1 px-4 py-6 space-y-1">
@@ -232,7 +234,11 @@ export default function Layout({ children, currentPageName }) {
                 alt="OptiFinance Logo"
                 className="w-16 h-16 object-contain"
               />
-              {clinicName && <p className="text-[10px] text-[#d4a740] font-light">{clinicName}</p>}
+              {clinicName && (
+                <p className="text-sm text-[#24364f] font-bold tracking-tight">
+                  {clinicName}
+                </p>
+              )}
             </div>
           </header>
 
