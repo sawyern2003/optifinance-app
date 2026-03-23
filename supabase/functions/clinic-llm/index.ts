@@ -158,6 +158,8 @@ function normalizeVoiceDiaryParsed(data: unknown): {
   payment_updates: Record<string, unknown>[];
   invoices: Record<string, unknown>[];
   patients: Record<string, unknown>[];
+  catalog_treatments: Record<string, unknown>[];
+  expenses: Record<string, unknown>[];
 } {
   if (!data || typeof data !== "object") {
     return {
@@ -165,6 +167,8 @@ function normalizeVoiceDiaryParsed(data: unknown): {
       payment_updates: [],
       invoices: [],
       patients: [],
+      catalog_treatments: [],
+      expenses: [],
     };
   }
   const o = data as Record<string, unknown>;
@@ -174,6 +178,8 @@ function normalizeVoiceDiaryParsed(data: unknown): {
     payment_updates: arr(o.payment_updates) as Record<string, unknown>[],
     invoices: arr(o.invoices) as Record<string, unknown>[],
     patients: arr(o.patients) as Record<string, unknown>[],
+    catalog_treatments: arr(o.catalog_treatments) as Record<string, unknown>[],
+    expenses: arr(o.expenses) as Record<string, unknown>[],
   };
 }
 
@@ -240,13 +246,19 @@ Extract ALL relevant information:
 4) NEW PATIENTS — people not clearly in KNOWN PATIENTS with contact info if given.
    Fields: name, contact (string or null), phone (string or null).
 
+5) CATALOG TREATMENTS — user asks to add a treatment/service to the catalogue.
+   Fields: treatment_name, category (string or null), default_price (number or null), typical_product_cost (number or null), default_duration_minutes (number or null).
+
+6) EXPENSES — user logs a business expense.
+   Fields: date (YYYY-MM-DD), category (string), amount (number), notes (string or null).
+
 Rules:
 - Use only information supported by the entry; do not invent patients or amounts.
 - Match treatment_name to AVAILABLE TREATMENTS when possible (minor wording differences OK).
 - If nothing for a section, use an empty array [].
 
 Respond with ONLY a single JSON object (no markdown), exactly in this shape:
-{"treatments":[],"payment_updates":[],"invoices":[],"patients":[]}
+{"treatments":[],"payment_updates":[],"invoices":[],"patients":[],"catalog_treatments":[],"expenses":[]}
 Each object in "invoices" must include: patient_name, treatment_name, amount, date, send_after_create (boolean), send_via ("email"|"sms"|"both"), patient_contact (string or null).`;
 }
 
@@ -378,12 +390,44 @@ async function handleVoiceDiary(
       p.phone != null && String(p.phone).length ? String(p.phone) : null,
   }));
 
+  const catalog_treatments = normalized.catalog_treatments.map((t) => ({
+    treatment_name: String(t.treatment_name ?? ""),
+    category:
+      t.category != null && String(t.category).trim().length
+        ? String(t.category).trim()
+        : null,
+    default_price:
+      t.default_price != null && t.default_price !== ""
+        ? Number(t.default_price)
+        : null,
+    typical_product_cost:
+      t.typical_product_cost != null && t.typical_product_cost !== ""
+        ? Number(t.typical_product_cost)
+        : null,
+    default_duration_minutes:
+      t.default_duration_minutes != null && t.default_duration_minutes !== ""
+        ? Number(t.default_duration_minutes)
+        : null,
+  }));
+
+  const expenses = normalized.expenses.map((e) => ({
+    date: String(e.date ?? ctx.todayDate),
+    category: String(e.category ?? "Other"),
+    amount: Math.abs(Number(e.amount ?? 0)),
+    notes:
+      e.notes != null && String(e.notes).trim().length
+        ? String(e.notes).trim()
+        : null,
+  }));
+
   return new Response(
     JSON.stringify({
       treatments,
       payment_updates,
       invoices,
       patients,
+      catalog_treatments,
+      expenses,
     }),
     { headers: { ...corsHeaders, "Content-Type": "application/json" } },
   );

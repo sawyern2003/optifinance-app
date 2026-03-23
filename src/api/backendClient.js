@@ -243,6 +243,8 @@ class Integrations {
       payment_updates: data?.payment_updates ?? [],
       invoices: data?.invoices ?? [],
       patients: data?.patients ?? [],
+      catalog_treatments: data?.catalog_treatments ?? [],
+      expenses: data?.expenses ?? [],
     };
   }
 

@@ -603,6 +603,14 @@ export default function VoiceDiary() {
       const rawPatients = (response.patients || []).filter((p) =>
         String(p.name || "").trim(),
       );
+      const rawCatalogTreatments = (response.catalog_treatments || []).filter(
+        (t) => String(t.treatment_name || "").trim(),
+      );
+      const rawExpenses = (response.expenses || []).filter(
+        (e) =>
+          String(e.category || "").trim() &&
+          Number(e.amount ?? 0) > 0,
+      );
       let invoiceRows = (response.invoices || []).filter(
         (i) =>
           String(i.patient_name || "").trim() &&
@@ -653,7 +661,9 @@ export default function VoiceDiary() {
         rawTreatments.length === 0 &&
         processedPaymentUpdates.length === 0 &&
         invoiceRows.length === 0 &&
-        rawPatients.length === 0
+        rawPatients.length === 0 &&
+        rawCatalogTreatments.length === 0 &&
+        rawExpenses.length === 0
       ) {
         toast({
           title: "Nothing extracted",
@@ -670,6 +680,8 @@ export default function VoiceDiary() {
         payment_updates: processedPaymentUpdates,
         invoices: invoiceRows,
         patients: rawPatients,
+        catalog_treatments: rawCatalogTreatments,
+        expenses: rawExpenses,
       };
 
       setExtractedData(processedData);
@@ -695,6 +707,32 @@ export default function VoiceDiary() {
           };
         }),
         patients: processedData.patients.map(p => ({ ...p, include: true }))
+        ,
+        catalog_treatments: processedData.catalog_treatments.map((t) => ({
+          ...t,
+          category: t.category || "Other",
+          default_price:
+            t.default_price != null && t.default_price !== ""
+              ? Number(t.default_price)
+              : null,
+          typical_product_cost:
+            t.typical_product_cost != null && t.typical_product_cost !== ""
+              ? Number(t.typical_product_cost)
+              : 0,
+          default_duration_minutes:
+            t.default_duration_minutes != null &&
+            t.default_duration_minutes !== ""
+              ? Number(t.default_duration_minutes)
+              : null,
+          include: true,
+        })),
+        expenses: processedData.expenses.map((e) => ({
+          ...e,
+          amount: Number(e.amount) || 0,
+          date: e.date || format(new Date(), "yyyy-MM-dd"),
+          notes: e.notes || null,
+          include: true,
+        })),
       });
       setReviewDialogOpen(true);
       setProcessing(false);
@@ -719,6 +757,7 @@ export default function VoiceDiary() {
 
     try {
       const leadPractitioner = practitioners.find(p => p.is_lead);
+      const catalogLookup = [...treatmentCatalog];
 
       // Create new patients first
       const patientMap = new Map();
@@ -732,6 +771,32 @@ export default function VoiceDiary() {
           patientMap.set(patientData.name.toLowerCase(), newPatient);
         } catch (error) {
           console.error('Failed to create patient:', error);
+        }
+      }
+
+      // Add new treatments to Catalogue (optional, from voice diary)
+      for (const catData of confirmedData.catalog_treatments.filter((t) => t.include)) {
+        try {
+          const exists = catalogLookup.find(
+            (t) =>
+              t.treatment_name?.toLowerCase() ===
+              String(catData.treatment_name || "").toLowerCase(),
+          );
+          if (exists) continue;
+          const createdCatalog = await api.entities.TreatmentCatalog.create({
+            treatment_name: String(catData.treatment_name || "").trim(),
+            category: String(catData.category || "Other").trim() || "Other",
+            default_price:
+              catData.default_price != null ? Number(catData.default_price) : null,
+            typical_product_cost: Number(catData.typical_product_cost || 0),
+            default_duration_minutes:
+              catData.default_duration_minutes != null
+                ? Number(catData.default_duration_minutes)
+                : null,
+          });
+          catalogLookup.push(createdCatalog);
+        } catch (error) {
+          console.error("Failed to create catalogue treatment:", error);
         }
       }
 
@@ -756,7 +821,7 @@ export default function VoiceDiary() {
           }
 
           // Find treatment from catalog
-          const treatment = treatmentCatalog.find(t => 
+          const treatment = catalogLookup.find(t => 
             t.treatment_name.toLowerCase() === treatmentData.treatment_name.toLowerCase()
           );
 
@@ -836,6 +901,20 @@ export default function VoiceDiary() {
         }
       }
 
+      // Create expenses from voice diary
+      for (const expenseData of confirmedData.expenses.filter((e) => e.include)) {
+        try {
+          await api.entities.Expense.create({
+            date: expenseData.date,
+            category: expenseData.category,
+            amount: Number(expenseData.amount) || 0,
+            notes: expenseData.notes || null,
+          });
+        } catch (error) {
+          console.error("Failed to create expense:", error);
+        }
+      }
+
       const patientsForFf = [...patients];
       for (const p of patientMap.values()) {
         if (!patientsForFf.some((x) => x.id === p.id)) patientsForFf.push(p);
@@ -888,7 +967,7 @@ export default function VoiceDiary() {
                 api,
                 invoiceData,
                 patient,
-                treatmentCatalog,
+                catalogLookup,
                 leadPractitioner,
                 treatmentMap,
                 invKey,
@@ -923,7 +1002,7 @@ export default function VoiceDiary() {
             notes: '',
             ...friendsFamilyInvoiceFields(
               treatment,
-              treatmentCatalog,
+              catalogLookup,
               patientsForFf,
             ),
           });
@@ -964,6 +1043,8 @@ export default function VoiceDiary() {
       queryClient.invalidateQueries({ queryKey: ['patients'] });
       queryClient.invalidateQueries({ queryKey: ['invoices'] });
       queryClient.invalidateQueries({ queryKey: ['practitioners'] });
+      queryClient.invalidateQueries({ queryKey: ['treatmentCatalog'] });
+      queryClient.invalidateQueries({ queryKey: ['expenses'] });
 
       const sendOk = invoiceSendOutcomes.filter((o) => o.ok);
       const sendBad = invoiceSendOutcomes.filter((o) => !o.ok);
@@ -1290,7 +1371,8 @@ export default function VoiceDiary() {
                 send an invoice and there is no matching visit yet, we create a{" "}
                 <strong>pending</strong> treatment for that patient, then the invoice,
                 PDF, and email (patient needs email or phone on file, or say it in the
-                diary).
+                diary). You can also add new catalogue treatments and expenses from this
+                review.
               </DialogDescription>
             </DialogHeader>
 
@@ -1498,6 +1580,114 @@ export default function VoiceDiary() {
                                     Invoice only — send from Communications or
                                     Invoices when ready
                                   </p>
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* Catalogue Treatments */}
+                {confirmedData.catalog_treatments.length > 0 && (
+                  <div className="space-y-4">
+                    <div className="flex items-center justify-between">
+                      <h3 className="text-sm font-medium text-gray-900 uppercase tracking-wide">
+                        Add to Catalogue
+                      </h3>
+                      <span className="text-xs text-gray-500 font-light">
+                        {confirmedData.catalog_treatments.filter(t => t.include).length} selected
+                      </span>
+                    </div>
+                    <div className="space-y-2">
+                      {confirmedData.catalog_treatments.map((t, index) => (
+                        <div
+                          key={index}
+                          className={`bg-white rounded-lg p-4 border transition-all ${
+                            t.include ? 'border-[#1a2845] bg-gray-50/50' : 'border-gray-200 opacity-50'
+                          }`}
+                        >
+                          <div className="flex items-start gap-3">
+                            <input
+                              type="checkbox"
+                              checked={t.include}
+                              onChange={() => toggleInclude('catalog_treatments', index)}
+                              className="w-4 h-4 text-[#1a2845] border-gray-300 rounded focus:ring-[#1a2845] mt-0.5"
+                            />
+                            <div className="flex-1 grid grid-cols-2 gap-x-4 gap-y-2 text-sm">
+                              <div>
+                                <span className="text-xs text-gray-500 uppercase tracking-wide">Treatment</span>
+                                <p className="text-gray-900 font-light">{t.treatment_name}</p>
+                              </div>
+                              <div>
+                                <span className="text-xs text-gray-500 uppercase tracking-wide">Category</span>
+                                <p className="text-gray-900 font-light">{t.category || "Other"}</p>
+                              </div>
+                              <div>
+                                <span className="text-xs text-gray-500 uppercase tracking-wide">Default price</span>
+                                <p className="text-gray-900 font-light">
+                                  {t.default_price != null ? `£${Number(t.default_price).toFixed(2)}` : "Not set"}
+                                </p>
+                              </div>
+                              <div>
+                                <span className="text-xs text-gray-500 uppercase tracking-wide">Duration</span>
+                                <p className="text-gray-900 font-light">
+                                  {t.default_duration_minutes ? `${t.default_duration_minutes} min` : "Not set"}
+                                </p>
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* Expenses */}
+                {confirmedData.expenses.length > 0 && (
+                  <div className="space-y-4">
+                    <div className="flex items-center justify-between">
+                      <h3 className="text-sm font-medium text-gray-900 uppercase tracking-wide">
+                        Expenses
+                      </h3>
+                      <span className="text-xs text-gray-500 font-light">
+                        {confirmedData.expenses.filter(e => e.include).length} selected
+                      </span>
+                    </div>
+                    <div className="space-y-2">
+                      {confirmedData.expenses.map((expense, index) => (
+                        <div
+                          key={index}
+                          className={`bg-white rounded-lg p-4 border transition-all ${
+                            expense.include ? 'border-[#1a2845] bg-gray-50/50' : 'border-gray-200 opacity-50'
+                          }`}
+                        >
+                          <div className="flex items-start gap-3">
+                            <input
+                              type="checkbox"
+                              checked={expense.include}
+                              onChange={() => toggleInclude('expenses', index)}
+                              className="w-4 h-4 text-[#1a2845] border-gray-300 rounded focus:ring-[#1a2845] mt-0.5"
+                            />
+                            <div className="flex-1 grid grid-cols-2 gap-x-4 gap-y-2 text-sm">
+                              <div>
+                                <span className="text-xs text-gray-500 uppercase tracking-wide">Category</span>
+                                <p className="text-gray-900 font-light">{expense.category}</p>
+                              </div>
+                              <div>
+                                <span className="text-xs text-gray-500 uppercase tracking-wide">Amount</span>
+                                <p className="text-gray-900 font-light">£{Number(expense.amount || 0).toFixed(2)}</p>
+                              </div>
+                              <div>
+                                <span className="text-xs text-gray-500 uppercase tracking-wide">Date</span>
+                                <p className="text-gray-900 font-light">{expense.date}</p>
+                              </div>
+                              {expense.notes && (
+                                <div>
+                                  <span className="text-xs text-gray-500 uppercase tracking-wide">Notes</span>
+                                  <p className="text-gray-900 font-light">{expense.notes}</p>
                                 </div>
                               )}
                             </div>
