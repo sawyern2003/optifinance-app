@@ -18,6 +18,23 @@ import {
 } from "@/lib/invoiceFriendsFamily";
 import { computeTreatmentFriendsFamilyPricing } from "@/lib/friendsFamilyPricing";
 
+const COURSE_NOTE_RE = /^\s*Course\s*(\d{1,2})\s*[:\-]\s*/i;
+
+function parseCourseNumberFromNotes(notes) {
+  const m = String(notes || "").match(COURSE_NOTE_RE);
+  return m?.[1] || "";
+}
+
+function stripCoursePrefix(notes) {
+  return String(notes || "").replace(COURSE_NOTE_RE, "").trim();
+}
+
+function composeNotesWithCourse(notes, courseNumber) {
+  const clean = stripCoursePrefix(notes);
+  if (!courseNumber) return clean;
+  return clean ? `Course ${courseNumber}: ${clean}` : `Course ${courseNumber}`;
+}
+
 export default function Records() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
@@ -229,6 +246,13 @@ export default function Records() {
       setPartialPaymentDialogOpen(false);
       setPartialPaymentTreatment(null);
     },
+    onError: (err) => {
+      toast({
+        title: "Could not update treatment",
+        description: err?.message || "Please check required fields and try again.",
+        variant: "destructive",
+      });
+    },
   });
 
   const updateExpenseMutation = useMutation({
@@ -237,6 +261,13 @@ export default function Records() {
       queryClient.invalidateQueries({ queryKey: ['expenses'] });
       setEditDialogOpen(false);
       setEditingItem(null);
+    },
+    onError: (err) => {
+      toast({
+        title: "Could not update expense",
+        description: err?.message || "Please check required fields and try again.",
+        variant: "destructive",
+      });
     },
   });
 
@@ -440,7 +471,8 @@ export default function Records() {
         duration_minutes: item.duration_minutes || '',
         practitioner_id: initialPractitionerId,
         practitioner_name: item.practitioner_name || '',
-        notes: item.notes || '',
+        course_number: parseCourseNumberFromNotes(item.notes || ""),
+        notes: stripCoursePrefix(item.notes || ""),
         friends_family_discount_applied: !!item.friends_family_discount_applied,
         friends_family_discount_percent: (() => {
           if (
@@ -546,6 +578,15 @@ export default function Records() {
       }
       
       const selectedTreatment = treatmentCatalog.find(t => t.id === editForm.treatment_id);
+      const finalTreatmentId =
+        editForm.treatment_id && editForm.treatment_id !== "none"
+          ? editForm.treatment_id
+          : editingItem?.treatment_id || null;
+      const finalTreatmentName =
+        selectedTreatment?.treatment_name ||
+        editForm.treatment_name ||
+        editingItem?.treatment_name ||
+        "";
       const selectedPatient = patients.find(p => p.id === editForm.patient_id);
       const effectiveFfPct = effectiveFriendsFamilyPercent(
         editForm.friends_family_discount_percent,
@@ -589,8 +630,8 @@ export default function Records() {
           date: editForm.date,
           patient_id: editForm.patient_id === 'none' ? null : editForm.patient_id,
           patient_name: selectedPatient?.name || editForm.patient_name,
-          treatment_id: editForm.treatment_id,
-          treatment_name: selectedTreatment?.treatment_name || editForm.treatment_name,
+          treatment_id: finalTreatmentId,
+          treatment_name: finalTreatmentName,
           duration_minutes: editForm.duration_minutes ? parseFloat(editForm.duration_minutes) : undefined,
           price_paid: pricePaid,
           payment_status: editForm.payment_status,
@@ -599,7 +640,10 @@ export default function Records() {
           profit: profit,
           practitioner_id: finalPractitionerId,
           practitioner_name: finalPractitionerName,
-          notes: editForm.notes,
+          notes: composeNotesWithCourse(
+            editForm.notes,
+            String(editForm.course_number || ""),
+          ),
           friends_family_discount_applied: ffApplied,
           friends_family_discount_percent: ffApplied ? effectiveFfPct : null,
           friends_family_list_price: ffApplied ? ffPricing.listSnapshot : null,
@@ -643,18 +687,22 @@ export default function Records() {
       const uniqueNames = Array.from(
         new Set(invoiceItems.map((t) => String(t.treatment_name || "").trim()).filter(Boolean)),
       );
+      const singleCourse = parseCourseNumberFromNotes(treatment.notes || "");
       const treatmentLabel = isBatch
         ? uniqueNames.length <= 2
           ? uniqueNames.join(" + ")
           : `${uniqueNames.slice(0, 2).join(" + ")} +${uniqueNames.length - 2} more`
-        : treatment.treatment_name;
+        : `${treatment.treatment_name}${singleCourse ? ` (Course ${singleCourse})` : ""}`;
       const batchNotes = isBatch
         ? [
             "Batch invoice items:",
             ...invoiceItems.map((t) => {
               const note = String(t.notes || "").trim();
-              const notePart = note ? ` | Notes: ${note}` : "";
-              return `- ${t.date} | ${t.treatment_name} | £${Number(t.price_paid || 0).toFixed(2)}${notePart}`;
+              const course = parseCourseNumberFromNotes(note);
+              const cleanNote = stripCoursePrefix(note);
+              const coursePart = course ? ` (Course ${course})` : "";
+              const notePart = cleanNote ? ` | Notes: ${cleanNote}` : "";
+              return `- ${t.date} | ${t.treatment_name}${coursePart} | £${Number(t.price_paid || 0).toFixed(2)}${notePart}`;
             }),
             `Batch treatment IDs: ${invoiceItems.map((t) => t.id).filter(Boolean).join(",")}`,
           ].join("\n")
@@ -1354,6 +1402,36 @@ export default function Records() {
                       placeholder="e.g. 30, 60, 90"
                       className="rounded-xl border-gray-300 h-11"
                     />
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label htmlFor="edit-course-number" className="text-sm font-medium text-gray-700">
+                      Course Number
+                    </Label>
+                    <Select
+                      value={editForm.course_number || "none"}
+                      onValueChange={(value) =>
+                        setEditForm({
+                          ...editForm,
+                          course_number: value === "none" ? "" : value,
+                        })
+                      }
+                    >
+                      <SelectTrigger className="rounded-xl border-gray-300 h-11">
+                        <SelectValue placeholder="Select course number (optional)" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="none">No course number</SelectItem>
+                        {Array.from({ length: 12 }).map((_, idx) => {
+                          const n = String(idx + 1);
+                          return (
+                            <SelectItem key={n} value={n}>
+                              Course {n}
+                            </SelectItem>
+                          );
+                        })}
+                      </SelectContent>
+                    </Select>
                   </div>
 
                   <div className="grid grid-cols-2 gap-4">

@@ -29,6 +29,17 @@ function diaryTreatmentLookupKey(patientName, treatmentName, date) {
   return `${String(patientName || "").trim().toLowerCase()}|${String(treatmentName || "").trim().toLowerCase()}|${normalizeDiaryDate(date)}`;
 }
 
+const COURSE_NOTE_RE = /^\s*Course\s*(\d{1,2})\s*[:\-]\s*/i;
+
+function parseCourseNumberFromNotes(notes) {
+  const m = String(notes || "").match(COURSE_NOTE_RE);
+  return m?.[1] || "";
+}
+
+function stripCoursePrefix(notes) {
+  return String(notes || "").replace(COURSE_NOTE_RE, "").trim();
+}
+
 /** Model often returns only treatments[]; user said "send invoice" → still need an invoice row to run PDF/send. */
 /**
  * Invoice row with no matching visit: create pending treatment, then invoice/PDF/email can run.
@@ -1024,18 +1035,24 @@ export default function VoiceDiary() {
           const uniqueNames = Array.from(
             new Set(invoiceItems.map((t) => String(t.treatment_name || "").trim()).filter(Boolean)),
           );
+          const singleCourse = parseCourseNumberFromNotes(
+            treatment?.notes || "",
+          );
           const treatmentLabel = isBatch
             ? uniqueNames.length <= 2
               ? uniqueNames.join(" + ")
               : `${uniqueNames.slice(0, 2).join(" + ")} +${uniqueNames.length - 2} more`
-            : invoiceData.treatment_name;
+            : `${invoiceData.treatment_name}${singleCourse ? ` (Course ${singleCourse})` : ""}`;
           const batchNotes = isBatch
             ? [
                 "Batch invoice items:",
                 ...invoiceItems.map((t) => {
                   const note = String(t.notes || "").trim();
-                  const notePart = note ? ` | Notes: ${note}` : "";
-                  return `- ${t.date} | ${t.treatment_name} | £${Number(t.price_paid || 0).toFixed(2)}${notePart}`;
+                  const course = parseCourseNumberFromNotes(note);
+                  const cleanNote = stripCoursePrefix(note);
+                  const coursePart = course ? ` (Course ${course})` : "";
+                  const notePart = cleanNote ? ` | Notes: ${cleanNote}` : "";
+                  return `- ${t.date} | ${t.treatment_name}${coursePart} | £${Number(t.price_paid || 0).toFixed(2)}${notePart}`;
                 }),
                 `Batch treatment IDs: ${invoiceItems.map((t) => t.id).filter(Boolean).join(",")}`,
               ].join("\n")

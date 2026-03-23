@@ -20,6 +20,18 @@ import {
 } from "@/lib/invoiceFriendsFamily";
 import { computeTreatmentFriendsFamilyPricing } from "@/lib/friendsFamilyPricing";
 
+const COURSE_NOTE_RE = /^\s*Course\s*(\d{1,2})\s*[:\-]\s*/i;
+
+function stripCoursePrefix(notes) {
+  return String(notes || "").replace(COURSE_NOTE_RE, "").trim();
+}
+
+function composeNotesWithCourse(notes, courseNumber) {
+  const clean = stripCoursePrefix(notes);
+  if (!courseNumber) return clean;
+  return clean ? `Course ${courseNumber}: ${clean}` : `Course ${courseNumber}`;
+}
+
 export default function QuickAdd() {
   const { toast } = useToast();
   const navigate = useNavigate();
@@ -110,6 +122,7 @@ export default function QuickAdd() {
     patient_id: '',
     patient_name: '',
     treatment_id: '',
+    course_number: '',
     price_paid: '',
     payment_status: 'paid',
     amount_paid: '',
@@ -431,6 +444,7 @@ export default function QuickAdd() {
         patient_id: '',
         patient_name: '',
         treatment_id: '',
+        course_number: '',
         price_paid: '',
         payment_status: 'paid',
         amount_paid: '',
@@ -646,6 +660,10 @@ export default function QuickAdd() {
 
     const formData = {
       ...treatmentForm,
+      notes: composeNotesWithCourse(
+        treatmentForm.notes,
+        String(treatmentForm.course_number || ""),
+      ),
       price_paid: treatmentForm.price_paid || selectedTreatment?.default_price || 0,
       sendSMS: sendInvoiceSMS,
       addAnother
@@ -1183,6 +1201,36 @@ export default function QuickAdd() {
                             {treatment.treatment_name}
                           </SelectItem>
                         ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label htmlFor="course-number" className="text-sm font-medium text-gray-700">
+                      Course Number
+                    </Label>
+                    <Select
+                      value={treatmentForm.course_number || "none"}
+                      onValueChange={(value) =>
+                        setTreatmentForm({
+                          ...treatmentForm,
+                          course_number: value === "none" ? "" : value,
+                        })
+                      }
+                    >
+                      <SelectTrigger className="rounded-xl border-gray-300 h-11 text-gray-900">
+                        <SelectValue placeholder="Select course number (optional)" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="none">No course number</SelectItem>
+                        {Array.from({ length: 12 }).map((_, idx) => {
+                          const n = String(idx + 1);
+                          return (
+                            <SelectItem key={n} value={n}>
+                              Course {n}
+                            </SelectItem>
+                          );
+                        })}
                       </SelectContent>
                     </Select>
                   </div>
