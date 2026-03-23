@@ -35,6 +35,22 @@ function composeNotesWithCourse(notes, courseNumber) {
   return clean ? `Course ${courseNumber}: ${clean}` : `Course ${courseNumber}`;
 }
 
+function batchInvoicePriceLabel(treatment) {
+  const charged = Number(treatment?.price_paid || 0);
+  const ffApplied =
+    treatment?.friends_family_discount_applied === true ||
+    treatment?.friends_family_discount_applied === "true";
+  const ffPct =
+    treatment?.friends_family_discount_percent != null &&
+    treatment?.friends_family_discount_percent !== ""
+      ? Number(treatment.friends_family_discount_percent)
+      : null;
+  if (ffApplied && Number.isFinite(ffPct) && ffPct > 0) {
+    return `£${charged.toFixed(2)} (F&F -${ffPct}%)`;
+  }
+  return `£${charged.toFixed(2)}`;
+}
+
 export default function Records() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
@@ -708,7 +724,7 @@ export default function Records() {
               const cleanNote = stripCoursePrefix(note);
               const coursePart = course ? ` (Course ${course})` : "";
               const notePart = cleanNote ? ` | Notes: ${cleanNote}` : "";
-              return `- ${t.date} | ${t.treatment_name}${coursePart} | £${Number(t.price_paid || 0).toFixed(2)}${notePart}`;
+              return `- ${t.date} | ${t.treatment_name}${coursePart} | ${batchInvoicePriceLabel(t)}${notePart}`;
             }),
             `Batch treatment IDs: ${invoiceItems.map((t) => t.id).filter(Boolean).join(",")}`,
           ].join("\n")

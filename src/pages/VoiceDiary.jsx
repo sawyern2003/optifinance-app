@@ -40,6 +40,22 @@ function stripCoursePrefix(notes) {
   return String(notes || "").replace(COURSE_NOTE_RE, "").trim();
 }
 
+function batchInvoicePriceLabel(treatment) {
+  const charged = Number(treatment?.price_paid || 0);
+  const ffApplied =
+    treatment?.friends_family_discount_applied === true ||
+    treatment?.friends_family_discount_applied === "true";
+  const ffPct =
+    treatment?.friends_family_discount_percent != null &&
+    treatment?.friends_family_discount_percent !== ""
+      ? Number(treatment.friends_family_discount_percent)
+      : null;
+  if (ffApplied && Number.isFinite(ffPct) && ffPct > 0) {
+    return `£${charged.toFixed(2)} (F&F -${ffPct}%)`;
+  }
+  return `£${charged.toFixed(2)}`;
+}
+
 /** Model often returns only treatments[]; user said "send invoice" → still need an invoice row to run PDF/send. */
 /**
  * Invoice row with no matching visit: create pending treatment, then invoice/PDF/email can run.
@@ -1052,7 +1068,7 @@ export default function VoiceDiary() {
                   const cleanNote = stripCoursePrefix(note);
                   const coursePart = course ? ` (Course ${course})` : "";
                   const notePart = cleanNote ? ` | Notes: ${cleanNote}` : "";
-                  return `- ${t.date} | ${t.treatment_name}${coursePart} | £${Number(t.price_paid || 0).toFixed(2)}${notePart}`;
+                  return `- ${t.date} | ${t.treatment_name}${coursePart} | ${batchInvoicePriceLabel(t)}${notePart}`;
                 }),
                 `Batch treatment IDs: ${invoiceItems.map((t) => t.id).filter(Boolean).join(",")}`,
               ].join("\n")

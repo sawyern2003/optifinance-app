@@ -256,20 +256,22 @@ serve(async (req) => {
       .filter((lineItem) => lineItem.startsWith("- "))
       .map((lineItem) => {
         const m = lineItem.match(
-          /^-\s*([^|]+)\|\s*([^|]+)\|\s*£?([0-9.]+)(?:\s*\|\s*Notes:\s*(.*))?$/i,
+          /^-\s*([^|]+)\|\s*([^|]+)\|\s*£?([0-9.]+)(?:\s*\(([^)]*)\))?(?:\s*\|\s*Notes:\s*(.*))?$/i,
         );
         if (!m) return null;
         return {
           date: String(m[1] || "").trim(),
           treatment: String(m[2] || "").trim(),
           amount: Number(m[3] || 0),
-          note: String(m[4] || "").trim(),
+          amountMeta: String(m[4] || "").trim(),
+          note: String(m[5] || "").trim(),
         };
       })
       .filter(Boolean) as Array<{
         date: string;
         treatment: string;
         amount: number;
+        amountMeta: string;
         note: string;
       }>;
 
@@ -289,6 +291,7 @@ serve(async (req) => {
               date: treatmentDate || "-",
               treatment: String(invoice.treatment_name || "Treatment"),
               amount: invAmount,
+              amountMeta: "",
               note: "",
             },
           ];
@@ -316,6 +319,16 @@ serve(async (req) => {
         color: textColor,
       });
       step(15);
+      if (item.amountMeta) {
+        page.drawText(`  ${item.amountMeta}`.substring(0, 38), {
+          x: margin + contentWidth - 120,
+          y,
+          font,
+          size: 9.5,
+          color: muted,
+        });
+        step(11);
+      }
       if (item.note) {
         page.drawText(`  Note: ${item.note}`.substring(0, 110), {
           x: margin + 8,
