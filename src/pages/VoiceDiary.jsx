@@ -810,12 +810,27 @@ export default function VoiceDiary() {
           const treatment = update.matched_treatment;
           const updatedAmountPaid = treatment.amount_paid + update.amount_paid;
           const isFullyPaid = updatedAmountPaid >= treatment.price_paid;
+          const settledAmount = Math.min(updatedAmountPaid, treatment.price_paid);
 
           await api.entities.TreatmentEntry.update(treatment.id, {
             payment_status: isFullyPaid ? 'paid' : 'partially_paid',
-            amount_paid: Math.min(updatedAmountPaid, treatment.price_paid),
-            profit: Math.min(updatedAmountPaid, treatment.price_paid) - (treatment.product_cost || 0)
+            amount_paid: settledAmount,
+            profit: settledAmount - (treatment.product_cost || 0)
           });
+
+          // Keep invoice state in sync when payments are confirmed by voice diary.
+          const linkedInvoices = await api.entities.Invoice.filter({
+            treatment_entry_id: treatment.id,
+          });
+          for (const inv of linkedInvoices || []) {
+            const nextStatus = isFullyPaid ? 'paid' : 'sent';
+            if (inv.status !== nextStatus) {
+              await api.entities.Invoice.update(inv.id, {
+                ...inv,
+                status: nextStatus,
+              });
+            }
+          }
         } catch (error) {
           console.error('Failed to update payment:', error);
         }

@@ -289,11 +289,35 @@ ${clinicName}
     setSendingEmail(null);
   };
 
-  const updateStatus = (invoice, newStatus) => {
-    updateInvoiceMutation.mutate({
-      id: invoice.id,
-      data: { ...invoice, status: newStatus }
-    });
+  const updateStatus = async (invoice, newStatus) => {
+    try {
+      // Manual "mark paid" should also settle the linked treatment so Dashboard revenue/profit updates.
+      if (newStatus === 'paid' && invoice.treatment_entry_id) {
+        const linked = await api.entities.TreatmentEntry.filter({ id: invoice.treatment_entry_id });
+        const t = Array.isArray(linked) ? linked[0] : null;
+        if (t) {
+          const fullAmount = Number(t.price_paid || invoice.amount || 0);
+          const productCost = Number(t.product_cost || 0);
+          await api.entities.TreatmentEntry.update(t.id, {
+            payment_status: 'paid',
+            amount_paid: fullAmount,
+            profit: fullAmount - productCost,
+          });
+          queryClient.invalidateQueries({ queryKey: ['treatments'] });
+        }
+      }
+      updateInvoiceMutation.mutate({
+        id: invoice.id,
+        data: { ...invoice, status: newStatus }
+      });
+    } catch (error) {
+      console.error('Failed to update invoice status:', error);
+      toast({
+        title: "Status update failed",
+        description: error?.message || "Could not update invoice status",
+        variant: "destructive",
+      });
+    }
   };
 
   const filteredInvoices = invoices.filter(inv => {
