@@ -1,5 +1,7 @@
 import React, { useState } from "react";
+import { Link } from "react-router-dom";
 import { api } from "@/api/api";
+import { createPageUrl } from "@/utils";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -8,7 +10,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { Textarea } from "@/components/ui/textarea";
-import { Plus, Pencil, Trash2, Sparkles, UserCog, Users, Copy, FileText } from "lucide-react";
+import { Plus, Pencil, Trash2, Sparkles, UserCog, Users, Copy, FileText, LayoutGrid } from "lucide-react";
 import { useToast } from "@/components/ui/use-toast";
 import { format } from 'date-fns';
 
@@ -753,6 +755,24 @@ export default function Catalogue() {
             {/* Patients List */}
             {activeTab === 'patients' && (
               <div className="space-y-3">
+                <div className="rounded-2xl border border-violet-200/80 bg-gradient-to-r from-violet-50 to-fuchsia-50/60 p-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+                  <div>
+                    <p className="text-sm font-semibold text-[#1a2845] flex items-center gap-2">
+                      <LayoutGrid className="w-4 h-4 text-violet-600" />
+                      Swipeable patient cards
+                    </p>
+                    <p className="text-xs text-slate-600 mt-1 max-w-xl">
+                      Open the full-screen card deck to review treatments, clinical notes, paid amounts and balances
+                      for each patient in one place.
+                    </p>
+                  </div>
+                  <Button
+                    asChild
+                    className="shrink-0 rounded-xl bg-[#1a2845] hover:bg-[#0f1829] text-white"
+                  >
+                    <Link to={createPageUrl("PatientCards")}>Open patient cards</Link>
+                  </Button>
+                </div>
                 {patients.map((patient) => (
                   <div
                     key={patient.id}

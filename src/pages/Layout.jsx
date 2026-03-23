@@ -2,7 +2,7 @@
 import React, { useState, useEffect } from "react";
 import { Link, useLocation } from "react-router-dom";
 import { createPageUrl } from "@/utils";
-import { LayoutDashboard, Plus, FileText, BarChart3, Settings, LogOut, TrendingUp, FileCheck, MessageSquare, CircleDot, Send } from "lucide-react";
+import { LayoutDashboard, Plus, FileText, BarChart3, Settings, LogOut, TrendingUp, FileCheck, MessageSquare, CircleDot, Send, ContactRound } from "lucide-react";
 import { api } from "@/api/api";
 
 const navigationItems = [
@@ -30,6 +30,11 @@ const navigationItems = [
     title: "Records",
     url: createPageUrl("Records"),
     icon: FileText,
+  },
+  {
+    title: "Patient cards",
+    url: createPageUrl("PatientCards"),
+    icon: ContactRound,
   },
   {
     title: "Invoices",
@@ -249,8 +254,8 @@ export default function Layout({ children, currentPageName }) {
           </header>
 
           <div className="md:hidden fixed bottom-0 left-0 right-0 bg-white/95 backdrop-blur-xl border-t border-[#f0e9d8]/50 z-50">
-            <div className="grid grid-cols-5 gap-1 px-2 py-2">
-              {navigationItems.slice(0, 5).map((item) => {
+            <div className="grid grid-cols-3 gap-1 px-2 py-2">
+              {navigationItems.slice(0, 6).map((item) => {
                 const isActive = location.pathname === item.url;
                 return (
                   <Link
@@ -263,7 +268,7 @@ export default function Layout({ children, currentPageName }) {
                     }`}
                   >
                     <item.icon className="w-5 h-5" />
-                    <span>{item.title}</span>
+                    <span className="text-center leading-tight">{item.title}</span>
                   </Link>
                 );
               })}

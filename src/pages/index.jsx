@@ -5,6 +5,8 @@ import Catalog from "./Catalog";
 
 import Catalogue from "./Catalogue";
 
+import PatientCards from "./PatientCards";
+
 import Consultant from "./Consultant";
 
 import Communications from "./Communications";
@@ -42,6 +44,8 @@ const PAGES = {
     Catalog: Catalog,
     
     Catalogue: Catalogue,
+    
+    PatientCards: PatientCards,
     
     Consultant: Consultant,
     
@@ -169,6 +173,7 @@ function PagesContent() {
                             <Route path="/" element={<VoiceDiary />} />
                             <Route path="/Catalog" element={<Catalog />} />
                             <Route path="/Catalogue" element={<Catalogue />} />
+                            <Route path="/PatientCards" element={<PatientCards />} />
                             <Route path="/Consultant" element={<Consultant />} />
                             <Route path="/Dashboard" element={<Dashboard />} />
                             <Route path="/Home" element={<Home />} />
