@@ -11,6 +11,7 @@ export const Invoice = backend.entities.Invoice;
 export const CompetitorPricing = backend.entities.CompetitorPricing;
 export const TaxSettings = backend.entities.TaxSettings;
 export const ChatHistory = backend.entities.ChatHistory;
+export const ClinicalNote = backend.entities.ClinicalNote;
 
 // Auth SDK
 export const User = backend.auth;

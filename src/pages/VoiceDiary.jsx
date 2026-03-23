@@ -4,7 +4,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { Loader2, Mic, MicOff, AudioLines } from "lucide-react";
+import { Loader2, Mic, MicOff, AudioLines, ClipboardList } from "lucide-react";
 import { format, subDays, parseISO } from "date-fns";
 import { useToast } from "@/components/ui/use-toast";
 import { createPageUrl } from "@/utils";
@@ -641,6 +641,12 @@ export default function VoiceDiary() {
           String(e.category || "").trim() &&
           Number(e.amount ?? 0) > 0,
       );
+      const rawClinicalNotes = (response.clinical_notes || []).filter(
+        (c) =>
+          String(c.patient_name || "").trim() &&
+          (String(c.clinical_summary || "").trim() ||
+            String(c.raw_narrative || "").trim()),
+      );
       let invoiceRows = (response.invoices || []).filter(
         (i) =>
           String(i.patient_name || "").trim() &&
@@ -693,7 +699,8 @@ export default function VoiceDiary() {
         invoiceRows.length === 0 &&
         rawPatients.length === 0 &&
         rawCatalogTreatments.length === 0 &&
-        rawExpenses.length === 0
+        rawExpenses.length === 0 &&
+        rawClinicalNotes.length === 0
       ) {
         toast({
           title: "Nothing extracted",
@@ -712,6 +719,7 @@ export default function VoiceDiary() {
         patients: rawPatients,
         catalog_treatments: rawCatalogTreatments,
         expenses: rawExpenses,
+        clinical_notes: rawClinicalNotes,
       };
 
       setExtractedData(processedData);
@@ -761,6 +769,11 @@ export default function VoiceDiary() {
           amount: Number(e.amount) || 0,
           date: e.date || format(new Date(), "yyyy-MM-dd"),
           notes: e.notes || null,
+          include: true,
+        })),
+        clinical_notes: (processedData.clinical_notes || []).map((c) => ({
+          ...c,
+          visit_date: c.visit_date || format(new Date(), "yyyy-MM-dd"),
           include: true,
         })),
       });
@@ -896,6 +909,63 @@ export default function VoiceDiary() {
           );
         } catch (error) {
           console.error('Failed to create treatment:', error);
+        }
+      }
+
+      // Clinical notes → patient file (structured); link to visit when we can match same day + treatment
+      for (const cn of (confirmedData.clinical_notes || []).filter((c) => c.include)) {
+        try {
+          const nameKey = String(cn.patient_name || "").toLowerCase().trim();
+          const patient =
+            patients.find((p) => p.name.toLowerCase() === nameKey) ||
+            patientMap.get(nameKey);
+          if (!patient?.id) {
+            console.warn("Clinical note skipped: unknown patient", cn.patient_name);
+            continue;
+          }
+          const visitDate = cn.visit_date || format(new Date(), "yyyy-MM-dd");
+          let treatmentEntryId = null;
+          if (cn.treatment_name && String(cn.treatment_name).trim()) {
+            const mapKey = diaryTreatmentLookupKey(
+              cn.patient_name,
+              cn.treatment_name,
+              visitDate,
+            );
+            const fromMap = treatmentMap.get(mapKey);
+            if (fromMap?.id) {
+              treatmentEntryId = fromMap.id;
+            } else {
+              const fromDb = treatments.find(
+                (t) =>
+                  t.patient_id === patient.id &&
+                  normalizeDiaryDate(t.date) === normalizeDiaryDate(visitDate) &&
+                  String(t.treatment_name || "").toLowerCase() ===
+                    String(cn.treatment_name || "").toLowerCase(),
+              );
+              treatmentEntryId = fromDb?.id ?? null;
+            }
+          }
+          const structured = {
+            procedure_summary: cn.procedure_summary ?? null,
+            areas: cn.areas ?? null,
+            units: cn.units ?? null,
+            complications: cn.complications ?? null,
+            patient_feedback: cn.patient_feedback ?? null,
+            next_steps: cn.next_steps ?? null,
+            clinical_summary:
+              String(cn.clinical_summary || "").trim() ||
+              String(cn.raw_narrative || "").trim(),
+          };
+          await api.entities.ClinicalNote.create({
+            patient_id: patient.id,
+            treatment_entry_id: treatmentEntryId,
+            visit_date: visitDate,
+            source: "voice_diary",
+            raw_narrative: String(cn.raw_narrative || "").trim() || null,
+            structured,
+          });
+        } catch (error) {
+          console.error("Failed to save clinical note:", error);
         }
       }
 
@@ -1136,6 +1206,7 @@ export default function VoiceDiary() {
       queryClient.invalidateQueries({ queryKey: ['practitioners'] });
       queryClient.invalidateQueries({ queryKey: ['treatmentCatalog'] });
       queryClient.invalidateQueries({ queryKey: ['expenses'] });
+      queryClient.invalidateQueries({ queryKey: ['clinicalNotes'] });
 
       const sendOk = invoiceSendOutcomes.filter((o) => o.ok);
       const sendBad = invoiceSendOutcomes.filter((o) => !o.ok);
@@ -1191,6 +1262,7 @@ export default function VoiceDiary() {
 
   const toggleInclude = (type, index) => {
     const newData = { ...confirmedData };
+    if (!Array.isArray(newData[type]) || !newData[type][index]) return;
     newData[type][index].include = !newData[type][index].include;
     setConfirmedData(newData);
   };
@@ -1390,7 +1462,7 @@ export default function VoiceDiary() {
                 id="voice-diary-input"
                 value={transcript}
                 onChange={(e) => setTranscript(e.target.value)}
-                placeholder="e.g. …please send an invoice to Jane for her facial…"
+                placeholder="Treatments, payments, invoices — and clinical notes: e.g. “Sarah — Botox 3 areas, 50 units, no complications, happy with result, review in 2 weeks…”"
                 className="min-h-[140px] w-full resize-y border-0 border-b border-slate-200 bg-transparent px-0 py-2 text-[15px] leading-7 text-[#1a2845] shadow-none placeholder:text-slate-400 focus-visible:border-[#1a2845]/40 focus-visible:ring-0 focus-visible:ring-offset-0 rounded-none"
                 disabled={processing}
                 autoFocus
@@ -1462,8 +1534,9 @@ export default function VoiceDiary() {
                 send an invoice and there is no matching visit yet, we create a{" "}
                 <strong>pending</strong> treatment for that patient, then the invoice,
                 PDF, and email (patient needs email or phone on file, or say it in the
-                diary). You can also add new catalogue treatments and expenses from this
-                review.
+                diary). You can also add new catalogue treatments, expenses, and{" "}
+                <strong>clinical notes</strong> (procedures, outcomes, follow-up) to each
+                patient file from this review.
               </DialogDescription>
             </DialogHeader>
 
@@ -1779,6 +1852,81 @@ export default function VoiceDiary() {
                                 <div>
                                   <span className="text-xs text-gray-500 uppercase tracking-wide">Notes</span>
                                   <p className="text-gray-900 font-light">{expense.notes}</p>
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* Clinical notes (patient file) */}
+                {(confirmedData.clinical_notes || []).length > 0 && (
+                  <div className="space-y-4">
+                    <div className="flex items-center justify-between">
+                      <h3 className="text-sm font-medium text-gray-900 uppercase tracking-wide flex items-center gap-2">
+                        <ClipboardList className="w-4 h-4" />
+                        Clinical notes
+                      </h3>
+                      <span className="text-xs text-gray-500 font-light">
+                        {(confirmedData.clinical_notes || []).filter((c) => c.include).length}{" "}
+                        selected
+                      </span>
+                    </div>
+                    <div className="space-y-2">
+                      {(confirmedData.clinical_notes || []).map((cn, index) => (
+                        <div
+                          key={index}
+                          className={`bg-white rounded-lg p-4 border transition-all ${
+                            cn.include
+                              ? "border-[#1a2845] bg-gray-50/50"
+                              : "border-gray-200 opacity-50"
+                          }`}
+                        >
+                          <div className="flex items-start gap-3">
+                            <input
+                              type="checkbox"
+                              checked={cn.include}
+                              onChange={() => toggleInclude("clinical_notes", index)}
+                              className="w-4 h-4 text-[#1a2845] border-gray-300 rounded focus:ring-[#1a2845] mt-0.5"
+                            />
+                            <div className="flex-1 grid grid-cols-2 gap-x-4 gap-y-2 text-sm">
+                              <div>
+                                <span className="text-xs text-gray-500 uppercase tracking-wide">
+                                  Patient
+                                </span>
+                                <p className="text-gray-900 font-light">{cn.patient_name}</p>
+                              </div>
+                              <div>
+                                <span className="text-xs text-gray-500 uppercase tracking-wide">
+                                  Visit date
+                                </span>
+                                <p className="text-gray-900 font-light">{cn.visit_date}</p>
+                              </div>
+                              {cn.treatment_name && (
+                                <div>
+                                  <span className="text-xs text-gray-500 uppercase tracking-wide">
+                                    Treatment
+                                  </span>
+                                  <p className="text-gray-900 font-light">{cn.treatment_name}</p>
+                                </div>
+                              )}
+                              <div className="col-span-2">
+                                <span className="text-xs text-gray-500 uppercase tracking-wide">
+                                  Summary
+                                </span>
+                                <p className="text-gray-900 font-light">
+                                  {cn.clinical_summary || cn.raw_narrative}
+                                </p>
+                              </div>
+                              {cn.next_steps && (
+                                <div className="col-span-2">
+                                  <span className="text-xs text-gray-500 uppercase tracking-wide">
+                                    Next steps
+                                  </span>
+                                  <p className="text-gray-900 font-light">{cn.next_steps}</p>
                                 </div>
                               )}
                             </div>

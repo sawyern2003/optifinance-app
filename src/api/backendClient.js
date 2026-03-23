@@ -245,6 +245,7 @@ class Integrations {
       patients: data?.patients ?? [],
       catalog_treatments: data?.catalog_treatments ?? [],
       expenses: data?.expenses ?? [],
+      clinical_notes: data?.clinical_notes ?? [],
     };
   }
 
@@ -422,6 +423,7 @@ export const backend = {
     CompetitorPricing: new Entity('competitor_pricing'),
     TaxSettings: new Entity('tax_settings'),
     ChatHistory: new Entity('chat_history'),
+    ClinicalNote: new Entity('clinical_notes'),
   },
   auth: new Auth(),
   integrations: new Integrations(),

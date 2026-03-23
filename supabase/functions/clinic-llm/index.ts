@@ -160,6 +160,7 @@ function normalizeVoiceDiaryParsed(data: unknown): {
   patients: Record<string, unknown>[];
   catalog_treatments: Record<string, unknown>[];
   expenses: Record<string, unknown>[];
+  clinical_notes: Record<string, unknown>[];
 } {
   if (!data || typeof data !== "object") {
     return {
@@ -169,6 +170,7 @@ function normalizeVoiceDiaryParsed(data: unknown): {
       patients: [],
       catalog_treatments: [],
       expenses: [],
+      clinical_notes: [],
     };
   }
   const o = data as Record<string, unknown>;
@@ -180,6 +182,7 @@ function normalizeVoiceDiaryParsed(data: unknown): {
     patients: arr(o.patients) as Record<string, unknown>[],
     catalog_treatments: arr(o.catalog_treatments) as Record<string, unknown>[],
     expenses: arr(o.expenses) as Record<string, unknown>[],
+    clinical_notes: arr(o.clinical_notes) as Record<string, unknown>[],
   };
 }
 
@@ -252,14 +255,29 @@ Extract ALL relevant information:
 6) EXPENSES — user logs a business expense.
    Fields: date (YYYY-MM-DD), category (string), amount (number), notes (string or null).
 
+7) CLINICAL NOTES — clinical documentation for a patient visit (procedures, units, outcomes, follow-up). Extract when the speaker describes what was done clinically, how the patient responded, complications, or next steps — even if no billing/treatment row is mentioned.
+   Fields per item:
+   - patient_name (string, required)
+   - visit_date (YYYY-MM-DD; default today if unclear)
+   - treatment_name (string or null) — e.g. "Botox" if mentioned; helps link to a visit
+   - raw_narrative (string) — short faithful summary of what they said (can be one sentence)
+   - procedure_summary (string or null) — e.g. "Botox, 3 areas, 50 units"
+   - areas (string or null) — anatomical or treatment areas if stated
+   - units (number or null) — e.g. units of toxin if stated
+   - complications (string or null) — e.g. "none", "mild bruising"
+   - patient_feedback (string or null) — e.g. "happy", "satisfied"
+   - next_steps (string or null) — follow-up, review date, aftercare
+   - clinical_summary (string) — one clean line for the patient file (required)
+
 Rules:
 - Use only information supported by the entry; do not invent patients or amounts.
 - Match treatment_name to AVAILABLE TREATMENTS when possible (minor wording differences OK).
 - If nothing for a section, use an empty array [].
 
 Respond with ONLY a single JSON object (no markdown), exactly in this shape:
-{"treatments":[],"payment_updates":[],"invoices":[],"patients":[],"catalog_treatments":[],"expenses":[]}
-Each object in "invoices" must include: patient_name, treatment_name, amount, date, send_after_create (boolean), send_via ("email"|"sms"|"both"), patient_contact (string or null).`;
+{"treatments":[],"payment_updates":[],"invoices":[],"patients":[],"catalog_treatments":[],"expenses":[],"clinical_notes":[]}
+Each object in "invoices" must include: patient_name, treatment_name, amount, date, send_after_create (boolean), send_via ("email"|"sms"|"both"), patient_contact (string or null).
+Each object in "clinical_notes" must include: patient_name, visit_date, raw_narrative, clinical_summary (and optional fields as above).`;
 }
 
 async function handleVoiceDiary(
@@ -420,6 +438,43 @@ async function handleVoiceDiary(
         : null,
   }));
 
+  const clinical_notes = normalized.clinical_notes.map((c) => ({
+    patient_name: String(c.patient_name ?? ""),
+    visit_date: String(c.visit_date ?? ctx.todayDate),
+    treatment_name:
+      c.treatment_name != null && String(c.treatment_name).trim().length
+        ? String(c.treatment_name).trim()
+        : null,
+    raw_narrative: String(c.raw_narrative ?? "").trim() ||
+      String(c.clinical_summary ?? "").trim(),
+    procedure_summary:
+      c.procedure_summary != null && String(c.procedure_summary).trim().length
+        ? String(c.procedure_summary).trim()
+        : null,
+    areas:
+      c.areas != null && String(c.areas).trim().length
+        ? String(c.areas).trim()
+        : null,
+    units:
+      c.units != null && c.units !== "" && Number.isFinite(Number(c.units))
+        ? Number(c.units)
+        : null,
+    complications:
+      c.complications != null && String(c.complications).trim().length
+        ? String(c.complications).trim()
+        : null,
+    patient_feedback:
+      c.patient_feedback != null && String(c.patient_feedback).trim().length
+        ? String(c.patient_feedback).trim()
+        : null,
+    next_steps:
+      c.next_steps != null && String(c.next_steps).trim().length
+        ? String(c.next_steps).trim()
+        : null,
+    clinical_summary: String(c.clinical_summary ?? "").trim() ||
+      String(c.raw_narrative ?? "").trim(),
+  }));
+
   return new Response(
     JSON.stringify({
       treatments,
@@ -428,6 +483,7 @@ async function handleVoiceDiary(
       patients,
       catalog_treatments,
       expenses,
+      clinical_notes,
     }),
     { headers: { ...corsHeaders, "Content-Type": "application/json" } },
   );

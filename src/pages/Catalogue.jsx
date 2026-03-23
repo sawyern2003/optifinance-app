@@ -6,7 +6,9 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Plus, Pencil, Trash2, Sparkles, UserCog, Users, Copy } from "lucide-react";
+import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@/components/ui/sheet";
+import { Textarea } from "@/components/ui/textarea";
+import { Plus, Pencil, Trash2, Sparkles, UserCog, Users, Copy, FileText } from "lucide-react";
 import { useToast } from "@/components/ui/use-toast";
 import { format } from 'date-fns';
 
@@ -18,6 +20,12 @@ export default function Catalogue() {
   const [editingItem, setEditingItem] = useState(null);
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
   const [itemToDelete, setItemToDelete] = useState(null);
+  const [clinicalFilePatient, setClinicalFilePatient] = useState(null);
+  const [clinicalNoteDraft, setClinicalNoteDraft] = useState({
+    visit_date: format(new Date(), "yyyy-MM-dd"),
+    treatment_entry_id: "",
+    raw_narrative: "",
+  });
   const [formData, setFormData] = useState({
     treatment_name: '',
     category: '',
@@ -51,6 +59,18 @@ export default function Catalogue() {
   const { data: patients, isLoading: loadingPatients } = useQuery({
     queryKey: ['patients'],
     queryFn: () => api.entities.Patient.list('name'),
+    initialData: [],
+  });
+
+  const { data: treatmentEntriesAll } = useQuery({
+    queryKey: ['treatmentEntriesCatalogue'],
+    queryFn: () => api.entities.TreatmentEntry.list('-date'),
+    initialData: [],
+  });
+
+  const { data: clinicalNotesAll } = useQuery({
+    queryKey: ['clinicalNotes'],
+    queryFn: () => api.entities.ClinicalNote.list('-visit_date'),
     initialData: [],
   });
 
@@ -192,6 +212,25 @@ export default function Catalogue() {
     onError: (err) => showError("Could not delete patient", err),
   });
 
+  const createClinicalNoteMutation = useMutation({
+    mutationFn: (payload) => api.entities.ClinicalNote.create(payload),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['clinicalNotes'] });
+      toast({
+        title: "Clinical note saved",
+        description: "Added to this patient’s file.",
+        className: "bg-green-50 border-green-200",
+      });
+    },
+    onError: (err) =>
+      showError(
+        "Could not save clinical note",
+        err?.message?.includes("clinical_notes")
+          ? { message: "Run database/add-clinical-notes.sql in Supabase first, then try again." }
+          : err,
+      ),
+  });
+
   const updateRecurringExpenseMutation = useMutation({
     mutationFn: ({ id, data }) => api.entities.Expense.update(id, data),
     onSuccess: () => {
@@ -224,6 +263,34 @@ export default function Catalogue() {
   const handleDeleteClick = (item, type) => {
     setItemToDelete({ ...item, type });
     setDeleteConfirmOpen(true);
+  };
+
+  const openClinicalFile = (patient) => {
+    setClinicalFilePatient(patient);
+    setClinicalNoteDraft({
+      visit_date: format(new Date(), "yyyy-MM-dd"),
+      treatment_entry_id: "",
+      raw_narrative: "",
+    });
+  };
+
+  const handleClinicalNoteSubmit = (e) => {
+    e.preventDefault();
+    if (!clinicalFilePatient) return;
+    const text = clinicalNoteDraft.raw_narrative.trim();
+    if (!text) {
+      showError("Add a note", { message: "Enter what was done and how the patient responded." });
+      return;
+    }
+    createClinicalNoteMutation.mutate({
+      patient_id: clinicalFilePatient.id,
+      treatment_entry_id: clinicalNoteDraft.treatment_entry_id || null,
+      visit_date: clinicalNoteDraft.visit_date,
+      source: "manual",
+      raw_narrative: text,
+      structured: { clinical_summary: text },
+    });
+    setClinicalNoteDraft((prev) => ({ ...prev, raw_narrative: "" }));
   };
 
   const confirmDelete = () => {
@@ -716,6 +783,15 @@ export default function Catalogue() {
                       <Button
                         variant="outline"
                         size="sm"
+                        onClick={() => openClinicalFile(patient)}
+                        className="rounded-lg border-gray-300 hover:bg-white"
+                        title="Clinical notes & visit record"
+                      >
+                        <FileText className="w-4 h-4" />
+                      </Button>
+                      <Button
+                        variant="outline"
+                        size="sm"
                         onClick={() => openDialog(patient, 'patient')}
                         className="rounded-lg border-gray-300 hover:bg-white"
                       >
@@ -1184,6 +1260,194 @@ export default function Catalogue() {
             </div>
           </DialogContent>
         </Dialog>
+
+        <Sheet
+          open={!!clinicalFilePatient}
+          onOpenChange={(open) => {
+            if (!open) setClinicalFilePatient(null);
+          }}
+        >
+          <SheetContent side="right" className="w-full sm:max-w-lg overflow-y-auto">
+            {clinicalFilePatient && (
+              <>
+                <SheetHeader>
+                  <SheetTitle className="text-[#1a2845]">
+                    Clinical file — {clinicalFilePatient.name}
+                  </SheetTitle>
+                  <SheetDescription>
+                    Structured visit notes for compliance and continuity. Add manually or use the Voice Diary to dictate the day’s visits.
+                  </SheetDescription>
+                </SheetHeader>
+                <div className="mt-6 space-y-6">
+                  <form onSubmit={handleClinicalNoteSubmit} className="space-y-4 rounded-xl border border-gray-200 bg-gray-50/80 p-4">
+                    <p className="text-xs font-semibold uppercase tracking-wide text-gray-600">
+                      Add clinical note
+                    </p>
+                    <div className="space-y-2">
+                      <Label htmlFor="cn-date">Visit date</Label>
+                      <Input
+                        id="cn-date"
+                        type="date"
+                        value={clinicalNoteDraft.visit_date}
+                        onChange={(e) =>
+                          setClinicalNoteDraft((p) => ({
+                            ...p,
+                            visit_date: e.target.value,
+                          }))
+                        }
+                        className="rounded-xl"
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label>Link to visit (optional)</Label>
+                      <Select
+                        value={clinicalNoteDraft.treatment_entry_id || "none"}
+                        onValueChange={(v) =>
+                          setClinicalNoteDraft((p) => ({
+                            ...p,
+                            treatment_entry_id: v === "none" ? "" : v,
+                          }))
+                        }
+                      >
+                        <SelectTrigger className="rounded-xl">
+                          <SelectValue placeholder="Not linked" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="none">Not linked to a visit</SelectItem>
+                          {(treatmentEntriesAll || [])
+                            .filter((t) => t.patient_id === clinicalFilePatient.id)
+                            .slice(0, 40)
+                            .map((t) => (
+                              <SelectItem key={t.id} value={t.id}>
+                                {format(new Date(t.date), "dd MMM yyyy")} —{" "}
+                                {t.treatment_name || "Treatment"}
+                              </SelectItem>
+                            ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="cn-text">Clinical narrative</Label>
+                      <Textarea
+                        id="cn-text"
+                        rows={4}
+                        placeholder="e.g. Botox — 3 areas, 50 units. No complications. Patient happy. Review 2 weeks."
+                        value={clinicalNoteDraft.raw_narrative}
+                        onChange={(e) =>
+                          setClinicalNoteDraft((p) => ({
+                            ...p,
+                            raw_narrative: e.target.value,
+                          }))
+                        }
+                        className="rounded-xl"
+                      />
+                    </div>
+                    <Button
+                      type="submit"
+                      className="w-full rounded-xl bg-[#1a2845] hover:bg-[#0f1829]"
+                      disabled={createClinicalNoteMutation.isPending}
+                    >
+                      {createClinicalNoteMutation.isPending ? "Saving…" : "Save to patient file"}
+                    </Button>
+                  </form>
+
+                  <div>
+                    <p className="text-xs font-semibold uppercase tracking-wide text-gray-600 mb-3">
+                      History
+                    </p>
+                    <div className="space-y-3">
+                      {(clinicalNotesAll || [])
+                        .filter((n) => n.patient_id === clinicalFilePatient.id)
+                        .map((note) => {
+                          const s =
+                            note.structured && typeof note.structured === "object"
+                              ? note.structured
+                              : {};
+                          return (
+                            <div
+                              key={note.id}
+                              className="rounded-xl border border-gray-200 bg-white p-3 text-sm"
+                            >
+                              <div className="flex justify-between gap-2 text-xs text-gray-500 mb-2">
+                                <span>
+                                  {format(new Date(note.visit_date), "dd MMM yyyy")}
+                                </span>
+                                <span className="capitalize">
+                                  {(note.source || "").replace(/_/g, " ")}
+                                </span>
+                              </div>
+                              <p className="font-medium text-gray-900">
+                                {s.clinical_summary || note.raw_narrative || "—"}
+                              </p>
+                              {(s.procedure_summary ||
+                                s.areas ||
+                                s.units != null ||
+                                s.complications ||
+                                s.patient_feedback ||
+                                s.next_steps) && (
+                                <dl className="mt-2 space-y-1 text-xs text-gray-600">
+                                  {s.procedure_summary && (
+                                    <div>
+                                      <dt className="font-medium text-gray-700 inline">Procedure: </dt>
+                                      <dd className="inline">{s.procedure_summary}</dd>
+                                    </div>
+                                  )}
+                                  {s.areas && (
+                                    <div>
+                                      <dt className="font-medium text-gray-700 inline">Areas: </dt>
+                                      <dd className="inline">{s.areas}</dd>
+                                    </div>
+                                  )}
+                                  {s.units != null && s.units !== "" && (
+                                    <div>
+                                      <dt className="font-medium text-gray-700 inline">Units: </dt>
+                                      <dd className="inline">{s.units}</dd>
+                                    </div>
+                                  )}
+                                  {s.complications && (
+                                    <div>
+                                      <dt className="font-medium text-gray-700 inline">Complications: </dt>
+                                      <dd className="inline">{s.complications}</dd>
+                                    </div>
+                                  )}
+                                  {s.patient_feedback && (
+                                    <div>
+                                      <dt className="font-medium text-gray-700 inline">Patient: </dt>
+                                      <dd className="inline">{s.patient_feedback}</dd>
+                                    </div>
+                                  )}
+                                  {s.next_steps && (
+                                    <div>
+                                      <dt className="font-medium text-gray-700 inline">Next steps: </dt>
+                                      <dd className="inline">{s.next_steps}</dd>
+                                    </div>
+                                  )}
+                                </dl>
+                              )}
+                              {note.raw_narrative &&
+                                s.clinical_summary &&
+                                note.raw_narrative !== s.clinical_summary && (
+                                  <p className="mt-2 text-xs text-gray-500 italic border-t pt-2">
+                                    Original: {note.raw_narrative}
+                                  </p>
+                                )}
+                            </div>
+                          );
+                        })}
+                      {(clinicalNotesAll || []).filter(
+                        (n) => n.patient_id === clinicalFilePatient.id,
+                      ).length === 0 && (
+                        <p className="text-sm text-gray-500 py-4 text-center">
+                          No clinical notes yet. Add one above or dictate in Voice Diary.
+                        </p>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              </>
+            )}
+          </SheetContent>
+        </Sheet>
       </div>
     </div>
   );
