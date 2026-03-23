@@ -3,17 +3,17 @@ import { PieChart, Pie, Cell, ResponsiveContainer, Legend, Tooltip } from 'recha
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
 const CATEGORY_COLORS = {
-  'Face': '#1a2845',
-  'Body': '#2a3f5f',
-  'Skin': '#3a5575',
-  'Wellness': '#d4a740',
-  'Consultation': '#c9962f',
-  'Other': '#90a4ae'
+  'Face': '#5a7397',
+  'Body': '#6f88aa',
+  'Skin': '#8599b7',
+  'Wellness': '#c7ac74',
+  'Consultation': '#d6bea1',
+  'Other': '#a8b3bf'
 };
 
 const TREATMENT_COLORS = [
-  '#1a2845', '#2a3f5f', '#3a5575', '#4a6585', '#d4a740',
-  '#c9962f', '#b8851f', '#5a7595', '#6a85a5', '#7a95b5'
+  '#5a7397', '#6f88aa', '#8599b7', '#9aabca', '#c7ac74',
+  '#d6bea1', '#b9c5d2', '#7c93b2', '#8ea4c1', '#9fb4cf'
 ];
 
 const CustomTooltip = ({ active, payload }) => {
@@ -21,25 +21,25 @@ const CustomTooltip = ({ active, payload }) => {
     const data = payload[0].payload;
     
     return (
-      <div className="bg-white p-4 rounded-xl shadow-lg border border-gray-200">
-        <p className="text-sm font-semibold text-gray-900 mb-3">{data.name}</p>
+      <div className="bg-white p-4 rounded-xl shadow-lg border border-[#e5e7eb]">
+        <p className="text-sm font-medium text-slate-800 mb-3">{data.name}</p>
         
         <div className="space-y-2">
           <div className="flex items-center justify-between gap-6">
-            <span className="text-xs text-gray-600">Treatments</span>
-            <span className="text-sm font-semibold text-gray-900">{data.count}</span>
+            <span className="text-xs text-slate-500">Treatments</span>
+            <span className="text-sm font-medium text-slate-900">{data.count}</span>
           </div>
           <div className="flex items-center justify-between gap-6">
-            <span className="text-xs text-gray-600">Revenue</span>
-            <span className="text-sm font-semibold text-green-600">£{data.revenue.toFixed(2)}</span>
+            <span className="text-xs text-slate-500">Revenue</span>
+            <span className="text-sm font-medium text-emerald-700">£{data.revenue.toFixed(2)}</span>
           </div>
           <div className="flex items-center justify-between gap-6">
-            <span className="text-xs text-gray-600">Profit</span>
-            <span className="text-sm font-semibold text-[#1a2845]">£{data.profit.toFixed(2)}</span>
+            <span className="text-xs text-slate-500">Profit</span>
+            <span className="text-sm font-medium text-[#435b7d]">£{data.profit.toFixed(2)}</span>
           </div>
           <div className="flex items-center justify-between gap-6">
-            <span className="text-xs text-gray-600">Percentage</span>
-            <span className="text-sm font-semibold text-gray-900">{data.percentage}%</span>
+            <span className="text-xs text-slate-500">Percentage</span>
+            <span className="text-sm font-medium text-slate-900">{data.percentage}%</span>
           </div>
         </div>
       </div>
@@ -63,7 +63,7 @@ const renderCustomLabel = ({ cx, cy, midAngle, innerRadius, outerRadius, percent
       fill="white" 
       textAnchor={x > cx ? 'start' : 'end'} 
       dominantBaseline="central"
-      className="text-xs font-semibold"
+      className="text-[11px] font-medium"
     >
       {`${(percent * 100).toFixed(0)}%`}
     </text>
@@ -86,9 +86,9 @@ export default function CategoryBreakdown({ categories, treatments }) {
   }));
 
   return (
-    <div className="bg-white rounded-2xl p-6 shadow-sm border border-gray-100">
+    <div className="bg-white rounded-2xl p-6 shadow-sm border border-[#e9e6df]">
       <div className="flex items-center justify-between mb-6">
-        <h3 className="text-lg font-semibold text-gray-900">Revenue & Profit Breakdown</h3>
+        <h3 className="text-lg font-medium text-[#1f2f46]">Revenue & Profit Breakdown</h3>
         <Select value={viewBy} onValueChange={setViewBy}>
           <SelectTrigger className="w-40 rounded-xl border-gray-300 h-10">
             <SelectValue />
@@ -124,17 +124,17 @@ export default function CategoryBreakdown({ categories, treatments }) {
 
           <div className="mt-6 grid grid-cols-2 gap-3">
             {chartData.map((item, index) => (
-              <div key={index} className="flex items-center justify-between bg-gray-50 rounded-lg p-3">
+              <div key={index} className="flex items-center justify-between bg-[#f8fafc] rounded-lg p-3 border border-[#eef1f5]">
                 <div className="flex items-center gap-2">
                   <div 
                     className="w-3 h-3 rounded-full flex-shrink-0"
                     style={{ backgroundColor: item.color }}
                   />
-                  <span className="text-sm font-medium text-gray-900 truncate">{item.name}</span>
+                  <span className="text-sm font-medium text-slate-800 truncate">{item.name}</span>
                 </div>
                 <div className="text-right">
-                  <p className="text-sm font-semibold text-gray-900">£{item.revenue.toFixed(0)}</p>
-                  <p className="text-xs text-gray-500">{item.count} treatment{item.count !== 1 ? 's' : ''}</p>
+                  <p className="text-sm font-medium text-slate-900">£{item.revenue.toFixed(0)}</p>
+                  <p className="text-xs text-slate-500">{item.count} treatment{item.count !== 1 ? 's' : ''}</p>
                 </div>
               </div>
             ))}

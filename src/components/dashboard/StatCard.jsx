@@ -3,30 +3,32 @@ import { TrendingUp, TrendingDown } from 'lucide-react';
 
 export default function StatCard({ title, value, trend, trendValue, icon: Icon, valueColor }) {
   return (
-    <div className="bg-white/90 backdrop-blur-xl rounded-3xl p-6 border border-[#f0e9d8] shadow-lg shadow-gray-200/50 hover:shadow-xl hover:shadow-[#d4a740]/10 transition-all duration-300">
+    <div className="bg-white rounded-2xl p-6 border border-[#e9e6df] shadow-sm transition-shadow duration-200 hover:shadow-md">
       <div className="flex items-start justify-between mb-4">
-        <div className={`w-14 h-14 rounded-2xl bg-gradient-to-br flex items-center justify-center shadow-lg ${
-          valueColor === 'text-green-600' ? 'from-green-400 to-emerald-500 shadow-green-200' :
-          valueColor === 'text-red-600' ? 'from-red-400 to-rose-500 shadow-red-200' :
-          'from-[#1a2845] to-[#2a3f5f] shadow-[#1a2845]/30'
+        <div className={`w-11 h-11 rounded-xl flex items-center justify-center border ${
+          valueColor === 'text-green-600'
+            ? 'bg-emerald-50 border-emerald-100 text-emerald-700'
+            : valueColor === 'text-red-600'
+              ? 'bg-rose-50 border-rose-100 text-rose-700'
+              : 'bg-[#f4f6fa] border-[#e6eaf2] text-[#334866]'
         }`}>
-          <Icon className="w-7 h-7 text-white" />
+          <Icon className="w-5 h-5" />
         </div>
         {trend && (
-          <div className={`flex items-center gap-1 px-3 py-1 rounded-full text-xs font-semibold ${
+          <div className={`flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-medium ${
             trend === 'up' 
-              ? 'bg-green-50 text-green-700' 
-              : 'bg-red-50 text-red-700'
+              ? 'bg-emerald-50 text-emerald-700' 
+              : 'bg-rose-50 text-rose-700'
           }`}>
             {trend === 'up' ? <TrendingUp className="w-3 h-3" /> : <TrendingDown className="w-3 h-3" />}
             {trendValue}
           </div>
         )}
       </div>
-      <h3 className="text-sm font-medium text-gray-600 mb-2">{title}</h3>
-      <p className={`text-3xl font-bold ${valueColor || 'text-gray-900'}`}>{value}</p>
+      <h3 className="text-sm font-medium text-slate-500 mb-2">{title}</h3>
+      <p className={`text-[30px] leading-none tracking-tight font-semibold ${valueColor || 'text-[#1a2845]'}`}>{value}</p>
       {trend && (
-        <p className="text-xs text-gray-500 mt-2">vs. previous period</p>
+        <p className="text-xs text-slate-400 mt-2">vs previous period</p>
       )}
     </div>
   );

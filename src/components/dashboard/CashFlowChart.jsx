@@ -8,30 +8,30 @@ const CustomTooltip = ({ active, payload, label }) => {
     const net = cashIn - cashOut;
     
     return (
-      <div className="bg-white p-4 rounded-xl shadow-lg border border-gray-200">
-        <p className="text-sm font-semibold text-gray-900 mb-3">{label}</p>
+      <div className="bg-white p-4 rounded-xl shadow-lg border border-[#e5e7eb]">
+        <p className="text-sm font-medium text-slate-800 mb-3">{label}</p>
         
         <div className="space-y-2">
           <div className="flex items-center justify-between gap-6">
             <div className="flex items-center gap-2">
-              <div className="w-3 h-3 rounded-full bg-green-600" />
-              <span className="text-xs text-gray-600">Cash In</span>
+              <div className="w-2.5 h-2.5 rounded-full bg-emerald-500" />
+              <span className="text-xs text-slate-500">Cash In</span>
             </div>
-            <span className="text-sm font-semibold text-gray-900">£{cashIn.toFixed(2)}</span>
+            <span className="text-sm font-medium text-slate-900">£{cashIn.toFixed(2)}</span>
           </div>
 
           <div className="flex items-center justify-between gap-6">
             <div className="flex items-center gap-2">
-              <div className="w-3 h-3 rounded-full bg-red-600" />
-              <span className="text-xs text-gray-600">Cash Out</span>
+              <div className="w-2.5 h-2.5 rounded-full bg-rose-500" />
+              <span className="text-xs text-slate-500">Cash Out</span>
             </div>
-            <span className="text-sm font-semibold text-gray-900">£{cashOut.toFixed(2)}</span>
+            <span className="text-sm font-medium text-slate-900">£{cashOut.toFixed(2)}</span>
           </div>
           
-          <div className="pt-2 border-t border-gray-200">
+          <div className="pt-2 border-t border-slate-200">
             <div className="flex items-center justify-between gap-6">
-              <span className="text-xs font-medium text-gray-700">Net Cash Flow</span>
-              <span className={`text-sm font-semibold ${net >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+              <span className="text-xs font-medium text-slate-700">Net Cash Flow</span>
+              <span className={`text-sm font-medium ${net >= 0 ? 'text-emerald-700' : 'text-rose-700'}`}>
                 £{net.toFixed(2)}
               </span>
             </div>
@@ -45,23 +45,23 @@ const CustomTooltip = ({ active, payload, label }) => {
 
 export default function CashFlowChart({ data }) {
   return (
-    <div className="bg-white rounded-2xl p-6 shadow-sm border border-gray-100">
-      <h3 className="text-lg font-semibold text-gray-900 mb-6">Cash In / Cash Out</h3>
+    <div className="bg-white rounded-2xl p-6 shadow-sm border border-[#e9e6df]">
+      <h3 className="text-lg font-medium text-[#1f2f46] mb-6">Cash In / Cash Out</h3>
       
       {data.length > 0 ? (
         <ResponsiveContainer width="100%" height={300}>
           <BarChart data={data}>
-            <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" vertical={false} />
+            <CartesianGrid strokeDasharray="3 3" stroke="#eef0f3" vertical={false} />
             <XAxis 
               dataKey="month" 
-              stroke="#6b7280" 
-              style={{ fontSize: '13px' }}
+              stroke="#94a3b8" 
+              style={{ fontSize: '12px' }}
               axisLine={false}
               tickLine={false}
             />
             <YAxis 
-              stroke="#6b7280" 
-              style={{ fontSize: '13px' }}
+              stroke="#94a3b8" 
+              style={{ fontSize: '12px' }}
               axisLine={false}
               tickLine={false}
               tickFormatter={(value) => `£${value}`}
@@ -73,14 +73,14 @@ export default function CashFlowChart({ data }) {
             />
             <Bar 
               dataKey="cashIn" 
-              fill="#16a34a" 
-              radius={[8, 8, 0, 0]}
+              fill="#34b37b" 
+              radius={[6, 6, 0, 0]}
               name="Cash In"
             />
             <Bar 
               dataKey="cashOut" 
-              fill="#dc2626" 
-              radius={[8, 8, 0, 0]}
+              fill="#e07a7a" 
+              radius={[6, 6, 0, 0]}
               name="Cash Out"
             />
           </BarChart>

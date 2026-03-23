@@ -27,20 +27,20 @@ const CustomTooltip = ({ active, payload, label }) => {
     }
     
     return (
-      <div className="bg-white p-4 rounded-xl shadow-lg border border-gray-200">
-        <p className="text-sm font-semibold text-gray-900 mb-3">{label}</p>
+      <div className="bg-white p-4 rounded-xl shadow-lg border border-[#e5e7eb]">
+        <p className="text-sm font-medium text-slate-800 mb-3">{label}</p>
         
         <div className="space-y-2">
           <div>
             <div className="flex items-center justify-between gap-4">
               <div className="flex items-center gap-2">
-                <div className="w-3 h-3 rounded-full bg-green-600" />
-                <span className="text-xs text-gray-600">Revenue</span>
+                <div className="w-2.5 h-2.5 rounded-full bg-emerald-500" />
+                <span className="text-xs text-slate-500">Revenue</span>
               </div>
-              <span className="text-sm font-semibold text-gray-900">£{revenue.toFixed(2)}</span>
+              <span className="text-sm font-medium text-slate-900">£{revenue.toFixed(2)}</span>
             </div>
             {revenueChange !== null && (
-              <p className={`text-xs mt-1 ml-5 ${parseFloat(revenueChange) >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+              <p className={`text-xs mt-1 ml-5 ${parseFloat(revenueChange) >= 0 ? 'text-emerald-600' : 'text-rose-600'}`}>
                 {parseFloat(revenueChange) >= 0 ? '↑' : '↓'} {Math.abs(parseFloat(revenueChange))}% vs prev month
               </p>
             )}
@@ -49,13 +49,13 @@ const CustomTooltip = ({ active, payload, label }) => {
           <div>
             <div className="flex items-center justify-between gap-4">
               <div className="flex items-center gap-2">
-                <div className="w-3 h-3 rounded-full bg-red-600" />
-                <span className="text-xs text-gray-600">Costs</span>
+                <div className="w-2.5 h-2.5 rounded-full bg-rose-500" />
+                <span className="text-xs text-slate-500">Costs</span>
               </div>
-              <span className="text-sm font-semibold text-gray-900">£{costs.toFixed(2)}</span>
+              <span className="text-sm font-medium text-slate-900">£{costs.toFixed(2)}</span>
             </div>
             {costsChange !== null && (
-              <p className={`text-xs mt-1 ml-5 ${parseFloat(costsChange) >= 0 ? 'text-red-600' : 'text-green-600'}`}>
+              <p className={`text-xs mt-1 ml-5 ${parseFloat(costsChange) >= 0 ? 'text-rose-600' : 'text-emerald-600'}`}>
                 {parseFloat(costsChange) >= 0 ? '↑' : '↓'} {Math.abs(parseFloat(costsChange))}% vs prev month
               </p>
             )}
@@ -64,13 +64,13 @@ const CustomTooltip = ({ active, payload, label }) => {
           <div>
             <div className="flex items-center justify-between gap-4">
               <div className="flex items-center gap-2">
-                <div className="w-3 h-3 rounded-full bg-[#1a2845]" />
-                <span className="text-xs text-gray-600">Profit</span>
+                <div className="w-2.5 h-2.5 rounded-full bg-[#50668a]" />
+                <span className="text-xs text-slate-500">Profit</span>
               </div>
-              <span className="text-sm font-semibold text-gray-900">£{profit.toFixed(2)}</span>
+              <span className="text-sm font-medium text-slate-900">£{profit.toFixed(2)}</span>
             </div>
             {profitChange !== null && (
-              <p className={`text-xs mt-1 ml-5 ${parseFloat(profitChange) >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+              <p className={`text-xs mt-1 ml-5 ${parseFloat(profitChange) >= 0 ? 'text-emerald-600' : 'text-rose-600'}`}>
                 {parseFloat(profitChange) >= 0 ? '↑' : '↓'} {Math.abs(parseFloat(profitChange))}% vs prev month
               </p>
             )}
@@ -94,24 +94,24 @@ export default function MonthlyChart({ data }) {
   const isSingleMonth = data.length <= 1;
 
   return (
-    <div className="bg-white rounded-2xl p-6 shadow-sm border border-gray-100">
-      <h3 className="text-lg font-semibold text-gray-900 mb-6">
+    <div className="bg-white rounded-2xl p-6 shadow-sm border border-[#e9e6df]">
+      <h3 className="text-lg font-medium text-[#1f2f46] mb-6">
         {isSingleMonth ? 'Revenue, Costs & Profit' : 'Revenue, Costs & Profit Trend'}
       </h3>
       <ResponsiveContainer width="100%" height={300}>
         {isSingleMonth ? (
           <BarChart data={enhancedData}>
-            <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" vertical={false} />
+            <CartesianGrid strokeDasharray="3 3" stroke="#eef0f3" vertical={false} />
             <XAxis 
               dataKey="month" 
-              stroke="#6b7280" 
-              style={{ fontSize: '13px' }}
+              stroke="#94a3b8" 
+              style={{ fontSize: '12px' }}
               axisLine={false}
               tickLine={false}
             />
             <YAxis 
-              stroke="#6b7280" 
-              style={{ fontSize: '13px' }}
+              stroke="#94a3b8" 
+              style={{ fontSize: '12px' }}
               axisLine={false}
               tickLine={false}
               tickFormatter={(value) => `£${value}`}
@@ -123,36 +123,36 @@ export default function MonthlyChart({ data }) {
             />
             <Bar 
               dataKey="revenue" 
-              fill="#16a34a" 
-              radius={[8, 8, 0, 0]}
+              fill="#34b37b" 
+              radius={[6, 6, 0, 0]}
               name="Revenue"
             />
             <Bar 
               dataKey="costs" 
-              fill="#dc2626" 
-              radius={[8, 8, 0, 0]}
+              fill="#e07a7a" 
+              radius={[6, 6, 0, 0]}
               name="Costs"
             />
             <Bar 
               dataKey="profit" 
-              fill="#1a2845" 
-              radius={[8, 8, 0, 0]}
+              fill="#50668a" 
+              radius={[6, 6, 0, 0]}
               name="Profit"
             />
           </BarChart>
         ) : (
           <LineChart data={enhancedData}>
-            <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" vertical={false} />
+            <CartesianGrid strokeDasharray="3 3" stroke="#eef0f3" vertical={false} />
             <XAxis 
               dataKey="month" 
-              stroke="#6b7280" 
-              style={{ fontSize: '13px' }}
+              stroke="#94a3b8" 
+              style={{ fontSize: '12px' }}
               axisLine={false}
               tickLine={false}
             />
             <YAxis 
-              stroke="#6b7280" 
-              style={{ fontSize: '13px' }}
+              stroke="#94a3b8" 
+              style={{ fontSize: '12px' }}
               axisLine={false}
               tickLine={false}
               tickFormatter={(value) => `£${value}`}
@@ -165,28 +165,28 @@ export default function MonthlyChart({ data }) {
             <Line 
               type="monotone" 
               dataKey="revenue" 
-              stroke="#16a34a" 
-              strokeWidth={3}
-              dot={{ fill: '#16a34a', strokeWidth: 2, r: 5 }}
-              activeDot={{ r: 7 }}
+              stroke="#34b37b" 
+              strokeWidth={2.25}
+              dot={{ fill: '#34b37b', strokeWidth: 1.5, r: 4 }}
+              activeDot={{ r: 6 }}
               name="Revenue"
             />
             <Line 
               type="monotone" 
               dataKey="costs" 
-              stroke="#dc2626" 
-              strokeWidth={3}
-              dot={{ fill: '#dc2626', strokeWidth: 2, r: 5 }}
-              activeDot={{ r: 7 }}
+              stroke="#e07a7a" 
+              strokeWidth={2.25}
+              dot={{ fill: '#e07a7a', strokeWidth: 1.5, r: 4 }}
+              activeDot={{ r: 6 }}
               name="Costs"
             />
             <Line 
               type="monotone" 
               dataKey="profit" 
-              stroke="#1a2845" 
-              strokeWidth={3}
-              dot={{ fill: '#1a2845', strokeWidth: 2, r: 5 }}
-              activeDot={{ r: 7 }}
+              stroke="#50668a" 
+              strokeWidth={2.25}
+              dot={{ fill: '#50668a', strokeWidth: 1.5, r: 4 }}
+              activeDot={{ r: 6 }}
               name="Profit"
             />
           </LineChart>

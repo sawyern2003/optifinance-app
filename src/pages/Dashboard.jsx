@@ -446,24 +446,24 @@ export default function Dashboard() {
   };
 
   return (
-    <div className="p-6 md:p-10 bg-[#F5F6F8] min-h-screen">
+    <div className="p-6 md:p-10 bg-[#f7f7f5] min-h-screen">
       <div className="max-w-7xl mx-auto">
         <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-8 gap-4">
           <div>
-            <h1 className="text-3xl font-light tracking-tight text-[#1a2845] mb-2">Dashboard</h1>
-            <p className="text-sm text-gray-500 font-light">
+            <h1 className="text-3xl font-medium tracking-tight text-[#24364f] mb-2">Dashboard</h1>
+            <p className="text-sm text-slate-500 font-light">
               Welcome back{clinicName ? `, ${clinicName}` : ''}
             </p>
           </div>
           <div className="flex gap-3">
             <Link to={createPageUrl("QuickAdd")}>
-              <Button className="bg-[#1a2845] hover:bg-[#0f1829] text-white rounded-lg px-5 h-10 text-sm font-light tracking-wide uppercase">
+              <Button className="bg-[#2e4463] hover:bg-[#24364f] text-white rounded-lg px-5 h-10 text-sm font-medium tracking-wide">
                 <Plus className="w-4 h-4 mr-2" />
                 Quick Add
               </Button>
             </Link>
             <Link to={createPageUrl("Reports")}>
-              <Button variant="outline" className="border-gray-300 hover:bg-gray-50 rounded-lg px-5 h-10 text-sm font-light tracking-wide uppercase text-[#1a2845]">
+              <Button variant="outline" className="border-slate-300 hover:bg-slate-50 rounded-lg px-5 h-10 text-sm font-medium tracking-wide text-[#2e4463]">
                 <Download className="w-4 h-4 mr-2" />
                 Export
               </Button>
@@ -473,32 +473,32 @@ export default function Dashboard() {
 
         {/* Outstanding Payments Alert or All Settled Up Message */}
         {allTimeOutstanding > 0 ? (
-          <div className="mb-8 bg-white border border-gray-200 rounded-lg p-6">
+          <div className="mb-8 bg-white border border-[#e9e6df] rounded-2xl p-6 shadow-sm">
             <div className="flex items-start gap-4">
               <div className="flex-1">
                 <div className="flex items-center gap-3 mb-3">
-                  <h3 className="text-base font-light text-[#1a2845] tracking-tight">Outstanding Payments</h3>
-                  <span className="text-xs font-light px-2 py-1 rounded bg-gray-100 text-gray-600 uppercase tracking-wide">
+                  <h3 className="text-base font-medium text-[#24364f] tracking-tight">Outstanding Payments</h3>
+                  <span className="text-xs font-medium px-2 py-1 rounded bg-slate-100 text-slate-600 tracking-wide">
                     All Time
                   </span>
                 </div>
-                <p className="text-gray-700 mb-4 font-light">
-                  <span className="text-2xl font-light text-[#1a2845]">£{allTimeOutstanding.toFixed(2)}</span> in pending and partial payments
+                <p className="text-slate-600 mb-4 font-light">
+                  <span className="text-2xl font-medium text-[#24364f]">£{allTimeOutstanding.toFixed(2)}</span> in pending and partial payments
                 </p>
                 {allTimeOutstanding >= 200 && (
-                  <div className="bg-gray-50 rounded-lg p-4 mb-4 border border-gray-200">
-                    <p className="text-sm text-gray-700 mb-3 font-light">
+                  <div className="bg-[#fafaf9] rounded-xl p-4 mb-4 border border-[#ebe9e3]">
+                    <p className="text-sm text-slate-600 mb-3 font-light">
                       Send professional invoices to your patients to get paid faster. Generate invoices from the Records page.
                     </p>
                     <div className="flex gap-2">
                       <Link to={createPageUrl("Records")}>
-                        <Button size="sm" className="bg-[#1a2845] hover:bg-[#0f1829] text-white rounded-lg text-xs font-light tracking-wide uppercase h-8">
+                        <Button size="sm" className="bg-[#2e4463] hover:bg-[#24364f] text-white rounded-lg text-xs font-medium tracking-wide h-8">
                           <FileText className="w-3 h-3 mr-2" />
                           Generate Invoices
                         </Button>
                       </Link>
                       <Link to={createPageUrl("Invoices")}>
-                        <Button size="sm" variant="outline" className="border-gray-300 text-gray-700 hover:bg-gray-50 rounded-lg text-xs font-light h-8">
+                        <Button size="sm" variant="outline" className="border-slate-300 text-slate-700 hover:bg-slate-50 rounded-lg text-xs font-medium h-8">
                           View All Invoices
                         </Button>
                       </Link>
@@ -506,7 +506,7 @@ export default function Dashboard() {
                   </div>
                 )}
                 <Link to={createPageUrl("Records")}>
-                  <Button variant="outline" size="sm" className="border-gray-300 text-gray-700 hover:bg-gray-50 rounded-lg text-xs font-light h-8">
+                  <Button variant="outline" size="sm" className="border-slate-300 text-slate-700 hover:bg-slate-50 rounded-lg text-xs font-medium h-8">
                     View Unpaid Records
                   </Button>
                 </Link>
@@ -514,11 +514,11 @@ export default function Dashboard() {
             </div>
           </div>
         ) : (
-          <div className="mb-8 bg-white border border-gray-200 rounded-lg p-6">
+          <div className="mb-8 bg-white border border-[#e9e6df] rounded-2xl p-6 shadow-sm">
             <div className="flex items-start gap-4">
               <div className="flex-1">
-                <h3 className="text-base font-light text-[#1a2845] mb-2 tracking-tight">All Settled Up</h3>
-                <p className="text-gray-700 font-light">
+                <h3 className="text-base font-medium text-[#24364f] mb-2 tracking-tight">All Settled Up</h3>
+                <p className="text-slate-600 font-light">
                   All treatments have been paid in full.
                 </p>
               </div>
@@ -526,15 +526,15 @@ export default function Dashboard() {
           </div>
         )}
 
-        <div className="bg-white border border-gray-200 rounded-lg p-5 mb-8">
+        <div className="bg-white border border-[#e9e6df] rounded-2xl p-5 mb-8 shadow-sm">
           <div className="flex flex-col md:flex-row md:items-center gap-4">
             <div className="flex-1">
-              <h3 className="text-xs font-medium text-gray-500 uppercase tracking-wide mb-1">Date Range</h3>
-              <p className="text-sm text-gray-700 font-light">{getDateRangeLabel()}</p>
+              <h3 className="text-xs font-medium text-slate-500 tracking-wide mb-1">Date Range</h3>
+              <p className="text-sm text-slate-700 font-light">{getDateRangeLabel()}</p>
             </div>
             <div className="flex flex-col md:flex-row gap-4 md:items-end">
               <Select value={dateRangePreset} onValueChange={setDateRangePreset}>
-                <SelectTrigger className="w-full md:w-48 rounded-lg border-gray-300 h-10 text-sm font-light">
+                <SelectTrigger className="w-full md:w-48 rounded-lg border-slate-300 h-10 text-sm font-light">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
@@ -551,23 +551,23 @@ export default function Dashboard() {
               {dateRangePreset === 'custom' && (
                 <>
                   <div className="space-y-1">
-                    <Label htmlFor="start-date" className="text-xs text-gray-600">Start Date</Label>
+                    <Label htmlFor="start-date" className="text-xs text-slate-600">Start Date</Label>
                     <Input
                       id="start-date"
                       type="date"
                       value={customStartDate}
                       onChange={(e) => setCustomStartDate(e.target.value)}
-                      className="rounded-lg border-gray-300 h-10 text-sm font-light"
+                      className="rounded-lg border-slate-300 h-10 text-sm font-light"
                     />
                   </div>
                   <div className="space-y-1">
-                    <Label htmlFor="end-date" className="text-xs text-gray-600 font-light">End Date</Label>
+                    <Label htmlFor="end-date" className="text-xs text-slate-600 font-light">End Date</Label>
                     <Input
                       id="end-date"
                       type="date"
                       value={customEndDate}
                       onChange={(e) => setCustomEndDate(e.target.value)}
-                      className="rounded-lg border-gray-300 h-10 text-sm font-light"
+                      className="rounded-lg border-slate-300 h-10 text-sm font-light"
                     />
                   </div>
                 </>
@@ -606,11 +606,11 @@ export default function Dashboard() {
         {/* The original date-range-specific outstanding payments alert is removed as per outline, replaced by the unified ALL TIME alert/message. */}
 
         {categoryBreakdown.length > 0 && currentStats.profit > lastMonthStats.profit && (
-          <div className="mb-8 bg-white border border-gray-200 rounded-lg p-5">
+          <div className="mb-8 bg-white border border-[#e9e6df] rounded-2xl p-5 shadow-sm">
             <div className="flex items-start gap-4">
               <div>
-                <h3 className="text-xs font-medium text-gray-500 uppercase tracking-wide mb-2">Performance Insight</h3>
-                <p className="text-sm text-gray-700 font-light">
+                <h3 className="text-xs font-medium text-slate-500 tracking-wide mb-2">Performance Insight</h3>
+                <p className="text-sm text-slate-600 font-light">
                   {`${categoryBreakdown[0].name} treatments are performing best with £${categoryBreakdown[0].revenue.toFixed(0)} revenue this period.`}
                 </p>
               </div>
