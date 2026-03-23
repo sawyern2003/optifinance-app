@@ -198,6 +198,18 @@ serve(async (req) => {
     page.drawLine({ start: { x: margin, y }, end: { x: margin + contentWidth, y }, color: line, thickness: 1 });
     step(22);
 
+    // Intro payment guidance near top of invoice
+    page.drawText(
+      `Thank you for your visit to ${clinicName}. Please make your payment to the`,
+      { x: margin, y, font, size: 10.5, color: muted },
+    );
+    step(14);
+    page.drawText(
+      "bank details below at your earliest convenience. We hope to see you again soon.",
+      { x: margin, y, font, size: 10.5, color: muted },
+    );
+    step(18);
+
     // Customer info block
     page.drawText("Customer Info:", { x: margin, y, font: fontBold, size: 11, color: muted });
     step(18);
@@ -389,19 +401,19 @@ serve(async (req) => {
 
     // Bank details box
     if (hasBankDetails) {
-      const boxY = y - 70;
+      const boxY = y - 86;
       page.drawRectangle({
         x: margin,
         y: boxY,
         width: contentWidth,
-        height: 86,
+        height: 102,
         color: rgb(0.97, 0.98, 1),
       });
-      page.drawText("Bank Details", { x: margin + 10, y: boxY + 66, font: fontBold, size: 11, color: brand });
-      page.drawText(`Business Name: ${clinicName}`, { x: margin + 10, y: boxY + 48, font, size: 11, color: textColor });
-      if (bankName) page.drawText(`Bank Name: ${bankName}`, { x: margin + 10, y: boxY + 32, font, size: 11, color: textColor });
-      if (accountNumber) page.drawText(`Account Number: ${accountNumber}`, { x: margin + 10, y: boxY + 16, font, size: 11, color: textColor });
-      if (sortCode) page.drawText(`Sort Code: ${sortCode}`, { x: margin + 290, y: boxY + 16, font, size: 11, color: textColor });
+      page.drawText("Bank Details", { x: margin + 10, y: boxY + 82, font: fontBold, size: 11, color: brand });
+      page.drawText(`Business Name: ${clinicName}`, { x: margin + 10, y: boxY + 64, font, size: 11, color: textColor });
+      if (bankName) page.drawText(`Bank Name: ${bankName}`, { x: margin + 10, y: boxY + 48, font, size: 11, color: textColor });
+      if (accountNumber) page.drawText(`Account Number: ${accountNumber}`, { x: margin + 10, y: boxY + 32, font, size: 11, color: textColor });
+      if (sortCode) page.drawText(`Sort Code: ${sortCode}`, { x: margin + 10, y: boxY + 16, font, size: 11, color: textColor });
       y = boxY - 18;
     }
 
@@ -427,14 +439,7 @@ serve(async (req) => {
     // Footer
     const footerY = 40;
     page.drawLine({ start: { x: margin, y: footerY + 18 }, end: { x: margin + contentWidth, y: footerY + 18 }, color: line, thickness: 1 });
-    page.drawText(
-      `Thank you for your visit to ${clinicName}. Please make your payment to the`,
-      { x: margin, y: footerY + 2, font, size: 10, color: muted },
-    );
-    page.drawText(
-      "bank details above at your earliest convenience. We hope to see you again soon.",
-      { x: margin, y: footerY - 11, font, size: 10, color: muted },
-    );
+    page.drawText("Thank you for your business.", { x: margin, y: footerY, font, size: 10.5, color: muted });
 
     const pdfBytes = await pdfDoc.save();
 
