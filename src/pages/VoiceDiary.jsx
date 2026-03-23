@@ -1131,7 +1131,7 @@ export default function VoiceDiary() {
                     inset 0 1px 0 rgba(255, 255, 255, 0.2),
                     inset 0 -24px 50px rgba(37, 52, 72, 0.35),
                     inset 0 -8px 20px rgba(37, 52, 72, 0.22),
-                    0 0 0 1px rgba(195, 183, 156, ${0.28 + micReactive * 0.25}),
+                    0 0 0 1px rgba(195, 183, 156, ${0.34 + micReactive * 0.34}),
                     0 ${8 + micReactive * 14}px ${34 + micReactive * 40}px -${8}px rgba(90, 108, 132, ${0.16 + micReactive * 0.16})
                   `,
                   transition: "box-shadow 0.09s ease-out",
@@ -1147,8 +1147,8 @@ export default function VoiceDiary() {
               <div
                 className="pointer-events-none absolute inset-[10%] rounded-full border border-[#c7b79d]/45"
                 style={{
-                  opacity: 0.35 + micReactive * 0.36,
-                  boxShadow: `inset 0 0 ${20 + micReactive * 20}px rgba(199, 183, 157, ${0.05 + micReactive * 0.08})`,
+                  opacity: 0.42 + micReactive * 0.5,
+                  boxShadow: `inset 0 0 ${20 + micReactive * 24}px rgba(199, 183, 157, ${0.08 + micReactive * 0.12})`,
                   transition: "opacity 0.08s ease-out, box-shadow 0.08s ease-out",
                 }}
                 aria-hidden
