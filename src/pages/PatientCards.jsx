@@ -1,16 +1,10 @@
-import React, { useMemo, useState, useEffect } from "react";
+import React, { useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { format } from "date-fns";
 import { api } from "@/api/api";
 import { createPageUrl } from "@/utils";
-import {
-  Carousel,
-  CarouselContent,
-  CarouselItem,
-  CarouselNext,
-  CarouselPrevious,
-} from "@/components/ui/carousel";
+import { motion, AnimatePresence } from "framer-motion";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Badge } from "@/components/ui/badge";
@@ -23,7 +17,8 @@ import {
   Mail,
   Stethoscope,
   ChevronRight,
-  Sparkles,
+  ChevronLeft,
+  User,
 } from "lucide-react";
 
 function money(n) {
@@ -93,8 +88,7 @@ function PaymentBadge({ status }) {
 }
 
 export default function PatientCards() {
-  const [carouselApi, setCarouselApi] = useState(null);
-  const [slideIndex, setSlideIndex] = useState(0);
+  const [currentIndex, setCurrentIndex] = useState(0);
 
   const { data: patients = [], isLoading: loadingPatients } = useQuery({
     queryKey: ["patients"],
@@ -119,19 +113,17 @@ export default function PatientCards() {
     [patients, treatmentEntriesAll, clinicalNotesAll],
   );
 
-  useEffect(() => {
-    if (!carouselApi) return;
-    const sync = () => setSlideIndex(carouselApi.selectedScrollSnap());
-    sync();
-    carouselApi.on("select", sync);
-    carouselApi.on("reInit", sync);
-    return () => {
-      carouselApi.off("select", sync);
-      carouselApi.off("reInit", sync);
-    };
-  }, [carouselApi]);
-
   const loading = loadingPatients || loadingTreatments || loadingNotes;
+
+  const nextCard = () => {
+    setCurrentIndex((prev) => (prev + 1) % rows.length);
+  };
+
+  const prevCard = () => {
+    setCurrentIndex((prev) => (prev - 1 + rows.length) % rows.length);
+  };
+
+  const currentPatient = rows[currentIndex];
 
   if (loading && patients.length === 0) {
     return (
@@ -160,280 +152,336 @@ export default function PatientCards() {
     );
   }
 
+  if (!currentPatient) return null;
+
+  const { patient, treatments, notes, totalBilled, totalPaid, outstanding } = currentPatient;
+
   return (
-    <div className="pb-16 px-4 md:px-8 max-w-5xl mx-auto">
-      <div className="pt-6 md:pt-10 mb-2 text-center space-y-2">
-        <div className="inline-flex items-center gap-2 text-violet-700 text-xs font-semibold uppercase tracking-widest">
-          <Sparkles className="h-3.5 w-3.5" />
-          Clinical overview
-        </div>
-        <h1 className="text-3xl md:text-4xl font-bold tracking-tight text-[#0f172a]">
-          Patient cards
-        </h1>
-        <p className="text-slate-600 max-w-xl mx-auto text-sm md:text-base">
-          Swipe horizontally (or use the arrows) to move between patients. Each card shows treatment
-          history, notes, and what they&apos;ve paid versus what&apos;s outstanding.
-        </p>
-      </div>
+    <div className="min-h-screen pb-20 px-4 bg-gradient-to-br from-slate-50 via-white to-slate-100">
+      {/* Header */}
+      <div className="pt-8 pb-6 max-w-7xl mx-auto">
+        <div className="flex items-center justify-between mb-6">
+          <div>
+            <h1 className="text-3xl font-bold tracking-tight text-[#1a2845] mb-1">
+              Patient Cards
+            </h1>
+            <p className="text-sm text-slate-600">
+              {currentIndex + 1} of {rows.length} patients
+            </p>
+          </div>
 
-      <div className="flex items-center justify-center gap-3 mb-6">
-        <span className="text-sm font-medium text-slate-500">
-          {slideIndex + 1} <span className="text-slate-400">/</span> {rows.length}
-        </span>
-        <div className="flex gap-1">
-          {rows.map((_, i) => (
+          {/* Navigation */}
+          <div className="flex items-center gap-3">
             <button
-              key={i}
-              type="button"
-              aria-label={`Go to patient ${i + 1}`}
-              onClick={() => carouselApi?.scrollTo(i)}
-              className={`h-2 rounded-full transition-all duration-300 ${
-                i === slideIndex ? "w-6 bg-violet-600" : "w-2 bg-slate-300 hover:bg-slate-400"
-              }`}
-            />
-          ))}
+              onClick={prevCard}
+              className="group h-11 w-11 rounded-xl bg-white border-2 border-slate-200 shadow-sm hover:shadow-md hover:border-[#1a2845] transition-all duration-200 flex items-center justify-center disabled:opacity-50"
+              disabled={rows.length <= 1}
+            >
+              <ChevronLeft className="h-5 w-5 text-slate-600 group-hover:text-[#1a2845]" />
+            </button>
+            <button
+              onClick={nextCard}
+              className="group h-11 w-11 rounded-xl bg-[#1a2845] border-2 border-[#1a2845] shadow-md hover:shadow-lg hover:scale-105 transition-all duration-200 flex items-center justify-center disabled:opacity-50"
+              disabled={rows.length <= 1}
+            >
+              <ChevronRight className="h-5 w-5 text-white" />
+            </button>
+          </div>
         </div>
       </div>
 
-      <div className="relative">
-        <Carousel
-          setApi={setCarouselApi}
-          opts={{ align: "center", loop: false, dragFree: false }}
-          className="w-full"
-        >
-          <CarouselContent className="-ml-3 md:-ml-4 pb-4">
-            {rows.map(({ patient, treatments, notes, totalBilled, totalPaid, outstanding }) => (
-              <CarouselItem key={patient.id} className="pl-3 md:pl-4 basis-full md:basis-[92%] lg:basis-[88%]">
-                <div className="rounded-[1.75rem] overflow-hidden shadow-2xl shadow-slate-900/10 border border-white/60 bg-white/90 backdrop-blur-sm ring-1 ring-slate-200/80 min-h-[520px] flex flex-col">
-                  {/* Header */}
-                  <div className="relative px-6 pt-8 pb-10 text-white overflow-hidden shrink-0">
-                    <div
-                      className="absolute inset-0 bg-gradient-to-br from-[#1e1b4b] via-violet-800 to-fuchsia-700"
-                      aria-hidden
-                    />
-                    <div
-                      className="absolute inset-0 opacity-30 bg-[radial-gradient(ellipse_at_top_right,_var(--tw-gradient-stops))] from-white via-transparent to-transparent"
-                      aria-hidden
-                    />
-                    <div className="relative flex items-start gap-4">
-                      <div className="h-16 w-16 rounded-2xl bg-white/15 backdrop-blur-md flex items-center justify-center text-xl font-bold tracking-tight border border-white/20 shadow-lg">
-                        {patientInitials(patient.name)}
+      {/* Card Deck Container */}
+      <div className="relative max-w-6xl mx-auto" style={{ perspective: "2000px" }}>
+        <div className="relative h-[600px] flex items-center justify-center">
+          <AnimatePresence mode="wait">
+            <motion.div
+              key={currentIndex}
+              initial={{ rotateY: -20, opacity: 0, x: -100, scale: 0.9 }}
+              animate={{ rotateY: 0, opacity: 1, x: 0, scale: 1 }}
+              exit={{ rotateY: 20, opacity: 0, x: 100, scale: 0.9 }}
+              transition={{
+                duration: 0.5,
+                ease: [0.22, 1, 0.36, 1]
+              }}
+              className="w-full max-w-4xl"
+              style={{ transformStyle: "preserve-3d" }}
+            >
+              {/* Main Card */}
+              <div
+                className="relative bg-white rounded-2xl overflow-hidden shadow-2xl border border-slate-200"
+                style={{
+                  transform: "rotateY(-2deg) rotateX(1deg)",
+                  transformStyle: "preserve-3d"
+                }}
+              >
+                {/* Premium Header with Gold Accent */}
+                <div className="relative h-48 bg-gradient-to-br from-[#1a2845] via-[#243556] to-[#1a2845] overflow-hidden">
+                  {/* Subtle pattern overlay */}
+                  <div
+                    className="absolute inset-0 opacity-10"
+                    style={{
+                      backgroundImage: "radial-gradient(circle at 2px 2px, rgba(255,255,255,0.15) 1px, transparent 0)",
+                      backgroundSize: "32px 32px"
+                    }}
+                  />
+
+                  {/* Gold accent bar */}
+                  <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-transparent via-[#c7a86a] to-transparent" />
+
+                  <div className="relative h-full px-8 py-6 flex flex-col justify-between">
+                    {/* Patient Info */}
+                    <div className="flex items-start gap-5">
+                      <div className="h-20 w-20 rounded-2xl bg-gradient-to-br from-[#c7a86a] to-[#b8935a] flex items-center justify-center shadow-lg border-2 border-white/20">
+                        <span className="text-2xl font-bold text-white tracking-tight">
+                          {patientInitials(patient.name)}
+                        </span>
                       </div>
-                      <div className="flex-1 min-w-0">
-                        <h2 className="text-2xl font-bold truncate">{patient.name || "Patient"}</h2>
-                        <div className="mt-2 flex flex-col gap-1.5 text-sm text-violet-100/95">
+                      <div className="flex-1 min-w-0 pt-1">
+                        <h2 className="text-3xl font-bold text-white mb-3 tracking-tight">
+                          {patient.name || "Patient"}
+                        </h2>
+                        <div className="flex flex-col gap-2 text-sm text-white/90">
                           {patient.phone && (
                             <a
                               href={`tel:${patient.phone}`}
-                              className="inline-flex items-center gap-2 hover:text-white transition-colors"
+                              className="inline-flex items-center gap-2.5 hover:text-[#c7a86a] transition-colors w-fit"
                             >
-                              <Phone className="h-3.5 w-3.5 shrink-0 opacity-80" />
-                              <span className="truncate">{patient.phone}</span>
+                              <Phone className="h-4 w-4" />
+                              <span>{patient.phone}</span>
                             </a>
                           )}
                           {(patient.contact || patient.email) && (
-                            <span className="inline-flex items-center gap-2 truncate">
-                              <Mail className="h-3.5 w-3.5 shrink-0 opacity-80" />
+                            <div className="inline-flex items-center gap-2.5 w-fit">
+                              <Mail className="h-4 w-4" />
                               <span className="truncate">{patient.contact || patient.email}</span>
-                            </span>
+                            </div>
                           )}
                         </div>
                       </div>
                     </div>
 
-                    {/* Stats */}
-                    <div className="relative mt-8 grid grid-cols-3 gap-2">
-                      <div className="rounded-xl bg-black/20 backdrop-blur-md border border-white/10 px-3 py-3 text-center">
-                        <p className="text-[10px] uppercase tracking-wider text-violet-200/80 font-semibold">
-                          Billed
+                    {/* Financial Stats - Sleek Cards */}
+                    <div className="grid grid-cols-3 gap-3">
+                      <div className="bg-white/10 backdrop-blur-md rounded-xl px-4 py-3 border border-white/20">
+                        <p className="text-[10px] uppercase tracking-widest text-white/70 font-semibold mb-1">
+                          Total Billed
                         </p>
-                        <p className="text-lg font-bold tabular-nums">£{money(totalBilled)}</p>
+                        <p className="text-2xl font-bold text-white tabular-nums">
+                          £{money(totalBilled)}
+                        </p>
                       </div>
-                      <div className="rounded-xl bg-black/20 backdrop-blur-md border border-white/10 px-3 py-3 text-center">
-                        <p className="text-[10px] uppercase tracking-wider text-emerald-200/90 font-semibold">
+                      <div className="bg-emerald-500/20 backdrop-blur-md rounded-xl px-4 py-3 border border-emerald-400/30">
+                        <p className="text-[10px] uppercase tracking-widest text-emerald-100 font-semibold mb-1">
                           Paid
                         </p>
-                        <p className="text-lg font-bold tabular-nums text-emerald-100">£{money(totalPaid)}</p>
-                      </div>
-                      <div className="rounded-xl bg-black/20 backdrop-blur-md border border-white/10 px-3 py-3 text-center">
-                        <p className="text-[10px] uppercase tracking-wider text-amber-200/90 font-semibold">
-                          Owes
+                        <p className="text-2xl font-bold text-emerald-50 tabular-nums">
+                          £{money(totalPaid)}
                         </p>
-                        <p
-                          className={`text-lg font-bold tabular-nums ${
-                            outstanding > 0 ? "text-amber-100" : "text-white/90"
-                          }`}
-                        >
+                      </div>
+                      <div className={`backdrop-blur-md rounded-xl px-4 py-3 border ${
+                        outstanding > 0
+                          ? "bg-amber-500/20 border-amber-400/30"
+                          : "bg-white/10 border-white/20"
+                      }`}>
+                        <p className={`text-[10px] uppercase tracking-widest font-semibold mb-1 ${
+                          outstanding > 0 ? "text-amber-100" : "text-white/70"
+                        }`}>
+                          Outstanding
+                        </p>
+                        <p className={`text-2xl font-bold tabular-nums ${
+                          outstanding > 0 ? "text-amber-50" : "text-white"
+                        }`}>
                           £{money(outstanding)}
                         </p>
                       </div>
                     </div>
                   </div>
+                </div>
 
-                  {/* Body */}
-                  <div className="flex-1 flex flex-col min-h-0 bg-gradient-to-b from-slate-50/80 to-white px-4 pb-4 pt-2">
-                    <Tabs defaultValue="visits" className="flex-1 flex flex-col min-h-0">
-                      <TabsList className="w-full grid grid-cols-2 h-10 rounded-xl bg-slate-200/60 p-1">
-                        <TabsTrigger
-                          value="visits"
-                          className="rounded-lg data-[state=active]:bg-white data-[state=active]:shadow-sm text-xs sm:text-sm gap-1.5"
-                        >
-                          <Stethoscope className="h-3.5 w-3.5" />
-                          Treatments ({treatments.length})
-                        </TabsTrigger>
-                        <TabsTrigger
-                          value="notes"
-                          className="rounded-lg data-[state=active]:bg-white data-[state=active]:shadow-sm text-xs sm:text-sm gap-1.5"
-                        >
-                          <FileText className="h-3.5 w-3.5" />
-                          Notes ({notes.length})
-                        </TabsTrigger>
-                      </TabsList>
+                {/* Card Body */}
+                <div className="bg-gradient-to-b from-white to-slate-50/50 p-6">
+                  <Tabs defaultValue="visits" className="w-full">
+                    <TabsList className="grid w-full grid-cols-2 mb-4 bg-slate-100/80 p-1 h-12">
+                      <TabsTrigger
+                        value="visits"
+                        className="rounded-lg data-[state=active]:bg-white data-[state=active]:shadow-sm text-sm font-semibold gap-2 data-[state=active]:text-[#1a2845]"
+                      >
+                        <Stethoscope className="h-4 w-4" />
+                        Treatments <span className="text-xs opacity-60">({treatments.length})</span>
+                      </TabsTrigger>
+                      <TabsTrigger
+                        value="notes"
+                        className="rounded-lg data-[state=active]:bg-white data-[state=active]:shadow-sm text-sm font-semibold gap-2 data-[state=active]:text-[#1a2845]"
+                      >
+                        <FileText className="h-4 w-4" />
+                        Notes <span className="text-xs opacity-60">({notes.length})</span>
+                      </TabsTrigger>
+                    </TabsList>
 
-                      <TabsContent value="visits" className="flex-1 min-h-0 mt-3 data-[state=inactive]:hidden">
-                        <ScrollArea className="h-[240px] pr-3">
-                          {treatments.length === 0 ? (
-                            <p className="text-sm text-slate-500 text-center py-10">
-                              No treatment visits recorded yet.
-                            </p>
-                          ) : (
-                            <ul className="space-y-2.5">
-                              {treatments.map((t) => (
-                                <li
-                                  key={t.id}
-                                  className="rounded-xl border border-slate-200/80 bg-white p-3 shadow-sm"
-                                >
-                                  <div className="flex items-start justify-between gap-2">
-                                    <div className="min-w-0">
-                                      <p className="font-semibold text-[#0f172a] truncate">
-                                        {t.treatment_name || "Treatment"}
-                                      </p>
-                                      <p className="text-xs text-slate-500 mt-0.5">
-                                        {t.date
-                                          ? format(new Date(t.date), "d MMM yyyy")
-                                          : "—"}{" "}
-                                        {t.practitioner_name && (
-                                          <span className="text-slate-400">
-                                            · {t.practitioner_name}
-                                          </span>
-                                        )}
-                                      </p>
-                                    </div>
-                                    <PaymentBadge status={t.payment_status} />
-                                  </div>
-                                  <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-slate-600">
-                                    <span className="tabular-nums">
-                                      Price <strong className="text-slate-900">£{money(t.price_paid)}</strong>
-                                    </span>
-                                    <span className="tabular-nums">
-                                      Paid <strong className="text-emerald-700">£{money(t.amount_paid)}</strong>
-                                    </span>
-                                    {Number(t.price_paid) - Number(t.amount_paid || 0) > 0 && (
-                                      <span className="tabular-nums text-amber-700">
-                                        Due £{money(Number(t.price_paid) - Number(t.amount_paid || 0))}
-                                      </span>
-                                    )}
-                                  </div>
-                                  {t.notes ? (
-                                    <p className="mt-2 text-xs text-slate-500 line-clamp-2 border-t border-slate-100 pt-2">
-                                      {t.notes}
-                                    </p>
-                                  ) : null}
-                                </li>
-                              ))}
-                            </ul>
-                          )}
-                        </ScrollArea>
-                      </TabsContent>
-
-                      <TabsContent value="notes" className="flex-1 min-h-0 mt-3 data-[state=inactive]:hidden">
-                        <ScrollArea className="h-[240px] pr-3">
-                          {notes.length === 0 ? (
-                            <div className="text-center py-8 px-2">
-                              <p className="text-sm text-slate-500 mb-3">
-                                No clinical notes yet for this patient.
-                              </p>
-                              <p className="text-xs text-slate-400">
-                                Add notes from{" "}
-                                <Link
-                                  to={createPageUrl("Catalogue")}
-                                  className="text-violet-700 font-medium underline-offset-2 hover:underline"
-                                >
-                                  Catalogue → Patients
-                                </Link>{" "}
-                                (clinical file) or via Voice Diary.
-                              </p>
+                    <TabsContent value="visits" className="mt-0">
+                      <ScrollArea className="h-[280px] pr-4">
+                        {treatments.length === 0 ? (
+                          <div className="flex flex-col items-center justify-center py-12 text-center">
+                            <div className="h-16 w-16 rounded-full bg-slate-100 flex items-center justify-center mb-3">
+                              <Stethoscope className="h-7 w-7 text-slate-400" />
                             </div>
-                          ) : (
-                            <ul className="space-y-2.5">
-                              {notes.map((note) => {
-                                const s =
-                                  note.structured && typeof note.structured === "object"
-                                    ? note.structured
-                                    : {};
-                                const summary = s.clinical_summary || note.raw_narrative || "—";
-                                return (
-                                  <li
-                                    key={note.id}
-                                    className="rounded-xl border border-violet-100 bg-violet-50/40 p-3 text-sm"
-                                  >
-                                    <div className="flex justify-between gap-2 text-xs text-slate-500 mb-1.5">
-                                      <span>
-                                        {note.visit_date
-                                          ? format(new Date(note.visit_date), "d MMM yyyy")
-                                          : "—"}
-                                      </span>
-                                      <span className="capitalize">
-                                        {(note.source || "").replace(/_/g, " ") || "note"}
+                            <p className="text-sm text-slate-500">No treatments recorded yet</p>
+                          </div>
+                        ) : (
+                          <div className="space-y-3">
+                            {treatments.map((t) => (
+                              <div
+                                key={t.id}
+                                className="group rounded-xl border border-slate-200 bg-white p-4 shadow-sm hover:shadow-md hover:border-[#c7a86a]/50 transition-all duration-200"
+                              >
+                                <div className="flex items-start justify-between gap-3 mb-3">
+                                  <div className="flex-1 min-w-0">
+                                    <h3 className="font-semibold text-[#1a2845] text-base mb-1">
+                                      {t.treatment_name || "Treatment"}
+                                    </h3>
+                                    <p className="text-xs text-slate-500">
+                                      {t.date ? format(new Date(t.date), "d MMMM yyyy") : "—"}
+                                      {t.practitioner_name && (
+                                        <span className="text-slate-400 ml-2">
+                                          • {t.practitioner_name}
+                                        </span>
+                                      )}
+                                    </p>
+                                  </div>
+                                  <PaymentBadge status={t.payment_status} />
+                                </div>
+
+                                <div className="flex items-center gap-5 text-sm">
+                                  <div>
+                                    <span className="text-slate-500">Price: </span>
+                                    <span className="font-bold text-[#1a2845] tabular-nums">
+                                      £{money(t.price_paid)}
+                                    </span>
+                                  </div>
+                                  <div>
+                                    <span className="text-slate-500">Paid: </span>
+                                    <span className="font-bold text-emerald-600 tabular-nums">
+                                      £{money(t.amount_paid)}
+                                    </span>
+                                  </div>
+                                  {Number(t.price_paid) - Number(t.amount_paid || 0) > 0 && (
+                                    <div>
+                                      <span className="text-slate-500">Due: </span>
+                                      <span className="font-bold text-amber-600 tabular-nums">
+                                        £{money(Number(t.price_paid) - Number(t.amount_paid || 0))}
                                       </span>
                                     </div>
-                                    <p className="text-[#0f172a] leading-snug">{summary}</p>
-                                  </li>
-                                );
-                              })}
-                            </ul>
-                          )}
-                        </ScrollArea>
-                      </TabsContent>
-                    </Tabs>
+                                  )}
+                                </div>
 
-                    <div className="mt-3 pt-3 border-t border-slate-200/80 flex flex-wrap gap-2">
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        className="rounded-xl border-slate-200 text-slate-700"
-                        asChild
-                      >
-                        <Link to={createPageUrl("Records")} className="gap-1.5">
-                          <CreditCard className="h-3.5 w-3.5" />
-                          Records & payments
-                          <ChevronRight className="h-3.5 w-3.5 opacity-50" />
-                        </Link>
-                      </Button>
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        className="rounded-xl border-slate-200 text-slate-700"
-                        asChild
-                      >
-                        <Link to={createPageUrl("Catalogue")} className="gap-1.5">
-                          Catalogue
-                          <ChevronRight className="h-3.5 w-3.5 opacity-50" />
-                        </Link>
-                      </Button>
-                    </div>
+                                {t.notes && (
+                                  <p className="mt-3 text-sm text-slate-600 leading-relaxed border-t border-slate-100 pt-3">
+                                    {t.notes}
+                                  </p>
+                                )}
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </ScrollArea>
+                    </TabsContent>
+
+                    <TabsContent value="notes" className="mt-0">
+                      <ScrollArea className="h-[280px] pr-4">
+                        {notes.length === 0 ? (
+                          <div className="flex flex-col items-center justify-center py-12 text-center">
+                            <div className="h-16 w-16 rounded-full bg-slate-100 flex items-center justify-center mb-3">
+                              <FileText className="h-7 w-7 text-slate-400" />
+                            </div>
+                            <p className="text-sm text-slate-500 mb-2">No clinical notes yet</p>
+                            <p className="text-xs text-slate-400">
+                              Add notes from{" "}
+                              <Link
+                                to={createPageUrl("Catalogue")}
+                                className="text-[#1a2845] font-medium hover:text-[#c7a86a]"
+                              >
+                                Catalogue
+                              </Link>
+                            </p>
+                          </div>
+                        ) : (
+                          <div className="space-y-3">
+                            {notes.map((note) => {
+                              const s = note.structured && typeof note.structured === "object" ? note.structured : {};
+                              const summary = s.clinical_summary || note.raw_narrative || "—";
+                              return (
+                                <div
+                                  key={note.id}
+                                  className="rounded-xl border border-slate-200 bg-slate-50/50 p-4"
+                                >
+                                  <div className="flex items-center justify-between mb-2 text-xs text-slate-500">
+                                    <span className="font-medium">
+                                      {note.visit_date
+                                        ? format(new Date(note.visit_date), "d MMMM yyyy")
+                                        : "—"}
+                                    </span>
+                                    <span className="capitalize px-2 py-1 rounded-md bg-white border border-slate-200">
+                                      {(note.source || "").replace(/_/g, " ") || "note"}
+                                    </span>
+                                  </div>
+                                  <p className="text-sm text-[#1a2845] leading-relaxed">{summary}</p>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        )}
+                      </ScrollArea>
+                    </TabsContent>
+                  </Tabs>
+
+                  {/* Action Buttons */}
+                  <div className="mt-6 pt-4 border-t border-slate-200 flex gap-3">
+                    <Button
+                      variant="outline"
+                      className="flex-1 rounded-xl border-2 border-slate-200 hover:border-[#1a2845] hover:bg-[#1a2845] hover:text-white transition-all duration-200 font-semibold h-11"
+                      asChild
+                    >
+                      <Link to={createPageUrl("Records")} className="gap-2">
+                        <CreditCard className="h-4 w-4" />
+                        View Records
+                      </Link>
+                    </Button>
+                    <Button
+                      className="flex-1 rounded-xl bg-[#1a2845] hover:bg-[#243556] shadow-md hover:shadow-lg transition-all duration-200 font-semibold h-11"
+                      asChild
+                    >
+                      <Link to={createPageUrl("Catalogue")} className="gap-2">
+                        <User className="h-4 w-4" />
+                        Patient Details
+                      </Link>
+                    </Button>
                   </div>
                 </div>
-              </CarouselItem>
-            ))}
-          </CarouselContent>
-          <CarouselPrevious className="hidden sm:flex -left-2 md:left-0 h-11 w-11 border-slate-200 bg-white shadow-md text-slate-700 hover:bg-slate-50" />
-          <CarouselNext className="hidden sm:flex -right-2 md:right-0 h-11 w-11 border-slate-200 bg-white shadow-md text-slate-700 hover:bg-slate-50" />
-        </Carousel>
 
-        <p className="text-center text-xs text-slate-400 mt-4 sm:hidden">
-          Swipe the card left or right to change patient
-        </p>
+                {/* Gold accent bottom */}
+                <div className="h-1 bg-gradient-to-r from-transparent via-[#c7a86a] to-transparent" />
+              </div>
+            </motion.div>
+          </AnimatePresence>
+        </div>
+
+        {/* Progress Dots */}
+        {rows.length > 1 && (
+          <div className="flex justify-center gap-2 mt-8">
+            {rows.map((_, i) => (
+              <button
+                key={i}
+                onClick={() => setCurrentIndex(i)}
+                className={`h-2.5 rounded-full transition-all duration-300 ${
+                  i === currentIndex
+                    ? "w-8 bg-[#1a2845]"
+                    : "w-2.5 bg-slate-300 hover:bg-slate-400"
+                }`}
+                aria-label={`Go to patient ${i + 1}`}
+              />
+            ))}
+          </div>
+        )}
       </div>
     </div>
   );
