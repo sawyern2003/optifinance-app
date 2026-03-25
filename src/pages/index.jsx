@@ -190,6 +190,7 @@ function PagesContent() {
                             <Route path="/SubscriptionPricing" element={<SubscriptionPricing />} />
                             <Route path="/Reports" element={<Reports />} />
                             <Route path="/Settings" element={<Settings />} />
+                            <Route path="*" element={<Navigate to="/" replace />} />
                         </Routes>
                     </Layout>
                 </ProtectedRoute>
