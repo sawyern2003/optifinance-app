@@ -83,42 +83,51 @@ function aggregateByPatient(patients, treatmentEntries, clinicalNotes) {
 
 // Patient Header Component
 function PatientHeader({ patient, lastSeen, hasOutstanding }) {
-  // Generate happy smiley with different colors - no sad or sick faces
+  // Generate happy cartoon smiley with different colors
   const generateAvatar = (name) => {
-    const happyEmojis = ['😊', '😄', '🙂', '😃', '🤗', '😺', '🌟', '✨', '🌈', '☀️'];
     const colors = [
-      'bg-blue-400',
-      'bg-purple-400',
-      'bg-pink-400',
-      'bg-emerald-400',
-      'bg-amber-400',
-      'bg-cyan-400',
-      'bg-indigo-400',
-      'bg-rose-400',
-      'bg-teal-400',
-      'bg-violet-400',
+      { bg: '#60a5fa', face: '#fff' }, // blue
+      { bg: '#a78bfa', face: '#fff' }, // purple
+      { bg: '#f472b6', face: '#fff' }, // pink
+      { bg: '#34d399', face: '#fff' }, // emerald
+      { bg: '#fbbf24', face: '#fff' }, // amber
+      { bg: '#22d3ee', face: '#fff' }, // cyan
+      { bg: '#818cf8', face: '#fff' }, // indigo
+      { bg: '#fb7185', face: '#fff' }, // rose
+      { bg: '#2dd4bf', face: '#fff' }, // teal
+      { bg: '#a855f7', face: '#fff' }, // violet
     ];
 
     const hash = (name || 'anonymous').split('').reduce((acc, char) => {
       return char.charCodeAt(0) + ((acc << 5) - acc);
     }, 0);
 
-    const emojiIndex = Math.abs(hash) % happyEmojis.length;
-    const colorIndex = Math.abs(hash) % colors.length;
+    const colorScheme = colors[Math.abs(hash) % colors.length];
 
-    return {
-      emoji: happyEmojis[emojiIndex],
-      bgColor: colors[colorIndex],
-    };
+    // Create inline SVG for happy smiley face
+    const svgData = `
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100">
+        <circle cx="50" cy="50" r="50" fill="${colorScheme.bg}"/>
+        <circle cx="35" cy="40" r="5" fill="${colorScheme.face}"/>
+        <circle cx="65" cy="40" r="5" fill="${colorScheme.face}"/>
+        <path d="M 30 60 Q 50 75 70 60" stroke="${colorScheme.face}" stroke-width="4" fill="none" stroke-linecap="round"/>
+      </svg>
+    `;
+
+    return `data:image/svg+xml;base64,${btoa(svgData)}`;
   };
 
-  const avatar = generateAvatar(patient.name);
+  const avatarUrl = generateAvatar(patient.name);
 
   return (
     <div className="mb-6">
       <div className="flex items-start gap-4 mb-3">
-        <div className={`h-14 w-14 rounded-lg ${avatar.bgColor} flex items-center justify-center flex-shrink-0`}>
-          <span className="text-3xl">{avatar.emoji}</span>
+        <div className="h-14 w-14 rounded-lg overflow-hidden flex items-center justify-center flex-shrink-0">
+          <img
+            src={avatarUrl}
+            alt={`${patient.name} avatar`}
+            className="h-full w-full"
+          />
         </div>
         <div className="flex-1 min-w-0">
           <h2 className="text-2xl font-semibold text-gray-900 mb-2">
