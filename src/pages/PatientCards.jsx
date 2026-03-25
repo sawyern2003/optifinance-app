@@ -508,13 +508,13 @@ export default function PatientCards() {
                 <TabsList className="grid w-full grid-cols-2 bg-gray-100 p-1 rounded-lg h-10 mb-6">
                   <TabsTrigger
                     value="treatments"
-                    className="rounded-md data-[state=active]:bg-white data-[state=active]:shadow-sm text-sm font-medium"
+                    className="rounded-md text-gray-500 data-[state=active]:bg-white data-[state=active]:text-gray-900 data-[state=active]:shadow-sm text-sm font-medium transition-colors"
                   >
                     Treatment history ({treatments.length})
                   </TabsTrigger>
                   <TabsTrigger
                     value="notes"
-                    className="rounded-md data-[state=active]:bg-white data-[state=active]:shadow-sm text-sm font-medium"
+                    className="rounded-md text-gray-500 data-[state=active]:bg-white data-[state=active]:text-gray-900 data-[state=active]:shadow-sm text-sm font-medium transition-colors"
                   >
                     Clinical notes ({notes.length})
                   </TabsTrigger>
