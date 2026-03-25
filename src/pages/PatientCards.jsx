@@ -1,7 +1,7 @@
 import React, { useMemo, useState, useEffect } from "react";
 import { Link } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
-import { format } from "date-fns";
+import { format, formatDistanceToNow, differenceInDays } from "date-fns";
 import { api } from "@/api/api";
 import { createPageUrl } from "@/utils";
 import { motion, AnimatePresence } from "framer-motion";
@@ -16,12 +16,15 @@ import {
   Loader2,
   Phone,
   Mail,
-  Stethoscope,
   ChevronRight,
   ChevronLeft,
-  User,
   Search,
   X,
+  Bell,
+  Plus,
+  Calendar,
+  AlertCircle,
+  Clock,
 } from "lucide-react";
 
 function money(n) {
@@ -74,19 +77,231 @@ function aggregateByPatient(patients, treatmentEntries, clinicalNotes) {
   );
 }
 
-function PaymentBadge({ status }) {
-  const s = (status || "pending").toLowerCase();
-  const styles = {
-    paid: "bg-emerald-500/15 text-emerald-800 border-emerald-200",
-    partially_paid: "bg-amber-500/15 text-amber-900 border-amber-200",
-    pending: "bg-slate-500/10 text-slate-700 border-slate-200",
-  };
-  const label =
-    s === "partially_paid" ? "Partial" : s === "paid" ? "Paid" : "Pending";
+// Patient Header Component
+function PatientHeader({ patient, lastSeen, hasOutstanding }) {
   return (
-    <Badge variant="outline" className={`text-[10px] font-semibold ${styles[s] || styles.pending}`}>
-      {label}
-    </Badge>
+    <div className="mb-6">
+      <div className="flex items-start gap-4 mb-3">
+        <div className="h-14 w-14 rounded-lg bg-gray-200 flex items-center justify-center flex-shrink-0">
+          <span className="text-xl font-semibold text-gray-700">
+            {patientInitials(patient.name)}
+          </span>
+        </div>
+        <div className="flex-1 min-w-0">
+          <h2 className="text-2xl font-semibold text-gray-900 mb-2">
+            {patient.name || "Patient"}
+          </h2>
+          <div className="flex flex-wrap items-center gap-2">
+            {lastSeen && (
+              <Badge variant="outline" className="text-xs font-normal border-gray-300 text-gray-600">
+                <Clock className="h-3 w-3 mr-1" />
+                Last seen {lastSeen}
+              </Badge>
+            )}
+            {hasOutstanding && (
+              <Badge variant="outline" className="text-xs font-normal border-amber-300 bg-amber-50 text-amber-700">
+                <AlertCircle className="h-3 w-3 mr-1" />
+                Payment due
+              </Badge>
+            )}
+          </div>
+        </div>
+      </div>
+
+      {/* Contact Info */}
+      <div className="flex flex-wrap gap-4 text-sm text-gray-600">
+        {patient.phone && (
+          <a
+            href={`tel:${patient.phone}`}
+            className="inline-flex items-center gap-1.5 hover:text-gray-900 transition-colors"
+          >
+            <Phone className="h-3.5 w-3.5" />
+            <span>{patient.phone}</span>
+          </a>
+        )}
+        {(patient.contact || patient.email) && (
+          <a
+            href={`mailto:${patient.contact || patient.email}`}
+            className="inline-flex items-center gap-1.5 hover:text-gray-900 transition-colors"
+          >
+            <Mail className="h-3.5 w-3.5" />
+            <span className="truncate max-w-[200px]">{patient.contact || patient.email}</span>
+          </a>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// Compact Financial Summary
+function FinancialSummary({ totalBilled, totalPaid, outstanding }) {
+  return (
+    <div className="py-4 border-y border-gray-200">
+      {outstanding > 0 ? (
+        <div className="flex items-baseline gap-2 mb-1">
+          <span className="text-2xl font-semibold text-amber-600 tabular-nums">
+            £{money(outstanding)}
+          </span>
+          <span className="text-sm text-gray-600">outstanding balance</span>
+        </div>
+      ) : (
+        <div className="flex items-baseline gap-2 mb-1">
+          <span className="text-lg font-medium text-emerald-600">Paid in full</span>
+        </div>
+      )}
+      <div className="text-sm text-gray-500">
+        £{money(totalPaid)} paid · £{money(totalBilled)} total spent
+      </div>
+    </div>
+  );
+}
+
+// Quick Actions Component
+function QuickActions({ hasOutstanding, patientId }) {
+  return (
+    <div className="flex flex-wrap gap-2 py-4">
+      {hasOutstanding && (
+        <Button size="sm" variant="default" className="bg-gray-900 hover:bg-gray-800">
+          <Bell className="h-3.5 w-3.5 mr-1.5" />
+          Send reminder
+        </Button>
+      )}
+      <Button size="sm" variant="outline" asChild>
+        <Link to={createPageUrl("Records")}>
+          <CreditCard className="h-3.5 w-3.5 mr-1.5" />
+          View records
+        </Link>
+      </Button>
+      <Button size="sm" variant="outline">
+        <Plus className="h-3.5 w-3.5 mr-1.5" />
+        Add note
+      </Button>
+      <Button size="sm" variant="outline">
+        <Calendar className="h-3.5 w-3.5 mr-1.5" />
+        Follow up
+      </Button>
+    </div>
+  );
+}
+
+// Treatment Timeline Component
+function TreatmentTimeline({ treatments }) {
+  if (treatments.length === 0) {
+    return (
+      <div className="py-12 text-center">
+        <FileText className="h-10 w-10 text-gray-300 mx-auto mb-2" />
+        <p className="text-sm text-gray-500">No treatments recorded</p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="relative">
+      {/* Timeline line */}
+      <div className="absolute left-[7px] top-6 bottom-6 w-px bg-gray-200" />
+
+      <div className="space-y-6">
+        {treatments.map((t, index) => {
+          const isPaid = t.payment_status === "paid";
+          const isPartial = t.payment_status === "partially_paid";
+          const dueAmount = Number(t.price_paid) - Number(t.amount_paid || 0);
+
+          return (
+            <div key={t.id} className="relative pl-8">
+              {/* Timeline dot */}
+              <div
+                className={`absolute left-0 top-1.5 h-4 w-4 rounded-full border-2 ${
+                  isPaid
+                    ? "bg-emerald-500 border-emerald-500"
+                    : isPartial
+                    ? "bg-amber-400 border-amber-400"
+                    : "bg-white border-gray-300"
+                }`}
+              />
+
+              <div>
+                {/* Date */}
+                <div className="text-xs font-medium text-gray-500 mb-1">
+                  {t.date ? format(new Date(t.date), "d MMM yyyy") : "—"}
+                </div>
+
+                {/* Treatment name */}
+                <div className="font-medium text-gray-900 mb-1">
+                  {t.treatment_name || "Treatment"}
+                </div>
+
+                {/* Details */}
+                <div className="text-sm text-gray-600 space-y-1">
+                  {t.practitioner_name && (
+                    <div className="text-xs text-gray-500">with {t.practitioner_name}</div>
+                  )}
+
+                  <div className="flex items-center gap-3 text-xs">
+                    <span className="tabular-nums">
+                      £{money(t.price_paid)} {!isPaid && `· £{money(t.amount_paid)} paid`}
+                    </span>
+                    {!isPaid && dueAmount > 0 && (
+                      <span className="text-amber-600 font-medium">
+                        £{money(dueAmount)} due
+                      </span>
+                    )}
+                    {isPaid && (
+                      <span className="text-emerald-600 font-medium">Paid</span>
+                    )}
+                  </div>
+
+                  {t.notes && (
+                    <p className="text-xs text-gray-600 mt-2 pt-2 border-t border-gray-100">
+                      {t.notes}
+                    </p>
+                  )}
+                </div>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+// Notes Timeline Component
+function NotesTimeline({ notes }) {
+  if (notes.length === 0) {
+    return (
+      <div className="py-12 text-center">
+        <FileText className="h-10 w-10 text-gray-300 mx-auto mb-2" />
+        <p className="text-sm text-gray-500 mb-1">No clinical notes yet</p>
+        <p className="text-xs text-gray-400">
+          Add notes from{" "}
+          <Link to={createPageUrl("Catalogue")} className="text-gray-900 font-medium hover:underline">
+            Catalogue
+          </Link>
+        </p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-4">
+      {notes.map((note) => {
+        const s = note.structured && typeof note.structured === "object" ? note.structured : {};
+        const summary = s.clinical_summary || note.raw_narrative || "—";
+        return (
+          <div key={note.id} className="border-l-2 border-gray-200 pl-4 py-1">
+            <div className="text-xs font-medium text-gray-500 mb-1">
+              {note.visit_date ? format(new Date(note.visit_date), "d MMM yyyy") : "—"}
+            </div>
+            <p className="text-sm text-gray-700 leading-relaxed">{summary}</p>
+            {note.source && (
+              <div className="text-xs text-gray-400 mt-1 capitalize">
+                {note.source.replace(/_/g, " ")}
+              </div>
+            )}
+          </div>
+        );
+      })}
+    </div>
   );
 }
 
@@ -120,9 +335,7 @@ export default function PatientCards() {
   const rows = useMemo(() => {
     if (!searchQuery.trim()) return allRows;
     const query = searchQuery.toLowerCase();
-    return allRows.filter((row) =>
-      row.patient.name?.toLowerCase().includes(query)
-    );
+    return allRows.filter((row) => row.patient.name?.toLowerCase().includes(query));
   }, [allRows, searchQuery]);
 
   const loading = loadingPatients || loadingTreatments || loadingNotes;
@@ -135,46 +348,42 @@ export default function PatientCards() {
     setCurrentIndex((prev) => (prev - 1 + rows.length) % rows.length);
   };
 
-  // Reset to first card when search changes
   useEffect(() => {
     if (rows.length > 0 && currentIndex >= rows.length) {
       setCurrentIndex(0);
     }
   }, [rows.length, currentIndex]);
 
-  const currentPatient = rows[currentIndex];
-
   if (loading && patients.length === 0) {
     return (
-      <div className="min-h-[60vh] flex flex-col items-center justify-center gap-3 text-[#1a2845]">
-        <Loader2 className="h-10 w-10 animate-spin text-violet-600" />
-        <p className="text-sm text-slate-600">Loading patient cards…</p>
+      <div className="min-h-[60vh] flex flex-col items-center justify-center gap-3">
+        <Loader2 className="h-10 w-10 animate-spin text-gray-400" />
+        <p className="text-sm text-gray-600">Loading patient cards…</p>
       </div>
     );
   }
 
-  if (!rows.length) {
+  if (!rows.length && !searchQuery) {
     return (
       <div className="max-w-lg mx-auto text-center py-20 px-6">
-        <div className="inline-flex h-16 w-16 items-center justify-center rounded-2xl bg-violet-100 text-violet-700 mb-6">
-          <Stethoscope className="h-8 w-8" />
+        <div className="inline-flex h-16 w-16 items-center justify-center rounded-xl bg-gray-100 text-gray-400 mb-6">
+          <FileText className="h-8 w-8" />
         </div>
-        <h1 className="text-2xl font-semibold text-[#0f172a] mb-2">No patients yet</h1>
-        <p className="text-slate-600 mb-8">
-          Add patients in the Catalogue, then swipe through their cards here — visits, clinical notes,
-          and balances in one place.
+        <h1 className="text-2xl font-semibold text-gray-900 mb-2">No patients yet</h1>
+        <p className="text-gray-600 mb-8">
+          Add patients in the Catalogue to view their treatment history and financial records here.
         </p>
-        <Button asChild className="rounded-xl bg-[#1a2845] hover:bg-[#0f1829]">
+        <Button asChild className="bg-gray-900 hover:bg-gray-800">
           <Link to={createPageUrl("Catalogue")}>Open Catalogue</Link>
         </Button>
       </div>
     );
   }
 
-  if (!currentPatient && rows.length === 0 && searchQuery) {
+  if (!rows.length && searchQuery) {
     return (
-      <div className="min-h-screen bg-gray-50 px-4 py-8">
-        <div className="max-w-4xl mx-auto">
+      <div className="min-h-screen bg-white px-4 py-8">
+        <div className="max-w-3xl mx-auto">
           <div className="mb-6">
             <h1 className="text-2xl font-semibold text-gray-900 mb-4">Patient Cards</h1>
             <div className="relative">
@@ -204,15 +413,25 @@ export default function PatientCards() {
     );
   }
 
+  const currentPatient = rows[currentIndex];
   if (!currentPatient) return null;
 
   const { patient, treatments, notes, totalBilled, totalPaid, outstanding } = currentPatient;
 
+  // Calculate last seen
+  const lastTreatment = treatments[0];
+  const lastSeenDate = lastTreatment?.date ? new Date(lastTreatment.date) : null;
+  const lastSeenText = lastSeenDate
+    ? differenceInDays(new Date(), lastSeenDate) === 0
+      ? "today"
+      : formatDistanceToNow(lastSeenDate, { addSuffix: true })
+    : null;
+
   return (
-    <div className="min-h-screen bg-gray-50 px-4 py-8">
-      <div className="max-w-4xl mx-auto">
+    <div className="min-h-screen bg-white px-4 py-8">
+      <div className="max-w-3xl mx-auto">
         {/* Header with Search */}
-        <div className="mb-6">
+        <div className="mb-8">
           <div className="flex items-center justify-between mb-4">
             <h1 className="text-2xl font-semibold text-gray-900">Patient Cards</h1>
             <div className="flex items-center gap-2">
@@ -264,232 +483,68 @@ export default function PatientCards() {
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            transition={{ duration: 0.2 }}
+            transition={{ duration: 0.15 }}
           >
-            <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
+            <div className="bg-white border border-gray-200 rounded-lg p-8">
               {/* Patient Header */}
-              <div className="bg-gray-900 px-6 py-6">
-                <div className="flex items-start gap-4 mb-6">
-                  <div className="h-16 w-16 rounded-lg bg-gray-700 flex items-center justify-center flex-shrink-0">
-                    <span className="text-2xl font-semibold text-white">
-                      {patientInitials(patient.name)}
-                    </span>
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <h2 className="text-xl font-semibold text-white mb-3">
-                      {patient.name || "Patient"}
-                    </h2>
-                    <div className="flex flex-wrap gap-3 text-sm">
-                      {patient.phone && (
-                        <a
-                          href={`tel:${patient.phone}`}
-                          className="inline-flex items-center gap-1.5 text-gray-300 hover:text-white transition-colors"
-                        >
-                          <Phone className="h-3.5 w-3.5" />
-                          <span>{patient.phone}</span>
-                        </a>
-                      )}
-                      {(patient.contact || patient.email) && (
-                        <div className="inline-flex items-center gap-1.5 text-gray-300">
-                          <Mail className="h-3.5 w-3.5" />
-                          <span className="truncate max-w-[200px]">{patient.contact || patient.email}</span>
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                </div>
+              <PatientHeader
+                patient={patient}
+                lastSeen={lastSeenText}
+                hasOutstanding={outstanding > 0}
+              />
 
-                {/* Financial Stats */}
-                <div className="grid grid-cols-3 gap-3">
-                  <div className="bg-gray-800 rounded-lg p-3">
-                    <p className="text-xs text-gray-400 mb-1">Total Billed</p>
-                    <p className="text-lg font-semibold text-white tabular-nums">
-                      £{money(totalBilled)}
-                    </p>
-                  </div>
-                  <div className="bg-gray-800 rounded-lg p-3">
-                    <p className="text-xs text-gray-400 mb-1">Paid</p>
-                    <p className="text-lg font-semibold text-emerald-400 tabular-nums">
-                      £{money(totalPaid)}
-                    </p>
-                  </div>
-                  <div className="bg-gray-800 rounded-lg p-3">
-                    <p className="text-xs text-gray-400 mb-1">Outstanding</p>
-                    <p className={`text-lg font-semibold tabular-nums ${
-                      outstanding > 0 ? "text-amber-400" : "text-white"
-                    }`}>
-                      £{money(outstanding)}
-                    </p>
-                  </div>
-                </div>
-              </div>
+              {/* Financial Summary */}
+              <FinancialSummary
+                totalBilled={totalBilled}
+                totalPaid={totalPaid}
+                outstanding={outstanding}
+              />
 
-              {/* Content */}
-              <div className="p-6">
-                <Tabs defaultValue="visits" className="w-full">
-                  <TabsList className="grid w-full grid-cols-2 bg-gray-100 p-1 rounded-lg mb-4 h-10">
-                    <TabsTrigger
-                      value="visits"
-                      className="rounded-md data-[state=active]:bg-white data-[state=active]:shadow-sm text-sm font-medium gap-2"
-                    >
-                      <Stethoscope className="h-4 w-4" />
-                      Treatments ({treatments.length})
-                    </TabsTrigger>
-                    <TabsTrigger
-                      value="notes"
-                      className="rounded-md data-[state=active]:bg-white data-[state=active]:shadow-sm text-sm font-medium gap-2"
-                    >
-                      <FileText className="h-4 w-4" />
-                      Notes ({notes.length})
-                    </TabsTrigger>
-                  </TabsList>
+              {/* Quick Actions */}
+              <QuickActions hasOutstanding={outstanding > 0} patientId={patient.id} />
 
-                  <TabsContent value="visits" className="mt-0">
-                    <ScrollArea className="h-[400px] pr-3">
-                      {treatments.length === 0 ? (
-                        <div className="flex flex-col items-center justify-center py-12 text-center">
-                          <Stethoscope className="h-12 w-12 text-gray-300 mb-3" />
-                          <p className="text-gray-600">No treatments recorded</p>
-                        </div>
-                      ) : (
-                        <div className="space-y-3">
-                          {treatments.map((t) => (
-                            <div
-                              key={t.id}
-                              className="border border-gray-200 rounded-lg p-4 hover:border-gray-300 hover:shadow-sm transition-all bg-white"
-                            >
-                              <div className="flex items-start justify-between gap-3 mb-2">
-                                <div className="flex-1">
-                                  <h3 className="font-medium text-gray-900 mb-0.5">
-                                    {t.treatment_name || "Treatment"}
-                                  </h3>
-                                  <p className="text-sm text-gray-500">
-                                    {t.date ? format(new Date(t.date), "d MMM yyyy") : "—"}
-                                    {t.practitioner_name && <span> · {t.practitioner_name}</span>}
-                                  </p>
-                                </div>
-                                <PaymentBadge status={t.payment_status} />
-                              </div>
-
-                              <div className="flex items-center gap-4 text-sm mt-3">
-                                <div>
-                                  <span className="text-gray-500">Price: </span>
-                                  <span className="font-semibold text-gray-900 tabular-nums">
-                                    £{money(t.price_paid)}
-                                  </span>
-                                </div>
-                                <div>
-                                  <span className="text-gray-500">Paid: </span>
-                                  <span className="font-semibold text-emerald-600 tabular-nums">
-                                    £{money(t.amount_paid)}
-                                  </span>
-                                </div>
-                                {Number(t.price_paid) - Number(t.amount_paid || 0) > 0 && (
-                                  <div>
-                                    <span className="text-gray-500">Due: </span>
-                                    <span className="font-semibold text-amber-600 tabular-nums">
-                                      £{money(Number(t.price_paid) - Number(t.amount_paid || 0))}
-                                    </span>
-                                  </div>
-                                )}
-                              </div>
-
-                              {t.notes && (
-                                <p className="mt-3 text-sm text-gray-600 pt-3 border-t border-gray-100">
-                                  {t.notes}
-                                </p>
-                              )}
-                            </div>
-                          ))}
-                        </div>
-                      )}
-                    </ScrollArea>
-                  </TabsContent>
-
-                  <TabsContent value="notes" className="mt-0">
-                    <ScrollArea className="h-[400px] pr-3">
-                      {notes.length === 0 ? (
-                        <div className="flex flex-col items-center justify-center py-12 text-center">
-                          <FileText className="h-12 w-12 text-gray-300 mb-3" />
-                          <p className="text-gray-600 mb-1">No clinical notes yet</p>
-                          <p className="text-sm text-gray-500">
-                            Add notes from{" "}
-                            <Link
-                              to={createPageUrl("Catalogue")}
-                              className="text-gray-900 font-medium hover:underline"
-                            >
-                              Catalogue
-                            </Link>
-                          </p>
-                        </div>
-                      ) : (
-                        <div className="space-y-3">
-                          {notes.map((note) => {
-                            const s = note.structured && typeof note.structured === "object" ? note.structured : {};
-                            const summary = s.clinical_summary || note.raw_narrative || "—";
-                            return (
-                              <div
-                                key={note.id}
-                                className="border border-gray-200 rounded-lg p-4 bg-gray-50"
-                              >
-                                <div className="flex items-center justify-between mb-2 text-xs">
-                                  <span className="font-medium text-gray-600">
-                                    {note.visit_date
-                                      ? format(new Date(note.visit_date), "d MMM yyyy")
-                                      : "—"}
-                                  </span>
-                                  <span className="px-2 py-0.5 rounded bg-white border border-gray-200 text-gray-500 capitalize">
-                                    {(note.source || "").replace(/_/g, " ") || "note"}
-                                  </span>
-                                </div>
-                                <p className="text-sm text-gray-700 leading-relaxed">{summary}</p>
-                              </div>
-                            );
-                          })}
-                        </div>
-                      )}
-                    </ScrollArea>
-                  </TabsContent>
-                </Tabs>
-
-                {/* Actions */}
-                <div className="mt-6 pt-4 border-t border-gray-200 grid grid-cols-2 gap-3">
-                  <Button
-                    variant="outline"
-                    className="rounded-lg h-10"
-                    asChild
+              {/* Tabs for History */}
+              <Tabs defaultValue="treatments" className="mt-6">
+                <TabsList className="grid w-full grid-cols-2 bg-gray-100 p-1 rounded-lg h-10 mb-6">
+                  <TabsTrigger
+                    value="treatments"
+                    className="rounded-md data-[state=active]:bg-white data-[state=active]:shadow-sm text-sm font-medium"
                   >
-                    <Link to={createPageUrl("Records")} className="gap-2">
-                      <CreditCard className="h-4 w-4" />
-                      Records
-                    </Link>
-                  </Button>
-                  <Button
-                    className="rounded-lg bg-gray-900 hover:bg-gray-800 h-10"
-                    asChild
+                    Treatment history ({treatments.length})
+                  </TabsTrigger>
+                  <TabsTrigger
+                    value="notes"
+                    className="rounded-md data-[state=active]:bg-white data-[state=active]:shadow-sm text-sm font-medium"
                   >
-                    <Link to={createPageUrl("Catalogue")} className="gap-2">
-                      <User className="h-4 w-4" />
-                      Details
-                    </Link>
-                  </Button>
-                </div>
-              </div>
+                    Clinical notes ({notes.length})
+                  </TabsTrigger>
+                </TabsList>
+
+                <TabsContent value="treatments" className="mt-0">
+                  <ScrollArea className="h-[400px] pr-3">
+                    <TreatmentTimeline treatments={treatments} />
+                  </ScrollArea>
+                </TabsContent>
+
+                <TabsContent value="notes" className="mt-0">
+                  <ScrollArea className="h-[400px] pr-3">
+                    <NotesTimeline notes={notes} />
+                  </ScrollArea>
+                </TabsContent>
+              </Tabs>
             </div>
           </motion.div>
         </AnimatePresence>
 
         {/* Pagination Dots */}
         {rows.length > 1 && (
-          <div className="flex justify-center items-center gap-1.5 mt-6">
+          <div className="flex justify-center items-center gap-1.5 mt-8">
             {rows.map((_, i) => (
               <button
                 key={i}
                 onClick={() => setCurrentIndex(i)}
                 className={`rounded-full transition-all ${
-                  i === currentIndex
-                    ? "w-6 h-2 bg-gray-900"
-                    : "w-2 h-2 bg-gray-300 hover:bg-gray-400"
+                  i === currentIndex ? "w-6 h-2 bg-gray-900" : "w-2 h-2 bg-gray-300 hover:bg-gray-400"
                 }`}
                 aria-label={`Go to patient ${i + 1}`}
               />
