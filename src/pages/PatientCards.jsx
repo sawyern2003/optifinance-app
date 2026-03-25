@@ -83,19 +83,42 @@ function aggregateByPatient(patients, treatmentEntries, clinicalNotes) {
 
 // Patient Header Component
 function PatientHeader({ patient, lastSeen, hasOutstanding }) {
-  // Generate neutral cartoon avatar - fun emojis that don't depict race or gender
-  const avatarSeed = patient.name || "anonymous";
-  const avatarUrl = `https://api.dicebear.com/7.x/fun-emoji/svg?seed=${encodeURIComponent(avatarSeed)}&backgroundColor=b6e3f4,c0aede,d1d4f9,ffd5dc,ffdfbf,c7d2fe,fecaca,fed7aa,a7f3d0,fbcfe8`;
+  // Generate happy smiley with different colors - no sad or sick faces
+  const generateAvatar = (name) => {
+    const happyEmojis = ['😊', '😄', '🙂', '😃', '🤗', '😺', '🌟', '✨', '🌈', '☀️'];
+    const colors = [
+      'bg-blue-400',
+      'bg-purple-400',
+      'bg-pink-400',
+      'bg-emerald-400',
+      'bg-amber-400',
+      'bg-cyan-400',
+      'bg-indigo-400',
+      'bg-rose-400',
+      'bg-teal-400',
+      'bg-violet-400',
+    ];
+
+    const hash = (name || 'anonymous').split('').reduce((acc, char) => {
+      return char.charCodeAt(0) + ((acc << 5) - acc);
+    }, 0);
+
+    const emojiIndex = Math.abs(hash) % happyEmojis.length;
+    const colorIndex = Math.abs(hash) % colors.length;
+
+    return {
+      emoji: happyEmojis[emojiIndex],
+      bgColor: colors[colorIndex],
+    };
+  };
+
+  const avatar = generateAvatar(patient.name);
 
   return (
     <div className="mb-6">
       <div className="flex items-start gap-4 mb-3">
-        <div className="h-14 w-14 rounded-lg bg-gradient-to-br from-blue-100 to-purple-100 flex items-center justify-center flex-shrink-0 overflow-hidden">
-          <img
-            src={avatarUrl}
-            alt={`${patient.name} avatar`}
-            className="h-full w-full"
-          />
+        <div className={`h-14 w-14 rounded-lg ${avatar.bgColor} flex items-center justify-center flex-shrink-0`}>
+          <span className="text-3xl">{avatar.emoji}</span>
         </div>
         <div className="flex-1 min-w-0">
           <h2 className="text-2xl font-semibold text-gray-900 mb-2">
