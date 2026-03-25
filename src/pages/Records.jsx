@@ -9,7 +9,14 @@ import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { Trash2, Search, Sparkles, CreditCard, Pencil, FileText, Loader2, Download, FileCheck } from "lucide-react";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import { Trash2, Search, Sparkles, CreditCard, Pencil, FileText, Loader2, Download, FileCheck, MoreVertical } from "lucide-react";
 import { format, startOfMonth, endOfMonth, subMonths, startOfYear } from "date-fns";
 import { useToast } from "@/components/ui/use-toast";
 import {
@@ -1163,54 +1170,70 @@ export default function Records() {
                         </div>
                       </td>
                       <td className="px-6 py-4">
-                       <div className="flex gap-2">
-                         {(() => {
-                           const inv = invoices?.find((i) => i.treatment_entry_id === treatment.id);
-                           const hasPdf = inv?.invoice_pdf_url;
-                           return hasPdf ? (
-                             <button
-                               type="button"
-                               onClick={() => openPdfDownload(inv)}
-                               disabled={downloadingPdfId === inv.id}
-                               className="p-2 hover:bg-green-50 rounded-lg text-gray-400 hover:text-green-600 transition-colors disabled:opacity-50"
-                               title="Download PDF"
-                             >
-                               {downloadingPdfId === inv.id ? (
-                                 <Loader2 className="w-4 h-4 animate-spin" />
-                               ) : (
-                                 <Download className="w-4 h-4" />
-                               )}
-                             </button>
-                           ) : null;
-                         })()}
-                         <button
-                           type="button"
-                           onClick={() => generateInvoice(treatment)}
-                           disabled={generatingInvoice === treatment.id}
-                           className="p-2 hover:bg-[#fef9f0] rounded-lg text-gray-400 hover:text-[#1a2845] transition-colors disabled:opacity-50"
-                          title="Generate invoice (batches all pending treatments for this patient)"
-                         >
-                           {generatingInvoice === treatment.id ? (
-                             <Loader2 className="w-4 h-4 animate-spin" />
-                           ) : (
-                             <FileText className="w-4 h-4" />
-                           )}
-                         </button>
-                         <button
-                           type="button"
-                           onClick={() => openEditDialog(treatment, 'treatment')}
-                           className="p-2 hover:bg-blue-50 rounded-lg text-gray-400 hover:text-blue-600 transition-colors"
-                         >
-                           <Pencil className="w-4 h-4" />
-                         </button>
-                         <button
-                           type="button"
-                           onClick={() => handleDeleteClick(treatment, 'treatment')}
-                           className="p-2 hover:bg-red-50 rounded-lg text-gray-400 hover:text-red-600 transition-colors"
-                         >
-                           <Trash2 className="w-4 h-4" />
-                         </button>
-                       </div>
+                        {(() => {
+                          const inv = invoices?.find((i) => i.treatment_entry_id === treatment.id);
+                          const hasPdf = Boolean(inv?.invoice_pdf_url);
+                          return (
+                            <DropdownMenu>
+                              <DropdownMenuTrigger asChild>
+                                <button
+                                  type="button"
+                                  aria-label="Treatment actions"
+                                  className="p-2 hover:bg-gray-50 rounded-lg text-gray-500 hover:text-gray-900 transition-colors"
+                                >
+                                  <MoreVertical className="w-4 h-4" />
+                                </button>
+                              </DropdownMenuTrigger>
+                              <DropdownMenuContent align="end" className="w-60">
+                                <DropdownMenuItem
+                                  onSelect={() => generateInvoice(treatment)}
+                                  disabled={generatingInvoice === treatment.id}
+                                  className="gap-2"
+                                >
+                                  {generatingInvoice === treatment.id ? (
+                                    <Loader2 className="w-4 h-4 animate-spin" />
+                                  ) : (
+                                    <FileText className="w-4 h-4 text-amber-700" />
+                                  )}
+                                  Generate invoice
+                                </DropdownMenuItem>
+
+                                {hasPdf && (
+                                  <DropdownMenuItem
+                                    onSelect={() => openPdfDownload(inv)}
+                                    disabled={downloadingPdfId === inv?.id}
+                                    className="gap-2"
+                                  >
+                                    {downloadingPdfId === inv?.id ? (
+                                      <Loader2 className="w-4 h-4 animate-spin" />
+                                    ) : (
+                                      <Download className="w-4 h-4 text-green-700" />
+                                    )}
+                                    Download PDF
+                                  </DropdownMenuItem>
+                                )}
+
+                                <DropdownMenuSeparator />
+
+                                <DropdownMenuItem
+                                  onSelect={() => openEditDialog(treatment, 'treatment')}
+                                  className="gap-2"
+                                >
+                                  <Pencil className="w-4 h-4 text-blue-700" />
+                                  Edit
+                                </DropdownMenuItem>
+
+                                <DropdownMenuItem
+                                  onSelect={() => handleDeleteClick(treatment, 'treatment')}
+                                  className="gap-2 text-red-700 focus:text-red-700"
+                                >
+                                  <Trash2 className="w-4 h-4 text-red-600" />
+                                  Delete
+                                </DropdownMenuItem>
+                              </DropdownMenuContent>
+                            </DropdownMenu>
+                          );
+                        })()}
                       </td>
                     </tr>
                   ))}
