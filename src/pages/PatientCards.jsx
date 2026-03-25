@@ -99,7 +99,7 @@ function PatientHeader({ patient, lastSeen, hasOutstanding }) {
               </Badge>
             )}
             {hasOutstanding && (
-              <Badge variant="outline" className="text-xs font-normal border-amber-300 bg-amber-50 text-amber-700">
+              <Badge variant="outline" className="text-xs font-normal border-rose-300 bg-rose-50 text-rose-700">
                 <AlertCircle className="h-3 w-3 mr-1" />
                 Payment due
               </Badge>
@@ -139,7 +139,7 @@ function FinancialSummary({ totalBilled, totalPaid, outstanding }) {
     <div className="py-4 border-y border-gray-200">
       {outstanding > 0 ? (
         <div className="flex items-baseline gap-2 mb-1">
-          <span className="text-2xl font-semibold text-amber-600 tabular-nums">
+          <span className="text-2xl font-semibold text-rose-600 tabular-nums">
             £{money(outstanding)}
           </span>
           <span className="text-sm text-gray-600">outstanding balance</span>
@@ -214,7 +214,7 @@ function TreatmentTimeline({ treatments }) {
                   isPaid
                     ? "bg-emerald-500 border-emerald-500"
                     : isPartial
-                    ? "bg-amber-400 border-amber-400"
+                    ? "bg-rose-400 border-rose-400"
                     : "bg-white border-gray-300"
                 }`}
               />
@@ -241,7 +241,7 @@ function TreatmentTimeline({ treatments }) {
                       £{money(t.price_paid)} {!isPaid && `· £{money(t.amount_paid)} paid`}
                     </span>
                     {!isPaid && dueAmount > 0 && (
-                      <span className="text-amber-600 font-medium">
+                      <span className="text-rose-600 font-medium">
                         £{money(dueAmount)} due
                       </span>
                     )}
