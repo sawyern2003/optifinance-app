@@ -1424,6 +1424,32 @@ export default function VoiceDiary() {
                 )}
               </button>
             </div>
+
+            {/* Animated Waveform Visualization */}
+            {(isWhisperRecording || isWhisperTranscribing) && (
+              <div className="mt-8 flex items-center justify-center gap-1.5 h-16">
+                {Array.from({ length: 25 }).map((_, i) => {
+                  // Create varied heights based on audio level and index
+                  const baseHeight = 12 + (pulseLevel * 32);
+                  const offset = Math.sin((i / 25) * Math.PI * 2 + Date.now() / 200) * 8;
+                  const height = Math.max(4, baseHeight + offset);
+
+                  return (
+                    <div
+                      key={i}
+                      className="w-1.5 rounded-full bg-gradient-to-t from-[#d6b164] to-[#b89a52] shadow-sm"
+                      style={{
+                        height: `${height}px`,
+                        opacity: 0.6 + (pulseLevel * 0.4),
+                        transition: 'height 0.1s ease-out, opacity 0.1s ease-out',
+                        animation: `waveform-pulse 1.2s ease-in-out infinite`,
+                        animationDelay: `${i * 0.05}s`,
+                      }}
+                    />
+                  );
+                })}
+              </div>
+            )}
           </div>
 
           <section className="shrink-0 border-t border-slate-200/70 pt-5">

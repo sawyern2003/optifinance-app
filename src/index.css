@@ -174,4 +174,14 @@ button:focus-visible {
   .vd-orb-glow-idle {
     animation: vd-orb-glow-idle 3.4s ease-in-out infinite;
   }
+
+  /* Waveform animation for recording visualizer */
+  @keyframes waveform-pulse {
+    0%, 100% {
+      transform: scaleY(0.5);
+    }
+    50% {
+      transform: scaleY(1.2);
+    }
+  }
 }
