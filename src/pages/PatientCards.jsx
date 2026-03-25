@@ -83,9 +83,9 @@ function aggregateByPatient(patients, treatmentEntries, clinicalNotes) {
 
 // Patient Header Component
 function PatientHeader({ patient, lastSeen, hasOutstanding }) {
-  // Generate unique cartoon avatar based on patient name - always happy and cheerful!
+  // Generate neutral cartoon avatar - fun emojis that don't depict race or gender
   const avatarSeed = patient.name || "anonymous";
-  const avatarUrl = `https://api.dicebear.com/7.x/big-smile/svg?seed=${encodeURIComponent(avatarSeed)}&backgroundColor=b6e3f4,c0aede,d1d4f9`;
+  const avatarUrl = `https://api.dicebear.com/7.x/fun-emoji/svg?seed=${encodeURIComponent(avatarSeed)}&backgroundColor=b6e3f4,c0aede,d1d4f9,ffd5dc,ffdfbf,c7d2fe,fecaca,fed7aa,a7f3d0,fbcfe8`;
 
   return (
     <div className="mb-6">
