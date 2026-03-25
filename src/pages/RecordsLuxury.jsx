@@ -3,14 +3,18 @@ import { api } from "@/api/api";
 import { invoicesAPI } from "@/api/invoices";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useLocation } from "react-router-dom";
-import { Input } from "@/components/ui/input";
-import { Button } from "@/components/ui/button";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { Sparkles, CreditCard, Search, FileCheck, Loader2 } from "lucide-react";
-import { format, startOfMonth, endOfMonth, subMonths, startOfYear } from "date-fns";
+import { Button } from "@/components/ui/button";
+import { Sparkles, CreditCard, FileCheck } from "lucide-react";
+import { format } from "date-fns";
 import { useToast } from "@/components/ui/use-toast";
 import { RecordsGrid } from "@/components/records/RecordsGrid";
+import { FilterSidebar } from "@/components/records/FilterSidebar";
+import { TreatmentEditPanel } from "@/components/records/TreatmentEditPanel";
+import { ExpenseEditPanel } from "@/components/records/ExpenseEditPanel";
+import {
+  friendsFamilyInvoiceFields,
+} from "@/lib/invoiceFriendsFamily";
 import Invoices from "./Invoices";
 
 export default function RecordsLuxury() {
@@ -22,14 +26,16 @@ export default function RecordsLuxury() {
   const [searchTerm, setSearchTerm] = useState('');
   const [activeTab, setActiveTab] = useState("treatments");
   const [dateRangePreset, setDateRangePreset] = useState('all-time');
-  const [customStartDate, setCustomStartDate] = useState('');
-  const [customEndDate, setCustomEndDate] = useState('');
   const [paymentStatusFilter, setPaymentStatusFilter] = useState('all');
 
   // Modal/Dialog state
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
   const [itemToDelete, setItemToDelete] = useState(null);
   const [generatingInvoice, setGeneratingInvoice] = useState(null);
+
+  // Edit panel state
+  const [editPanelOpen, setEditPanelOpen] = useState(false);
+  const [editingItem, setEditingItem] = useState(null);
 
   // Selection state
   const [selectedTreatments, setSelectedTreatments] = useState([]);
@@ -81,6 +87,50 @@ export default function RecordsLuxury() {
     if (tab === "expenses") setActiveTab("expenses");
   }, [location.search]);
 
+  // Update mutations
+  const updateTreatmentMutation = useMutation({
+    mutationFn: ({ id, data }) => api.entities.TreatmentEntry.update(id, data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['treatments'] });
+      queryClient.invalidateQueries({ queryKey: ['practitioners'] });
+      setEditPanelOpen(false);
+      setEditingItem(null);
+      toast({
+        title: 'Treatment updated',
+        description: 'Changes have been saved successfully.',
+        className: 'bg-green-50 border-green-200',
+      });
+    },
+    onError: (err) => {
+      toast({
+        title: "Could not update treatment",
+        description: err?.message || "Please check required fields and try again.",
+        variant: "destructive",
+      });
+    },
+  });
+
+  const updateExpenseMutation = useMutation({
+    mutationFn: ({ id, data }) => api.entities.Expense.update(id, data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['expenses'] });
+      setEditPanelOpen(false);
+      setEditingItem(null);
+      toast({
+        title: 'Expense updated',
+        description: 'Changes have been saved successfully.',
+        className: 'bg-green-50 border-green-200',
+      });
+    },
+    onError: (err) => {
+      toast({
+        title: "Could not update expense",
+        description: err?.message || "Please check required fields and try again.",
+        variant: "destructive",
+      });
+    },
+  });
+
   // Delete mutations
   const deleteTreatmentMutation = useMutation({
     mutationFn: (id) => api.entities.TreatmentEntry.delete(id),
@@ -126,6 +176,46 @@ export default function RecordsLuxury() {
     }
   };
 
+  // Edit handlers
+  const handleEditClick = (item, type) => {
+    setEditingItem({ ...item, type });
+    setEditPanelOpen(true);
+  };
+
+  const handleTreatmentSave = async (data, newPractitionerName) => {
+    let finalData = { ...data };
+
+    // Handle new practitioner creation if needed
+    if (newPractitionerName && newPractitionerName.trim() !== '') {
+      try {
+        const newPractitioner = await api.entities.Practitioner.create({ name: newPractitionerName });
+        finalData.practitioner_id = newPractitioner.id;
+        finalData.practitioner_name = newPractitioner.name;
+        queryClient.invalidateQueries({ queryKey: ['practitioners'] });
+      } catch (error) {
+        console.error('Failed to create new practitioner:', error);
+        toast({
+          title: "Could not create practitioner",
+          description: error?.message || "Please try again.",
+          variant: "destructive",
+        });
+        return;
+      }
+    }
+
+    updateTreatmentMutation.mutate({
+      id: editingItem.id,
+      data: finalData
+    });
+  };
+
+  const handleExpenseSave = (data) => {
+    updateExpenseMutation.mutate({
+      id: editingItem.id,
+      data: data
+    });
+  };
+
   // Generate invoice
   const generateInvoiceNumber = () => {
     const date = new Date();
@@ -154,6 +244,7 @@ export default function RecordsLuxury() {
         issue_date: format(new Date(), 'yyyy-MM-dd'),
         status: treatment.payment_status === 'paid' ? 'paid' : 'draft',
         notes: treatment.notes || '',
+        ...friendsFamilyInvoiceFields(treatment, treatmentCatalog, patients),
       });
 
       // Generate PDF
@@ -180,9 +271,14 @@ export default function RecordsLuxury() {
     setGeneratingInvoice(null);
   };
 
-  // Date range calculation
+  // Date range calculation (keeping existing logic)
   const getDateRange = () => {
     const now = new Date();
+    const startOfMonth = (date) => new Date(date.getFullYear(), date.getMonth(), 1);
+    const endOfMonth = (date) => new Date(date.getFullYear(), date.getMonth() + 1, 0, 23, 59, 59);
+    const subMonths = (date, months) => new Date(date.getFullYear(), date.getMonth() - months, date.getDate());
+    const startOfYear = (date) => new Date(date.getFullYear(), 0, 1);
+
     switch(dateRangePreset) {
       case 'this-month':
         return { start: startOfMonth(now), end: endOfMonth(now) };
@@ -195,11 +291,6 @@ export default function RecordsLuxury() {
         return { start: startOfMonth(subMonths(now, 5)), end: endOfMonth(now) };
       case 'year-to-date':
         return { start: startOfYear(now), end: now };
-      case 'custom':
-        return {
-          start: customStartDate ? new Date(customStartDate) : null,
-          end: customEndDate ? new Date(customEndDate) : null
-        };
       case 'all-time':
       default:
         return null;
@@ -249,6 +340,26 @@ export default function RecordsLuxury() {
     });
   }, [expenses, searchTerm, dateRange]);
 
+  // Calculate statistics
+  const statistics = useMemo(() => {
+    if (activeTab === 'treatments') {
+      const totalRevenue = filteredTreatments.reduce((sum, t) => sum + (t.amount_paid || 0), 0);
+      const pendingCount = filteredTreatments.filter(t => t.payment_status === 'pending').length;
+      return {
+        count: filteredTreatments.length,
+        totalRevenue,
+        pendingCount
+      };
+    } else if (activeTab === 'expenses') {
+      const totalExpenses = filteredExpenses.reduce((sum, e) => sum + (e.amount || 0), 0);
+      return {
+        count: filteredExpenses.length,
+        totalExpenses
+      };
+    }
+    return null;
+  }, [activeTab, filteredTreatments, filteredExpenses]);
+
   // Toggle selection
   const toggleSelectItem = (id) => {
     if (activeTab === 'treatments') {
@@ -263,150 +374,137 @@ export default function RecordsLuxury() {
   };
 
   return (
-    <div className="min-h-screen bg-[#F5F6F8]">
-      {/* Header */}
-      <div className="bg-white border-b border-gray-100">
-        <div className="max-w-7xl mx-auto px-6 py-6">
-          <h1 className="text-3xl font-light tracking-tight text-[#1a2845] mb-2">Records</h1>
-          <p className="text-sm text-gray-500 font-light">View and manage all your transactions</p>
-        </div>
-      </div>
+    <div className="min-h-screen bg-[#F5F6F8] flex">
+      {/* Filter Sidebar */}
+      {activeTab !== 'invoices' && (
+        <FilterSidebar
+          searchTerm={searchTerm}
+          setSearchTerm={setSearchTerm}
+          dateRangePreset={dateRangePreset}
+          setDateRangePreset={setDateRangePreset}
+          paymentStatusFilter={paymentStatusFilter}
+          setPaymentStatusFilter={setPaymentStatusFilter}
+          statistics={statistics}
+          type={activeTab}
+        />
+      )}
 
-      {/* Tabs */}
-      <div className="bg-white border-b border-gray-100">
-        <div className="max-w-7xl mx-auto px-6 py-4">
-          <div className="flex gap-2">
-            <button
-              type="button"
-              onClick={() => setActiveTab("treatments")}
-              className={`flex items-center gap-2 px-6 py-3 rounded-xl font-medium transition-colors ${
-                activeTab === "treatments"
-                  ? 'bg-[#2C3E50] text-white'
-                  : 'text-gray-600 hover:text-gray-900'
-              }`}
-            >
-              <Sparkles className="w-5 h-5" />
-              Treatments
-            </button>
-            <button
-              type="button"
-              onClick={() => setActiveTab("expenses")}
-              className={`flex items-center gap-2 px-6 py-3 rounded-xl font-medium transition-colors ${
-                activeTab === "expenses"
-                  ? 'bg-[#2C3E50] text-white'
-                  : 'text-gray-600 hover:text-gray-900'
-              }`}
-            >
-              <CreditCard className="w-5 h-5" />
-              Expenses
-            </button>
-            <button
-              type="button"
-              onClick={() => setActiveTab("invoices")}
-              className={`flex items-center gap-2 px-6 py-3 rounded-xl font-medium transition-colors ${
-                activeTab === "invoices"
-                  ? 'bg-[#2C3E50] text-white'
-                  : 'text-gray-600 hover:text-gray-900'
-              }`}
-            >
-              <FileCheck className="w-5 h-5" />
-              Invoices
-            </button>
+      {/* Main Content */}
+      <div className="flex-1 flex flex-col">
+        {/* Header */}
+        <div className="bg-white border-b border-gray-100">
+          <div className="px-6 py-6">
+            <h1 className="text-3xl font-light tracking-tight text-[#1a2845] mb-2">Records</h1>
+            <p className="text-sm text-gray-500 font-light">View and manage all your transactions</p>
           </div>
         </div>
-      </div>
 
-      {/* Filters */}
-      {activeTab !== 'invoices' && (
+        {/* Tabs */}
         <div className="bg-white border-b border-gray-100">
-          <div className="max-w-7xl mx-auto px-6 py-4">
-            <div className="flex flex-col md:flex-row gap-4">
-              {/* Search */}
-              <div className="relative flex-1">
-                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400" />
-                <Input
-                  placeholder="Search records..."
-                  value={searchTerm}
-                  onChange={(e) => setSearchTerm(e.target.value)}
-                  className="pl-10 rounded-xl border-gray-300 h-11"
-                />
-              </div>
-
-              {/* Date Range */}
-              <Select value={dateRangePreset} onValueChange={setDateRangePreset}>
-                <SelectTrigger className="w-full md:w-48 rounded-xl border-gray-300 h-11">
-                  <SelectValue placeholder="Select date range" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all-time">All Time</SelectItem>
-                  <SelectItem value="this-month">This Month</SelectItem>
-                  <SelectItem value="last-month">Last Month</SelectItem>
-                  <SelectItem value="last-3-months">Last 3 Months</SelectItem>
-                  <SelectItem value="last-6-months">Last 6 Months</SelectItem>
-                  <SelectItem value="year-to-date">Year to Date</SelectItem>
-                </SelectContent>
-              </Select>
-
-              {/* Payment Status Filter (Treatments only) */}
-              {activeTab === "treatments" && (
-                <Select value={paymentStatusFilter} onValueChange={setPaymentStatusFilter}>
-                  <SelectTrigger className="w-full md:w-48 rounded-xl border-gray-300 h-11">
-                    <SelectValue placeholder="Payment status" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all">All Payments</SelectItem>
-                    <SelectItem value="paid">Paid</SelectItem>
-                    <SelectItem value="pending">Pending</SelectItem>
-                    <SelectItem value="partially_paid">Partial</SelectItem>
-                  </SelectContent>
-                </Select>
-              )}
+          <div className="px-6 py-4">
+            <div className="flex gap-2">
+              <button
+                type="button"
+                onClick={() => setActiveTab("treatments")}
+                className={`flex items-center gap-2 px-6 py-3 rounded-xl font-medium transition-colors ${
+                  activeTab === "treatments"
+                    ? 'bg-[#2C3E50] text-white'
+                    : 'text-gray-600 hover:text-gray-900'
+                }`}
+              >
+                <Sparkles className="w-5 h-5" />
+                Treatments
+              </button>
+              <button
+                type="button"
+                onClick={() => setActiveTab("expenses")}
+                className={`flex items-center gap-2 px-6 py-3 rounded-xl font-medium transition-colors ${
+                  activeTab === "expenses"
+                    ? 'bg-[#2C3E50] text-white'
+                    : 'text-gray-600 hover:text-gray-900'
+                }`}
+              >
+                <CreditCard className="w-5 h-5" />
+                Expenses
+              </button>
+              <button
+                type="button"
+                onClick={() => setActiveTab("invoices")}
+                className={`flex items-center gap-2 px-6 py-3 rounded-xl font-medium transition-colors ${
+                  activeTab === "invoices"
+                    ? 'bg-[#2C3E50] text-white'
+                    : 'text-gray-600 hover:text-gray-900'
+                }`}
+              >
+                <FileCheck className="w-5 h-5" />
+                Invoices
+              </button>
             </div>
           </div>
         </div>
+
+        {/* Content */}
+        <div className="flex-1 overflow-y-auto">
+          {activeTab === "treatments" ? (
+            <RecordsGrid
+              items={filteredTreatments}
+              type="treatments"
+              isLoading={loadingTreatments}
+              selectedItems={selectedTreatments}
+              onSelectItem={toggleSelectItem}
+              onEdit={handleEditClick}
+              onDelete={handleDeleteClick}
+              onGenerateInvoice={generateInvoice}
+              practitioners={practitioners}
+              invoices={invoices}
+            />
+          ) : activeTab === "expenses" ? (
+            <RecordsGrid
+              items={filteredExpenses}
+              type="expenses"
+              isLoading={loadingExpenses}
+              selectedItems={selectedExpenses}
+              onSelectItem={toggleSelectItem}
+              onEdit={handleEditClick}
+              onDelete={handleDeleteClick}
+            />
+          ) : (
+            <div className="p-6">
+              <Invoices embedded />
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* Edit Panels */}
+      {editingItem?.type === 'treatment' && (
+        <TreatmentEditPanel
+          treatment={editingItem}
+          isOpen={editPanelOpen}
+          onClose={() => {
+            setEditPanelOpen(false);
+            setEditingItem(null);
+          }}
+          onSave={handleTreatmentSave}
+          patients={patients}
+          treatmentCatalog={treatmentCatalog}
+          practitioners={practitioners}
+          isSaving={updateTreatmentMutation.isPending}
+        />
       )}
 
-      {/* Content */}
-      <div className="max-w-7xl mx-auto">
-        {activeTab === "treatments" ? (
-          <RecordsGrid
-            items={filteredTreatments}
-            type="treatments"
-            isLoading={loadingTreatments}
-            selectedItems={selectedTreatments}
-            onSelectItem={toggleSelectItem}
-            onEdit={() => {
-              toast({
-                title: 'Coming soon',
-                description: 'Edit functionality will be added in Phase 2',
-              });
-            }}
-            onDelete={handleDeleteClick}
-            onGenerateInvoice={generateInvoice}
-            practitioners={practitioners}
-            invoices={invoices}
-          />
-        ) : activeTab === "expenses" ? (
-          <RecordsGrid
-            items={filteredExpenses}
-            type="expenses"
-            isLoading={loadingExpenses}
-            selectedItems={selectedExpenses}
-            onSelectItem={toggleSelectItem}
-            onEdit={() => {
-              toast({
-                title: 'Coming soon',
-                description: 'Edit functionality will be added in Phase 2',
-              });
-            }}
-            onDelete={handleDeleteClick}
-          />
-        ) : (
-          <div className="p-6">
-            <Invoices embedded />
-          </div>
-        )}
-      </div>
+      {editingItem?.type === 'expense' && (
+        <ExpenseEditPanel
+          expense={editingItem}
+          isOpen={editPanelOpen}
+          onClose={() => {
+            setEditPanelOpen(false);
+            setEditingItem(null);
+          }}
+          onSave={handleExpenseSave}
+          isSaving={updateExpenseMutation.isPending}
+        />
+      )}
 
       {/* Delete Confirmation Dialog */}
       <Dialog open={deleteConfirmOpen} onOpenChange={setDeleteConfirmOpen}>
