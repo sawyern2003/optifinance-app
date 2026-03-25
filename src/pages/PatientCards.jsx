@@ -418,6 +418,18 @@ export default function PatientCards() {
 
   const { patient, treatments, notes, totalBilled, totalPaid, outstanding } = currentPatient;
 
+  // Elegant gradient colors for each patient
+  const glowColors = [
+    { gradient: "from-blue-500/20 via-cyan-500/20 to-blue-500/20", shadow: "shadow-blue-500/10" },
+    { gradient: "from-purple-500/20 via-pink-500/20 to-purple-500/20", shadow: "shadow-purple-500/10" },
+    { gradient: "from-emerald-500/20 via-teal-500/20 to-emerald-500/20", shadow: "shadow-emerald-500/10" },
+    { gradient: "from-violet-500/20 via-fuchsia-500/20 to-violet-500/20", shadow: "shadow-violet-500/10" },
+    { gradient: "from-cyan-500/20 via-blue-500/20 to-cyan-500/20", shadow: "shadow-cyan-500/10" },
+    { gradient: "from-indigo-500/20 via-purple-500/20 to-indigo-500/20", shadow: "shadow-indigo-500/10" },
+  ];
+
+  const cardGlow = glowColors[currentIndex % glowColors.length];
+
   // Calculate last seen
   const lastTreatment = treatments[0];
   const lastSeenDate = lastTreatment?.date ? new Date(lastTreatment.date) : null;
@@ -484,8 +496,18 @@ export default function PatientCards() {
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
             transition={{ duration: 0.15 }}
+            className="relative"
           >
-            <div className="bg-white border border-gray-200 rounded-lg p-8">
+            {/* Ambient glow effect */}
+            <div className={`absolute -inset-4 rounded-2xl bg-gradient-to-br ${cardGlow.gradient} blur-2xl opacity-30`} />
+
+            <div className={`relative bg-white rounded-lg p-8 overflow-hidden shadow-2xl ${cardGlow.shadow}`}>
+              {/* Gradient glow border effect */}
+              <div className={`absolute inset-0 rounded-lg bg-gradient-to-br ${cardGlow.gradient} opacity-100`} />
+              <div className="absolute inset-[1px] rounded-lg bg-white" />
+
+              {/* Content wrapper with relative positioning */}
+              <div className="relative z-10">
               {/* Patient Header */}
               <PatientHeader
                 patient={patient}
@@ -532,6 +554,7 @@ export default function PatientCards() {
                   </ScrollArea>
                 </TabsContent>
               </Tabs>
+              </div>
             </div>
           </motion.div>
         </AnimatePresence>
