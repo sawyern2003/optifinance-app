@@ -54,7 +54,8 @@ const PAGES = {
     
     Home: Home,
     
-    Invoices: Invoices,
+    // `/Invoices` now redirects to `Records?tab=invoices`; keep this mapping to avoid runtime errors.
+    Invoices: Records,
     
     Pricing: Pricing,
     
