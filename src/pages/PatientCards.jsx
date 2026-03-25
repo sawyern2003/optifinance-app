@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from "react";
+import React, { useMemo, useState, useEffect } from "react";
 import { Link } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { format } from "date-fns";
@@ -9,6 +9,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import {
   CreditCard,
   FileText,
@@ -19,6 +20,8 @@ import {
   ChevronRight,
   ChevronLeft,
   User,
+  Search,
+  X,
 } from "lucide-react";
 
 function money(n) {
@@ -89,6 +92,7 @@ function PaymentBadge({ status }) {
 
 export default function PatientCards() {
   const [currentIndex, setCurrentIndex] = useState(0);
+  const [searchQuery, setSearchQuery] = useState("");
 
   const { data: patients = [], isLoading: loadingPatients } = useQuery({
     queryKey: ["patients"],
@@ -108,10 +112,18 @@ export default function PatientCards() {
     initialData: [],
   });
 
-  const rows = useMemo(
+  const allRows = useMemo(
     () => aggregateByPatient(patients, treatmentEntriesAll, clinicalNotesAll),
     [patients, treatmentEntriesAll, clinicalNotesAll],
   );
+
+  const rows = useMemo(() => {
+    if (!searchQuery.trim()) return allRows;
+    const query = searchQuery.toLowerCase();
+    return allRows.filter((row) =>
+      row.patient.name?.toLowerCase().includes(query)
+    );
+  }, [allRows, searchQuery]);
 
   const loading = loadingPatients || loadingTreatments || loadingNotes;
 
@@ -122,6 +134,13 @@ export default function PatientCards() {
   const prevCard = () => {
     setCurrentIndex((prev) => (prev - 1 + rows.length) % rows.length);
   };
+
+  // Reset to first card when search changes
+  useEffect(() => {
+    if (rows.length > 0 && currentIndex >= rows.length) {
+      setCurrentIndex(0);
+    }
+  }, [rows.length, currentIndex]);
 
   const currentPatient = rows[currentIndex];
 
@@ -152,92 +171,126 @@ export default function PatientCards() {
     );
   }
 
+  if (!currentPatient && rows.length === 0 && searchQuery) {
+    return (
+      <div className="min-h-screen bg-gray-50 px-4 py-8">
+        <div className="max-w-4xl mx-auto">
+          <div className="mb-6">
+            <h1 className="text-2xl font-semibold text-gray-900 mb-4">Patient Cards</h1>
+            <div className="relative">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
+              <Input
+                type="text"
+                placeholder="Search patients..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="pl-10 pr-10 h-11 border-gray-300"
+              />
+              {searchQuery && (
+                <button
+                  onClick={() => setSearchQuery("")}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                >
+                  <X className="h-4 w-4" />
+                </button>
+              )}
+            </div>
+          </div>
+          <div className="text-center py-16">
+            <p className="text-gray-600">No patients found matching "{searchQuery}"</p>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   if (!currentPatient) return null;
 
   const { patient, treatments, notes, totalBilled, totalPaid, outstanding } = currentPatient;
 
   return (
-    <div className="min-h-screen pb-20 px-4 md:px-8">
-      {/* Elegant Header */}
-      <div className="max-w-7xl mx-auto pt-8 pb-8">
-        <div className="flex items-center justify-between">
-          <div>
-            <h1 className="text-4xl font-bold text-[#1a2845] tracking-tight">Patient Cards</h1>
-            <p className="text-slate-500 mt-1">
-              Viewing {currentIndex + 1} of {rows.length}
-            </p>
+    <div className="min-h-screen bg-gray-50 px-4 py-8">
+      <div className="max-w-4xl mx-auto">
+        {/* Header with Search */}
+        <div className="mb-6">
+          <div className="flex items-center justify-between mb-4">
+            <h1 className="text-2xl font-semibold text-gray-900">Patient Cards</h1>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={prevCard}
+                disabled={rows.length <= 1}
+                className="h-9 w-9 rounded-lg border border-gray-300 bg-white hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed transition-colors flex items-center justify-center"
+              >
+                <ChevronLeft className="h-4 w-4 text-gray-700" />
+              </button>
+              <span className="text-sm text-gray-600 min-w-[60px] text-center">
+                {currentIndex + 1} / {rows.length}
+              </span>
+              <button
+                onClick={nextCard}
+                disabled={rows.length <= 1}
+                className="h-9 w-9 rounded-lg border border-gray-300 bg-white hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed transition-colors flex items-center justify-center"
+              >
+                <ChevronRight className="h-4 w-4 text-gray-700" />
+              </button>
+            </div>
           </div>
 
-          {/* Sleek Navigation Controls */}
-          <div className="flex items-center gap-3">
-            <button
-              onClick={prevCard}
-              disabled={rows.length <= 1}
-              className="h-12 w-12 rounded-xl bg-white border border-slate-200 hover:border-[#1a2845] hover:bg-slate-50 disabled:opacity-30 disabled:cursor-not-allowed transition-all shadow-sm hover:shadow-md flex items-center justify-center group"
-            >
-              <ChevronLeft className="h-5 w-5 text-slate-600 group-hover:text-[#1a2845]" />
-            </button>
-            <button
-              onClick={nextCard}
-              disabled={rows.length <= 1}
-              className="h-12 w-12 rounded-xl bg-gradient-to-br from-[#1a2845] to-[#2d4263] hover:from-[#243556] hover:to-[#1a2845] disabled:opacity-30 disabled:cursor-not-allowed transition-all shadow-md hover:shadow-xl flex items-center justify-center"
-            >
-              <ChevronRight className="h-5 w-5 text-white" />
-            </button>
+          {/* Search Bar */}
+          <div className="relative">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
+            <Input
+              type="text"
+              placeholder="Search patients..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="pl-10 pr-10 h-11 border-gray-300"
+            />
+            {searchQuery && (
+              <button
+                onClick={() => setSearchQuery("")}
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            )}
           </div>
         </div>
-      </div>
 
-      {/* Main Card Container */}
-      <div className="max-w-5xl mx-auto">
+        {/* Main Card */}
         <AnimatePresence mode="wait">
           <motion.div
             key={currentIndex}
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -20 }}
-            transition={{ duration: 0.3, ease: "easeInOut" }}
-            className="relative"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.2 }}
           >
-            {/* Premium Card Design */}
-            <div className="bg-white rounded-3xl shadow-2xl overflow-hidden border border-slate-200/60">
-              {/* Header Section - Modern Glass Effect */}
-              <div className="relative bg-gradient-to-br from-[#1a2845] via-[#243556] to-[#1a2845] px-8 py-8">
-                {/* Decorative Elements */}
-                <div className="absolute top-0 left-0 right-0 h-[2px] bg-gradient-to-r from-transparent via-[#c7a86a] to-transparent opacity-80" />
-                <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_right,_var(--tw-gradient-stops))] from-white/5 via-transparent to-transparent" />
-
-                {/* Patient Info */}
-                <div className="relative flex items-start gap-6 mb-8">
-                  {/* Avatar */}
-                  <div className="relative">
-                    <div className="h-24 w-24 rounded-2xl bg-gradient-to-br from-[#c7a86a] to-[#b8935a] flex items-center justify-center shadow-xl">
-                      <span className="text-3xl font-bold text-white">
-                        {patientInitials(patient.name)}
-                      </span>
-                    </div>
-                    <div className="absolute -bottom-1 -right-1 h-7 w-7 rounded-lg bg-emerald-500 border-4 border-[#1a2845] flex items-center justify-center">
-                      <User className="h-4 w-4 text-white" />
-                    </div>
+            <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
+              {/* Patient Header */}
+              <div className="bg-gray-900 px-6 py-6">
+                <div className="flex items-start gap-4 mb-6">
+                  <div className="h-16 w-16 rounded-lg bg-gray-700 flex items-center justify-center flex-shrink-0">
+                    <span className="text-2xl font-semibold text-white">
+                      {patientInitials(patient.name)}
+                    </span>
                   </div>
-
-                  {/* Name & Contact */}
-                  <div className="flex-1 min-w-0 pt-1">
-                    <h2 className="text-3xl font-bold text-white mb-4 tracking-tight">
+                  <div className="flex-1 min-w-0">
+                    <h2 className="text-xl font-semibold text-white mb-3">
                       {patient.name || "Patient"}
                     </h2>
-                    <div className="flex flex-wrap gap-4 text-sm">
+                    <div className="flex flex-wrap gap-3 text-sm">
                       {patient.phone && (
                         <a
                           href={`tel:${patient.phone}`}
-                          className="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg bg-white/10 hover:bg-white/20 text-white/90 hover:text-white backdrop-blur-sm border border-white/10 transition-all"
+                          className="inline-flex items-center gap-1.5 text-gray-300 hover:text-white transition-colors"
                         >
                           <Phone className="h-3.5 w-3.5" />
                           <span>{patient.phone}</span>
                         </a>
                       )}
                       {(patient.contact || patient.email) && (
-                        <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg bg-white/10 text-white/90 backdrop-blur-sm border border-white/10">
+                        <div className="inline-flex items-center gap-1.5 text-gray-300">
                           <Mail className="h-3.5 w-3.5" />
                           <span className="truncate max-w-[200px]">{patient.contact || patient.email}</span>
                         </div>
@@ -246,127 +299,95 @@ export default function PatientCards() {
                   </div>
                 </div>
 
-                {/* Financial Overview - Elegant Cards */}
-                <div className="relative grid grid-cols-3 gap-4">
-                  <div className="bg-white/10 backdrop-blur-xl rounded-xl p-4 border border-white/20 hover:bg-white/15 transition-all">
-                    <p className="text-[10px] font-bold uppercase tracking-wider text-white/60 mb-2">
-                      Total Billed
-                    </p>
-                    <p className="text-3xl font-bold text-white tabular-nums">
+                {/* Financial Stats */}
+                <div className="grid grid-cols-3 gap-3">
+                  <div className="bg-gray-800 rounded-lg p-3">
+                    <p className="text-xs text-gray-400 mb-1">Total Billed</p>
+                    <p className="text-lg font-semibold text-white tabular-nums">
                       £{money(totalBilled)}
                     </p>
                   </div>
-                  <div className="bg-emerald-500/20 backdrop-blur-xl rounded-xl p-4 border border-emerald-400/40 hover:bg-emerald-500/25 transition-all">
-                    <p className="text-[10px] font-bold uppercase tracking-wider text-emerald-100 mb-2">
-                      Paid
-                    </p>
-                    <p className="text-3xl font-bold text-white tabular-nums">
+                  <div className="bg-gray-800 rounded-lg p-3">
+                    <p className="text-xs text-gray-400 mb-1">Paid</p>
+                    <p className="text-lg font-semibold text-emerald-400 tabular-nums">
                       £{money(totalPaid)}
                     </p>
                   </div>
-                  <div
-                    className={`backdrop-blur-xl rounded-xl p-4 border transition-all ${
-                      outstanding > 0
-                        ? "bg-amber-500/20 border-amber-400/40 hover:bg-amber-500/25"
-                        : "bg-white/10 border-white/20 hover:bg-white/15"
-                    }`}
-                  >
-                    <p
-                      className={`text-[10px] font-bold uppercase tracking-wider mb-2 ${
-                        outstanding > 0 ? "text-amber-100" : "text-white/60"
-                      }`}
-                    >
-                      Outstanding
-                    </p>
-                    <p className={`text-3xl font-bold tabular-nums ${outstanding > 0 ? "text-white" : "text-white"}`}>
+                  <div className="bg-gray-800 rounded-lg p-3">
+                    <p className="text-xs text-gray-400 mb-1">Outstanding</p>
+                    <p className={`text-lg font-semibold tabular-nums ${
+                      outstanding > 0 ? "text-amber-400" : "text-white"
+                    }`}>
                       £{money(outstanding)}
                     </p>
                   </div>
                 </div>
-
-                {/* Bottom accent */}
-                <div className="absolute bottom-0 left-0 right-0 h-[2px] bg-gradient-to-r from-transparent via-[#c7a86a] to-transparent opacity-80" />
               </div>
 
-              {/* Content Section */}
-              <div className="p-8">
+              {/* Content */}
+              <div className="p-6">
                 <Tabs defaultValue="visits" className="w-full">
-                  {/* Modern Tab Buttons */}
-                  <TabsList className="grid w-full grid-cols-2 bg-slate-100 p-1.5 rounded-xl mb-6 h-14">
+                  <TabsList className="grid w-full grid-cols-2 bg-gray-100 p-1 rounded-lg mb-4 h-10">
                     <TabsTrigger
                       value="visits"
-                      className="rounded-lg data-[state=active]:bg-white data-[state=active]:shadow-md text-sm font-semibold gap-2.5 data-[state=active]:text-[#1a2845] transition-all"
+                      className="rounded-md data-[state=active]:bg-white data-[state=active]:shadow-sm text-sm font-medium gap-2"
                     >
                       <Stethoscope className="h-4 w-4" />
-                      Treatments
-                      <span className="ml-1 text-xs px-2 py-0.5 rounded-full bg-slate-200 data-[state=active]:bg-[#1a2845]/10">
-                        {treatments.length}
-                      </span>
+                      Treatments ({treatments.length})
                     </TabsTrigger>
                     <TabsTrigger
                       value="notes"
-                      className="rounded-lg data-[state=active]:bg-white data-[state=active]:shadow-md text-sm font-semibold gap-2.5 data-[state=active]:text-[#1a2845] transition-all"
+                      className="rounded-md data-[state=active]:bg-white data-[state=active]:shadow-sm text-sm font-medium gap-2"
                     >
                       <FileText className="h-4 w-4" />
-                      Clinical Notes
-                      <span className="ml-1 text-xs px-2 py-0.5 rounded-full bg-slate-200 data-[state=active]:bg-[#1a2845]/10">
-                        {notes.length}
-                      </span>
+                      Notes ({notes.length})
                     </TabsTrigger>
                   </TabsList>
 
-                  {/* Treatments Tab */}
                   <TabsContent value="visits" className="mt-0">
-                    <ScrollArea className="h-[320px] pr-4">
+                    <ScrollArea className="h-[400px] pr-3">
                       {treatments.length === 0 ? (
-                        <div className="flex flex-col items-center justify-center py-16 text-center">
-                          <div className="h-20 w-20 rounded-2xl bg-gradient-to-br from-slate-100 to-slate-50 flex items-center justify-center mb-4 shadow-inner">
-                            <Stethoscope className="h-9 w-9 text-slate-300" />
-                          </div>
-                          <p className="text-slate-600 font-medium">No treatments recorded yet</p>
-                          <p className="text-sm text-slate-400 mt-1">Treatment history will appear here</p>
+                        <div className="flex flex-col items-center justify-center py-12 text-center">
+                          <Stethoscope className="h-12 w-12 text-gray-300 mb-3" />
+                          <p className="text-gray-600">No treatments recorded</p>
                         </div>
                       ) : (
                         <div className="space-y-3">
                           {treatments.map((t) => (
                             <div
                               key={t.id}
-                              className="group rounded-2xl border-2 border-slate-100 bg-gradient-to-br from-white to-slate-50/30 p-5 hover:border-[#c7a86a] hover:shadow-lg transition-all duration-200"
+                              className="border border-gray-200 rounded-lg p-4 hover:border-gray-300 hover:shadow-sm transition-all bg-white"
                             >
-                              <div className="flex items-start justify-between gap-3 mb-3">
+                              <div className="flex items-start justify-between gap-3 mb-2">
                                 <div className="flex-1">
-                                  <h3 className="font-bold text-[#1a2845] text-lg mb-1">
+                                  <h3 className="font-medium text-gray-900 mb-0.5">
                                     {t.treatment_name || "Treatment"}
                                   </h3>
-                                  <p className="text-sm text-slate-500">
-                                    {t.date ? format(new Date(t.date), "d MMMM yyyy") : "—"}
-                                    {t.practitioner_name && (
-                                      <span className="text-slate-400">
-                                        {" "}• {t.practitioner_name}
-                                      </span>
-                                    )}
+                                  <p className="text-sm text-gray-500">
+                                    {t.date ? format(new Date(t.date), "d MMM yyyy") : "—"}
+                                    {t.practitioner_name && <span> · {t.practitioner_name}</span>}
                                   </p>
                                 </div>
                                 <PaymentBadge status={t.payment_status} />
                               </div>
 
-                              <div className="flex items-center gap-6 text-sm">
-                                <div className="flex items-center gap-1.5">
-                                  <span className="text-slate-500">Price</span>
-                                  <span className="font-bold text-[#1a2845] text-base tabular-nums">
+                              <div className="flex items-center gap-4 text-sm mt-3">
+                                <div>
+                                  <span className="text-gray-500">Price: </span>
+                                  <span className="font-semibold text-gray-900 tabular-nums">
                                     £{money(t.price_paid)}
                                   </span>
                                 </div>
-                                <div className="flex items-center gap-1.5">
-                                  <span className="text-slate-500">Paid</span>
-                                  <span className="font-bold text-emerald-600 text-base tabular-nums">
+                                <div>
+                                  <span className="text-gray-500">Paid: </span>
+                                  <span className="font-semibold text-emerald-600 tabular-nums">
                                     £{money(t.amount_paid)}
                                   </span>
                                 </div>
                                 {Number(t.price_paid) - Number(t.amount_paid || 0) > 0 && (
-                                  <div className="flex items-center gap-1.5">
-                                    <span className="text-slate-500">Due</span>
-                                    <span className="font-bold text-amber-600 text-base tabular-nums">
+                                  <div>
+                                    <span className="text-gray-500">Due: </span>
+                                    <span className="font-semibold text-amber-600 tabular-nums">
                                       £{money(Number(t.price_paid) - Number(t.amount_paid || 0))}
                                     </span>
                                   </div>
@@ -374,7 +395,7 @@ export default function PatientCards() {
                               </div>
 
                               {t.notes && (
-                                <p className="mt-4 text-sm text-slate-600 leading-relaxed border-t border-slate-200 pt-3">
+                                <p className="mt-3 text-sm text-gray-600 pt-3 border-t border-gray-100">
                                   {t.notes}
                                 </p>
                               )}
@@ -385,20 +406,17 @@ export default function PatientCards() {
                     </ScrollArea>
                   </TabsContent>
 
-                  {/* Notes Tab */}
                   <TabsContent value="notes" className="mt-0">
-                    <ScrollArea className="h-[320px] pr-4">
+                    <ScrollArea className="h-[400px] pr-3">
                       {notes.length === 0 ? (
-                        <div className="flex flex-col items-center justify-center py-16 text-center">
-                          <div className="h-20 w-20 rounded-2xl bg-gradient-to-br from-slate-100 to-slate-50 flex items-center justify-center mb-4 shadow-inner">
-                            <FileText className="h-9 w-9 text-slate-300" />
-                          </div>
-                          <p className="text-slate-600 font-medium mb-2">No clinical notes yet</p>
-                          <p className="text-sm text-slate-400">
+                        <div className="flex flex-col items-center justify-center py-12 text-center">
+                          <FileText className="h-12 w-12 text-gray-300 mb-3" />
+                          <p className="text-gray-600 mb-1">No clinical notes yet</p>
+                          <p className="text-sm text-gray-500">
                             Add notes from{" "}
                             <Link
                               to={createPageUrl("Catalogue")}
-                              className="text-[#1a2845] font-semibold hover:text-[#c7a86a] underline"
+                              className="text-gray-900 font-medium hover:underline"
                             >
                               Catalogue
                             </Link>
@@ -412,19 +430,19 @@ export default function PatientCards() {
                             return (
                               <div
                                 key={note.id}
-                                className="rounded-2xl border-2 border-slate-100 bg-slate-50/50 p-5 hover:border-slate-200 transition-all"
+                                className="border border-gray-200 rounded-lg p-4 bg-gray-50"
                               >
-                                <div className="flex items-center justify-between mb-3 text-xs">
-                                  <span className="font-semibold text-slate-600">
+                                <div className="flex items-center justify-between mb-2 text-xs">
+                                  <span className="font-medium text-gray-600">
                                     {note.visit_date
-                                      ? format(new Date(note.visit_date), "d MMMM yyyy")
+                                      ? format(new Date(note.visit_date), "d MMM yyyy")
                                       : "—"}
                                   </span>
-                                  <span className="px-3 py-1 rounded-lg bg-white border border-slate-200 text-slate-500 font-medium capitalize">
+                                  <span className="px-2 py-0.5 rounded bg-white border border-gray-200 text-gray-500 capitalize">
                                     {(note.source || "").replace(/_/g, " ") || "note"}
                                   </span>
                                 </div>
-                                <p className="text-sm text-[#1a2845] leading-relaxed">{summary}</p>
+                                <p className="text-sm text-gray-700 leading-relaxed">{summary}</p>
                               </div>
                             );
                           })}
@@ -434,27 +452,25 @@ export default function PatientCards() {
                   </TabsContent>
                 </Tabs>
 
-                {/* Action Buttons */}
-                <div className="mt-8 pt-6 border-t-2 border-slate-100 grid grid-cols-2 gap-4">
+                {/* Actions */}
+                <div className="mt-6 pt-4 border-t border-gray-200 grid grid-cols-2 gap-3">
                   <Button
                     variant="outline"
-                    size="lg"
-                    className="rounded-xl border-2 border-slate-200 hover:border-[#1a2845] hover:bg-slate-50 font-semibold h-14 text-base"
+                    className="rounded-lg h-10"
                     asChild
                   >
-                    <Link to={createPageUrl("Records")} className="gap-2.5">
-                      <CreditCard className="h-5 w-5" />
-                      View Records
+                    <Link to={createPageUrl("Records")} className="gap-2">
+                      <CreditCard className="h-4 w-4" />
+                      Records
                     </Link>
                   </Button>
                   <Button
-                    size="lg"
-                    className="rounded-xl bg-gradient-to-r from-[#1a2845] to-[#2d4263] hover:from-[#243556] hover:to-[#1a2845] shadow-lg hover:shadow-xl font-semibold h-14 text-base"
+                    className="rounded-lg bg-gray-900 hover:bg-gray-800 h-10"
                     asChild
                   >
-                    <Link to={createPageUrl("Catalogue")} className="gap-2.5">
-                      <User className="h-5 w-5" />
-                      Patient Details
+                    <Link to={createPageUrl("Catalogue")} className="gap-2">
+                      <User className="h-4 w-4" />
+                      Details
                     </Link>
                   </Button>
                 </div>
@@ -463,17 +479,17 @@ export default function PatientCards() {
           </motion.div>
         </AnimatePresence>
 
-        {/* Elegant Progress Indicators */}
+        {/* Pagination Dots */}
         {rows.length > 1 && (
-          <div className="flex justify-center items-center gap-2 mt-10">
+          <div className="flex justify-center items-center gap-1.5 mt-6">
             {rows.map((_, i) => (
               <button
                 key={i}
                 onClick={() => setCurrentIndex(i)}
-                className={`rounded-full transition-all duration-300 ${
+                className={`rounded-full transition-all ${
                   i === currentIndex
-                    ? "w-10 h-3 bg-gradient-to-r from-[#1a2845] to-[#2d4263]"
-                    : "w-3 h-3 bg-slate-300 hover:bg-slate-400"
+                    ? "w-6 h-2 bg-gray-900"
+                    : "w-2 h-2 bg-gray-300 hover:bg-gray-400"
                 }`}
                 aria-label={`Go to patient ${i + 1}`}
               />
