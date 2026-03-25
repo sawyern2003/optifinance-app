@@ -79,13 +79,19 @@ function aggregateByPatient(patients, treatmentEntries, clinicalNotes) {
 
 // Patient Header Component
 function PatientHeader({ patient, lastSeen, hasOutstanding }) {
+  // Generate unique cartoon avatar based on patient name
+  const avatarSeed = patient.name || "anonymous";
+  const avatarUrl = `https://api.dicebear.com/7.x/fun-emoji/svg?seed=${encodeURIComponent(avatarSeed)}&backgroundColor=b6e3f4,c0aede,d1d4f9`;
+
   return (
     <div className="mb-6">
       <div className="flex items-start gap-4 mb-3">
-        <div className="h-14 w-14 rounded-lg bg-gray-200 flex items-center justify-center flex-shrink-0">
-          <span className="text-xl font-semibold text-gray-700">
-            {patientInitials(patient.name)}
-          </span>
+        <div className="h-14 w-14 rounded-lg bg-gradient-to-br from-blue-100 to-purple-100 flex items-center justify-center flex-shrink-0 overflow-hidden">
+          <img
+            src={avatarUrl}
+            alt={`${patient.name} avatar`}
+            className="h-full w-full"
+          />
         </div>
         <div className="flex-1 min-w-0">
           <h2 className="text-2xl font-semibold text-gray-900 mb-2">
