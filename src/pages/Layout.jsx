@@ -2,7 +2,7 @@
 import React, { useState, useEffect } from "react";
 import { Link, useLocation } from "react-router-dom";
 import { createPageUrl } from "@/utils";
-import { LayoutDashboard, Plus, FileText, BarChart3, Settings, LogOut, TrendingUp, FileCheck, MessageSquare, CircleDot, Send, ContactRound } from "lucide-react";
+import { LayoutDashboard, Plus, FileText, BarChart3, Settings, LogOut, TrendingUp, MessageSquare, CircleDot, Send, ContactRound } from "lucide-react";
 import { api } from "@/api/api";
 
 const navigationItems = [
@@ -35,11 +35,6 @@ const navigationItems = [
     title: "Patient cards",
     url: createPageUrl("PatientCards"),
     icon: ContactRound,
-  },
-  {
-    title: "Invoices",
-    url: createPageUrl("Invoices"),
-    icon: FileCheck,
   },
   {
     title: "Communications",

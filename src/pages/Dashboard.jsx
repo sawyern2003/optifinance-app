@@ -497,7 +497,7 @@ export default function Dashboard() {
                           Generate Invoices
                         </Button>
                       </Link>
-                      <Link to={createPageUrl("Invoices")}>
+                      <Link to={`${createPageUrl("Records")}?tab=invoices`}>
                         <Button size="sm" variant="outline" className="border-slate-300 text-slate-700 hover:bg-slate-50 rounded-lg text-xs font-medium h-8">
                           View All Invoices
                         </Button>

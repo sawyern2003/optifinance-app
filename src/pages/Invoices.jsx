@@ -7,12 +7,13 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { FileText, Download, Trash2, Search, Mail, Loader2, Pencil, MessageSquare, Send } from "lucide-react";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
+import { FileText, Download, Trash2, Search, Mail, Loader2, Pencil, MessageSquare, Send, MoreVertical } from "lucide-react";
 import { format } from "date-fns";
 import { useToast } from "@/components/ui/use-toast";
 import { invoicesAPI, summarizeSendInvoiceResults } from "@/api/invoices";
 
-export default function Invoices() {
+export default function Invoices({ embedded = false }) {
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const [searchTerm, setSearchTerm] = useState('');
@@ -369,14 +370,18 @@ ${clinicName}
   };
 
   return (
-    <div className="p-6 md:p-10 bg-[#F5F6F8] min-h-screen">
-      <div className="max-w-7xl mx-auto">
-        <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-8 gap-4">
-          <div>
-            <h1 className="text-3xl font-light tracking-tight text-[#1a2845] mb-2">Invoices</h1>
-            <p className="text-sm text-gray-500 font-light">View and manage invoices. Message or email the PDF: set patient phone or email in Edit, then use the send buttons (SMS link or email with PDF attached).</p>
+    <div className={embedded ? "" : "p-6 md:p-10 bg-[#F5F6F8] min-h-screen"}>
+      <div className={embedded ? "" : "max-w-7xl mx-auto"}>
+        {!embedded && (
+          <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-8 gap-4">
+            <div>
+              <h1 className="text-3xl font-light tracking-tight text-[#1a2845] mb-2">Invoices</h1>
+              <p className="text-sm text-gray-500 font-light">
+                View and manage invoices. Message or email the PDF: set patient phone or email in Edit, then use the send options.
+              </p>
+            </div>
           </div>
-        </div>
+        )}
 
         {/* Filters */}
         <div className="bg-white rounded-2xl p-6 shadow-sm border border-gray-100 mb-6">
@@ -460,84 +465,97 @@ ${clinicName}
                         </select>
                       </td>
                       <td className="px-6 py-4">
-                        <div className="flex gap-2">
-                          <button
-                            onClick={() => openEditDialog(invoice)}
-                            className="p-2 hover:bg-blue-50 rounded-lg text-gray-400 hover:text-blue-600 transition-colors"
-                            title="Edit Invoice"
-                          >
-                            <Pencil className="w-4 h-4" />
-                          </button>
-                          <button
-                            onClick={() => generatePdf(invoice)}
-                            disabled={generatingPdf === invoice.id}
-                            className="p-2 hover:bg-amber-50 rounded-lg text-gray-400 hover:text-amber-600 transition-colors disabled:opacity-50"
-                            title={invoice.invoice_pdf_url ? "Regenerate PDF with latest layout" : "Generate PDF"}
-                          >
-                            {generatingPdf === invoice.id ? (
-                              <Loader2 className="w-4 h-4 animate-spin" />
-                            ) : (
-                              <FileText className="w-4 h-4" />
-                            )}
-                          </button>
-                          {invoice.invoice_pdf_url && (
+                        <DropdownMenu>
+                          <DropdownMenuTrigger asChild>
                             <button
-                              onClick={() => openPdfDownload(invoice)}
-                              disabled={downloadingPdf === invoice.id}
-                              className="p-2 hover:bg-green-50 rounded-lg text-gray-400 hover:text-green-600 transition-colors disabled:opacity-50"
-                              title="View/Download PDF"
+                              type="button"
+                              className="p-2 hover:bg-gray-50 rounded-lg text-gray-500 hover:text-gray-900 transition-colors"
+                              aria-label="Invoice actions"
                             >
-                              {downloadingPdf === invoice.id ? (
+                              <MoreVertical className="w-4 h-4" />
+                            </button>
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent align="end" className="w-60">
+                            <DropdownMenuItem
+                              onSelect={() => openEditDialog(invoice)}
+                              className="gap-2"
+                            >
+                              <Pencil className="w-4 h-4 text-blue-600" />
+                              Edit
+                            </DropdownMenuItem>
+
+                            <DropdownMenuItem
+                              onSelect={() => generatePdf(invoice)}
+                              disabled={generatingPdf === invoice.id}
+                              className="gap-2"
+                            >
+                              {generatingPdf === invoice.id ? (
                                 <Loader2 className="w-4 h-4 animate-spin" />
                               ) : (
-                                <Download className="w-4 h-4" />
+                                <FileText className="w-4 h-4 text-amber-600" />
                               )}
-                            </button>
-                          )}
-                          <button
-                            onClick={() => sendPaymentReminder(invoice)}
-                            disabled={sendingReminder === invoice.id || !invoice.patient_contact}
-                            className="p-2 hover:bg-purple-50 rounded-lg text-gray-400 hover:text-purple-600 transition-colors disabled:opacity-50"
-                            title="Send Payment Reminder (SMS)"
-                          >
-                            {sendingReminder === invoice.id ? (
-                              <Loader2 className="w-4 h-4 animate-spin" />
-                            ) : (
-                              <MessageSquare className="w-4 h-4" />
+                              {invoice.invoice_pdf_url ? "Regenerate PDF" : "Generate PDF"}
+                            </DropdownMenuItem>
+
+                            <DropdownMenuSeparator />
+
+                            {invoice.invoice_pdf_url && (
+                              <DropdownMenuItem
+                                onSelect={() => openPdfDownload(invoice)}
+                                disabled={downloadingPdf === invoice.id}
+                                className="gap-2"
+                              >
+                                {downloadingPdf === invoice.id ? (
+                                  <Loader2 className="w-4 h-4 animate-spin" />
+                                ) : (
+                                  <Download className="w-4 h-4 text-green-700" />
+                                )}
+                                View / Download PDF
+                              </DropdownMenuItem>
                             )}
-                          </button>
-                          <button
-                            onClick={() => sendInvoice(invoice, 'sms')}
-                            disabled={sendingInvoice === invoice.id || !canSendSms(invoice)}
-                            className="p-2 hover:bg-sky-50 rounded-lg text-gray-400 hover:text-sky-600 transition-colors disabled:opacity-50"
-                            title={canSendSms(invoice) ? "Message patient (SMS with link to PDF)" : "Add patient phone in Edit to send by text"}
-                          >
-                            {sendingInvoice === invoice.id ? (
-                              <Loader2 className="w-4 h-4 animate-spin" />
-                            ) : (
-                              <Send className="w-4 h-4" />
-                            )}
-                          </button>
-                          <button
-                            onClick={() => sendInvoice(invoice, 'email')}
-                            disabled={sendingInvoice === invoice.id || !canSendEmail(invoice)}
-                            className="p-2 hover:bg-orange-50 rounded-lg text-gray-400 hover:text-orange-600 transition-colors disabled:opacity-50"
-                            title={canSendEmail(invoice) ? "Email patient (PDF attached)" : "Add patient email in Edit to send PDF by email"}
-                          >
-                            {sendingInvoice === invoice.id ? (
-                              <Loader2 className="w-4 h-4 animate-spin" />
-                            ) : (
-                              <Mail className="w-4 h-4" />
-                            )}
-                          </button>
-                          <button
-                            onClick={() => handleDeleteClick(invoice)}
-                            className="p-2 hover:bg-red-50 rounded-lg text-gray-400 hover:text-red-600 transition-colors"
-                            title="Delete"
-                          >
-                            <Trash2 className="w-4 h-4" />
-                          </button>
-                        </div>
+
+                            <DropdownMenuItem
+                              onSelect={() => sendPaymentReminder(invoice)}
+                              disabled={sendingReminder === invoice.id || !invoice.patient_contact}
+                              className="gap-2"
+                            >
+                              {sendingReminder === invoice.id ? (
+                                <Loader2 className="w-4 h-4 animate-spin" />
+                              ) : (
+                                <MessageSquare className="w-4 h-4 text-purple-700" />
+                              )}
+                              Send reminder
+                            </DropdownMenuItem>
+
+                            <DropdownMenuItem
+                              onSelect={() => sendInvoice(invoice, 'sms')}
+                              disabled={sendingInvoice === invoice.id || !canSendSms(invoice)}
+                              className="gap-2"
+                            >
+                              <Send className="w-4 h-4 text-sky-700" />
+                              Message (SMS)
+                            </DropdownMenuItem>
+
+                            <DropdownMenuItem
+                              onSelect={() => sendInvoice(invoice, 'email')}
+                              disabled={sendingInvoice === invoice.id || !canSendEmail(invoice)}
+                              className="gap-2"
+                            >
+                              <Mail className="w-4 h-4 text-orange-700" />
+                              Email (PDF attached)
+                            </DropdownMenuItem>
+
+                            <DropdownMenuSeparator />
+
+                            <DropdownMenuItem
+                              onSelect={() => handleDeleteClick(invoice)}
+                              className="gap-2 text-red-700 focus:text-red-700"
+                            >
+                              <Trash2 className="w-4 h-4 text-red-600" />
+                              Delete
+                            </DropdownMenuItem>
+                          </DropdownMenuContent>
+                        </DropdownMenu>
                       </td>
                     </tr>
                   ))}
@@ -586,7 +604,6 @@ ${clinicName}
                     placeholder="e.g. +44… or patient@email.com"
                     value={editForm.patient_contact}
                     onChange={(e) => setEditForm({...editForm, patient_contact: e.target.value})}
-                    placeholder="Email or phone"
                     className="rounded-xl border-gray-300 h-11"
                   />
                 </div>

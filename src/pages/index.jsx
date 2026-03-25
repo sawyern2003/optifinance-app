@@ -15,8 +15,6 @@ import Dashboard from "./Dashboard";
 
 import Home from "./Home";
 
-import Invoices from "./Invoices";
-
 import Pricing from "./Pricing";
 
 import QuickAdd from "./QuickAdd";
@@ -38,6 +36,7 @@ import SubscriptionPricing from "./SubscriptionPricing";
 import { BrowserRouter as Router, Route, Routes, useLocation, Navigate } from 'react-router-dom';
 import { useState, useEffect } from 'react';
 import { supabase } from '@/config/supabase';
+import { createPageUrl } from "@/utils";
 
 const PAGES = {
     
@@ -177,7 +176,10 @@ function PagesContent() {
                             <Route path="/Consultant" element={<Consultant />} />
                             <Route path="/Dashboard" element={<Dashboard />} />
                             <Route path="/Home" element={<Home />} />
-                            <Route path="/Invoices" element={<Invoices />} />
+                            <Route
+                              path="/Invoices"
+                              element={<Navigate to={`${createPageUrl("Records")}?tab=invoices`} replace />}
+                            />
                             <Route path="/Communications" element={<Communications />} />
                             <Route path="/Pricing" element={<Pricing />} />
                             <Route path="/QuickAdd" element={<QuickAdd />} />

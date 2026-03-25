@@ -254,7 +254,7 @@ export default function Communications() {
           All invoices
         </Button>
         <Link
-          to={createPageUrl("Invoices")}
+          to={`${createPageUrl("Records")}?tab=invoices`}
           className="ml-auto inline-flex items-center gap-1 text-sm text-[#1a2845] hover:underline"
         >
           <FileText className="h-4 w-4" />
@@ -280,7 +280,7 @@ export default function Communications() {
               </Link>{" "}
               or open{" "}
               <Link
-                to={createPageUrl("Invoices")}
+                to={`${createPageUrl("Records")}?tab=invoices`}
                 className="text-[#1a2845] underline"
               >
                 Invoices

@@ -2,13 +2,14 @@ import React, { useState, useEffect } from "react";
 import { api } from "@/api/api";
 import { invoicesAPI } from "@/api/invoices";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useLocation } from "react-router-dom";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { Trash2, Search, Sparkles, CreditCard, Pencil, FileText, Loader2, Download } from "lucide-react";
+import { Trash2, Search, Sparkles, CreditCard, Pencil, FileText, Loader2, Download, FileCheck } from "lucide-react";
 import { format, startOfMonth, endOfMonth, subMonths, startOfYear } from "date-fns";
 import { useToast } from "@/components/ui/use-toast";
 import {
@@ -17,6 +18,7 @@ import {
   effectiveFriendsFamilyPercent,
 } from "@/lib/invoiceFriendsFamily";
 import { computeTreatmentFriendsFamilyPricing } from "@/lib/friendsFamilyPricing";
+import Invoices from "./Invoices";
 
 const COURSE_NOTE_RE = /^\s*Course\s*(\d{1,2})\s*[:\-]\s*/i;
 
@@ -59,6 +61,7 @@ export default function Records() {
   const queryClient = useQueryClient();
   const [searchTerm, setSearchTerm] = useState('');
   const [activeTab, setActiveTab] = useState("treatments");
+  const location = useLocation();
   const [dateRangePreset, setDateRangePreset] = useState('all-time');
   const [customStartDate, setCustomStartDate] = useState('');
   const [customEndDate, setCustomEndDate] = useState('');
@@ -77,6 +80,14 @@ export default function Records() {
   const [selectedTreatments, setSelectedTreatments] = useState([]);
   const [selectedExpenses, setSelectedExpenses] = useState([]);
   const [downloadingPdfId, setDownloadingPdfId] = useState(null);
+
+  useEffect(() => {
+    const params = new URLSearchParams(location.search || "");
+    const tab = params.get("tab");
+    if (tab === "invoices") setActiveTab("invoices");
+    if (tab === "treatments") setActiveTab("treatments");
+    if (tab === "expenses") setActiveTab("expenses");
+  }, [location.search]);
 
   const { data: treatments, isLoading: loadingTreatments } = useQuery({
     queryKey: ['treatments'],
@@ -904,33 +915,47 @@ export default function Records() {
                   <CreditCard className="w-5 h-5" />
                   Expenses
                 </button>
+                <button
+                  type="button"
+                  onClick={() => setActiveTab("invoices")}
+                  className={`flex items-center gap-2 px-6 py-3 rounded-xl font-medium transition-colors ${
+                    activeTab === "invoices"
+                      ? 'bg-[#2C3E50] text-white'
+                      : 'text-gray-600 hover:text-gray-900'
+                  }`}
+                >
+                  <FileCheck className="w-5 h-5" />
+                  Invoices
+                </button>
               </div>
               
-              <div className="flex gap-3 items-center w-full md:w-auto">
-                {activeTab === "treatments" && (
-                  <Button
-                    onClick={autoAssignLeadPractitioner}
-                    variant="outline"
-                    className="border-[#f0e9d8] text-[#1a2845] hover:bg-[#fef9f0] rounded-xl whitespace-nowrap"
-                  >
-                    <Sparkles className="w-4 h-4 mr-2" />
-                    Auto-assign Lead
-                  </Button>
-                )}
-                <div className="relative flex-1 md:w-80">
-                  <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400" />
-                  <Input
-                    placeholder="Search records..."
-                    value={searchTerm}
-                    onChange={(e) => setSearchTerm(e.target.value)}
-                    className="pl-10 rounded-xl border-gray-300 h-11"
-                  />
+              {activeTab !== "invoices" && (
+                <div className="flex gap-3 items-center w-full md:w-auto">
+                  {activeTab === "treatments" && (
+                    <Button
+                      onClick={autoAssignLeadPractitioner}
+                      variant="outline"
+                      className="border-[#f0e9d8] text-[#1a2845] hover:bg-[#fef9f0] rounded-xl whitespace-nowrap"
+                    >
+                      <Sparkles className="w-4 h-4 mr-2" />
+                      Auto-assign Lead
+                    </Button>
+                  )}
+                  <div className="relative flex-1 md:w-80">
+                    <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400" />
+                    <Input
+                      placeholder="Search records..."
+                      value={searchTerm}
+                      onChange={(e) => setSearchTerm(e.target.value)}
+                      className="pl-10 rounded-xl border-gray-300 h-11"
+                    />
+                  </div>
                 </div>
-              </div>
+              )}
             </div>
 
             {/* Bulk Actions Bar */}
-            {((activeTab === 'treatments' && selectedTreatments.length > 0) || 
+            {activeTab !== 'invoices' && ((activeTab === 'treatments' && selectedTreatments.length > 0) || 
               (activeTab === 'expenses' && selectedExpenses.length > 0)) && (
               <div className="bg-blue-50 border border-blue-200 rounded-xl p-4 mt-4 flex items-center justify-between">
                 <div className="flex items-center gap-3">
@@ -958,64 +983,67 @@ export default function Records() {
             )}
 
             {/* Date Range and Payment Status Filters */}
-            <div className="flex flex-col md:flex-row md:items-end gap-4 mt-4">
-              <Select value={dateRangePreset} onValueChange={setDateRangePreset}>
-                <SelectTrigger className="w-full md:w-48 rounded-xl border-gray-300 h-11">
-                  <SelectValue placeholder="Select date range" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all-time">All Time</SelectItem>
-                  <SelectItem value="this-month">This Month</SelectItem>
-                  <SelectItem value="last-month">Last Month</SelectItem>
-                  <SelectItem value="last-3-months">Last 3 Months</SelectItem>
-                  <SelectItem value="last-6-months">Last 6 Months</SelectItem>
-                  <SelectItem value="year-to-date">Year to Date</SelectItem>
-                  <SelectItem value="custom">Custom Range</SelectItem>
-                </SelectContent>
-              </Select>
-
-              {activeTab === "treatments" && (
-                <Select value={paymentStatusFilter} onValueChange={setPaymentStatusFilter}>
+            {activeTab !== 'invoices' && (
+              <div className="flex flex-col md:flex-row md:items-end gap-4 mt-4">
+                <Select value={dateRangePreset} onValueChange={setDateRangePreset}>
                   <SelectTrigger className="w-full md:w-48 rounded-xl border-gray-300 h-11">
-                    <SelectValue placeholder="Payment status" />
+                    <SelectValue placeholder="Select date range" />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="all">All Payments</SelectItem>
-                    <SelectItem value="paid">Paid</SelectItem>
-                    <SelectItem value="pending">Pending</SelectItem>
-                    <SelectItem value="partially_paid">Partial</SelectItem>
+                    <SelectItem value="all-time">All Time</SelectItem>
+                    <SelectItem value="this-month">This Month</SelectItem>
+                    <SelectItem value="last-month">Last Month</SelectItem>
+                    <SelectItem value="last-3-months">Last 3 Months</SelectItem>
+                    <SelectItem value="last-6-months">Last 6 Months</SelectItem>
+                    <SelectItem value="year-to-date">Year to Date</SelectItem>
+                    <SelectItem value="custom">Custom Range</SelectItem>
                   </SelectContent>
                 </Select>
-              )}
 
-              {dateRangePreset === 'custom' && (
-                <>
-                  <div className="space-y-1">
-                    <Label htmlFor="start-date" className="text-xs text-gray-600">Start Date</Label>
-                    <Input
-                      id="start-date"
-                      type="date"
-                      value={customStartDate}
-                      onChange={(e) => setCustomStartDate(e.target.value)}
-                      className="rounded-xl border-gray-300 h-11"
-                    />
-                  </div>
-                  <div className="space-y-1">
-                    <Label htmlFor="end-date" className="text-xs text-gray-600">End Date</Label>
-                    <Input
-                      id="end-date"
-                      type="date"
-                      value={customEndDate}
-                      onChange={(e) => setCustomEndDate(e.target.value)}
-                      className="rounded-xl border-gray-300 h-11"
-                    />
-                  </div>
-                </>
-              )}
-            </div>
+                {activeTab === "treatments" && (
+                  <Select value={paymentStatusFilter} onValueChange={setPaymentStatusFilter}>
+                    <SelectTrigger className="w-full md:w-48 rounded-xl border-gray-300 h-11">
+                      <SelectValue placeholder="Payment status" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">All Payments</SelectItem>
+                      <SelectItem value="paid">Paid</SelectItem>
+                      <SelectItem value="pending">Pending</SelectItem>
+                      <SelectItem value="partially_paid">Partial</SelectItem>
+                    </SelectContent>
+                  </Select>
+                )}
+
+                {dateRangePreset === 'custom' && (
+                  <>
+                    <div className="space-y-1">
+                      <Label htmlFor="start-date" className="text-xs text-gray-600">Start Date</Label>
+                      <Input
+                        id="start-date"
+                        type="date"
+                        value={customStartDate}
+                        onChange={(e) => setCustomStartDate(e.target.value)}
+                        className="rounded-xl border-gray-300 h-11"
+                      />
+                    </div>
+                    <div className="space-y-1">
+                      <Label htmlFor="end-date" className="text-xs text-gray-600">End Date</Label>
+                      <Input
+                        id="end-date"
+                        type="date"
+                        value={customEndDate}
+                        onChange={(e) => setCustomEndDate(e.target.value)}
+                        className="rounded-xl border-gray-300 h-11"
+                      />
+                    </div>
+                  </>
+                )}
+              </div>
+            )}
           </div>
 
           {/* Selection Controls */}
+          {activeTab !== 'invoices' && (
           <div className="px-6 py-3 bg-gray-50 border-b border-gray-100 flex items-center justify-between">
             <div className="flex items-center gap-2">
               <span className="text-sm text-gray-600">
@@ -1037,6 +1065,7 @@ export default function Records() {
                 : 'Select All'}
             </Button>
           </div>
+          )}
 
           {/* Table */}
           <div className="overflow-x-auto">
@@ -1194,7 +1223,7 @@ export default function Records() {
                   )}
                 </tbody>
               </table>
-            ) : (
+            ) : activeTab === "expenses" ? (
               <table className="w-full">
                 <thead>
                   <tr className="bg-gray-50 border-b border-gray-100">
@@ -1257,6 +1286,10 @@ export default function Records() {
                   )}
                 </tbody>
               </table>
+            ) : (
+              <div className="p-0">
+                <Invoices embedded />
+              </div>
             )}
           </div>
         </div>
