@@ -21,6 +21,8 @@ import QuickAdd from "./QuickAdd";
 
 import Records from "./Records";
 
+import RecordsLuxury from "./RecordsLuxury";
+
 import Reports from "./Reports";
 
 import Settings from "./Settings";
@@ -55,13 +57,13 @@ const PAGES = {
     Home: Home,
     
     // `/Invoices` now redirects to `Records?tab=invoices`; keep this mapping to avoid runtime errors.
-    Invoices: Records,
-    
+    Invoices: RecordsLuxury,
+
     Pricing: Pricing,
-    
+
     QuickAdd: QuickAdd,
-    
-    Records: Records,
+
+    Records: RecordsLuxury,
     
     Reports: Reports,
     
@@ -185,7 +187,7 @@ function PagesContent() {
                             <Route path="/Pricing" element={<Pricing />} />
                             <Route path="/QuickAdd" element={<QuickAdd />} />
                             <Route path="/VoiceDiary" element={<VoiceDiary />} />
-                            <Route path="/Records" element={<Records />} />
+                            <Route path="/Records" element={<RecordsLuxury />} />
                             <Route path="/Checkout" element={<Checkout />} />
                             <Route path="/Billing" element={<Billing />} />
                             <Route path="/SubscriptionPricing" element={<SubscriptionPricing />} />
