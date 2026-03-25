@@ -167,7 +167,7 @@ function FinancialSummary({ totalBilled, totalPaid, outstanding }) {
 }
 
 // Quick Actions Component
-function QuickActions({ hasOutstanding, patientId }) {
+function QuickActions({ hasOutstanding, patientId, onAddNote }) {
   return (
     <div className="flex flex-wrap gap-2 py-4">
       {hasOutstanding && (
@@ -182,7 +182,12 @@ function QuickActions({ hasOutstanding, patientId }) {
           View records
         </Link>
       </Button>
-      <Button size="sm" variant="outline" className="border-gray-300 text-gray-700 hover:bg-gray-50">
+      <Button
+        size="sm"
+        variant="outline"
+        className="border-gray-300 text-gray-700 hover:bg-gray-50"
+        onClick={onAddNote}
+      >
         <Plus className="h-3.5 w-3.5 mr-1.5" />
         Add note
       </Button>
@@ -324,7 +329,7 @@ function pickRecorderMime() {
   return "";
 }
 
-function VoiceNoteComposer({ patient, onSave, isSaving }) {
+function VoiceNoteComposer({ patient, onSave, isSaving, focusToken }) {
   const { toast } = useToast();
   const [visitDate, setVisitDate] = useState(format(new Date(), "yyyy-MM-dd"));
   const [rawNarrative, setRawNarrative] = useState("");
@@ -333,6 +338,7 @@ function VoiceNoteComposer({ patient, onSave, isSaving }) {
   const mediaRecorderRef = React.useRef(null);
   const mediaChunksRef = React.useRef([]);
   const mediaStreamRef = React.useRef(null);
+  const noteInputRef = React.useRef(null);
 
   useEffect(() => {
     return () => {
@@ -341,6 +347,11 @@ function VoiceNoteComposer({ patient, onSave, isSaving }) {
       mediaRecorderRef.current = null;
     };
   }, []);
+
+  useEffect(() => {
+    if (!focusToken) return;
+    noteInputRef.current?.focus?.();
+  }, [focusToken]);
 
   const toggleVoiceRecording = async () => {
     if (isTranscribing) return;
@@ -484,6 +495,7 @@ function VoiceNoteComposer({ patient, onSave, isSaving }) {
         </div>
         <div className="sm:col-span-2">
           <Textarea
+            ref={noteInputRef}
             rows={3}
             value={rawNarrative}
             onChange={(e) => setRawNarrative(e.target.value)}
@@ -506,6 +518,8 @@ export default function PatientCards() {
   const queryClient = useQueryClient();
   const [currentIndex, setCurrentIndex] = useState(0);
   const [searchQuery, setSearchQuery] = useState("");
+  const [activeTab, setActiveTab] = useState("treatments");
+  const [focusNoteToken, setFocusNoteToken] = useState(0);
 
   const { data: patients = [], isLoading: loadingPatients } = useQuery({
     queryKey: ["patients"],
@@ -564,11 +578,20 @@ export default function PatientCards() {
     setCurrentIndex((prev) => (prev - 1 + rows.length) % rows.length);
   };
 
+  const jumpToAddNote = () => {
+    setActiveTab("notes");
+    setFocusNoteToken((p) => p + 1);
+  };
+
   useEffect(() => {
     if (rows.length > 0 && currentIndex >= rows.length) {
       setCurrentIndex(0);
     }
   }, [rows.length, currentIndex]);
+
+  useEffect(() => {
+    setActiveTab("treatments");
+  }, [currentIndex]);
 
   if (loading && patients.length === 0) {
     return (
@@ -739,10 +762,10 @@ export default function PatientCards() {
               />
 
               {/* Quick Actions */}
-              <QuickActions hasOutstanding={outstanding > 0} patientId={patient.id} />
+              <QuickActions hasOutstanding={outstanding > 0} patientId={patient.id} onAddNote={jumpToAddNote} />
 
               {/* Tabs for History */}
-              <Tabs defaultValue="treatments" className="mt-6">
+              <Tabs value={activeTab} onValueChange={setActiveTab} className="mt-6">
                 <TabsList className="grid w-full grid-cols-2 bg-gray-100 p-1 rounded-lg h-10 mb-6">
                   <TabsTrigger
                     value="treatments"
@@ -769,6 +792,7 @@ export default function PatientCards() {
                     <VoiceNoteComposer
                       patient={patient}
                       isSaving={createClinicalNoteMutation.isPending}
+                      focusToken={focusNoteToken}
                       onSave={(payload) => createClinicalNoteMutation.mutateAsync(payload)}
                     />
                     <NotesTimeline notes={notes} />
