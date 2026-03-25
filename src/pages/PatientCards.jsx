@@ -1,6 +1,6 @@
 import React, { useMemo, useState, useEffect } from "react";
 import { Link } from "react-router-dom";
-import { useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { format, formatDistanceToNow, differenceInDays } from "date-fns";
 import { api } from "@/api/api";
 import { createPageUrl } from "@/utils";
@@ -10,6 +10,8 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
+import { useToast } from "@/components/ui/use-toast";
 import {
   CreditCard,
   FileText,
@@ -25,6 +27,8 @@ import {
   Calendar,
   AlertCircle,
   Clock,
+  Mic,
+  Square,
 } from "lucide-react";
 
 function money(n) {
@@ -311,7 +315,195 @@ function NotesTimeline({ notes }) {
   );
 }
 
+function pickRecorderMime() {
+  if (typeof MediaRecorder === "undefined") return "";
+  const candidates = ["audio/webm;codecs=opus", "audio/webm", "audio/mp4"];
+  for (const t of candidates) {
+    if (MediaRecorder.isTypeSupported(t)) return t;
+  }
+  return "";
+}
+
+function VoiceNoteComposer({ patient, onSave, isSaving }) {
+  const { toast } = useToast();
+  const [visitDate, setVisitDate] = useState(format(new Date(), "yyyy-MM-dd"));
+  const [rawNarrative, setRawNarrative] = useState("");
+  const [isRecording, setIsRecording] = useState(false);
+  const [isTranscribing, setIsTranscribing] = useState(false);
+  const mediaRecorderRef = React.useRef(null);
+  const mediaChunksRef = React.useRef([]);
+  const mediaStreamRef = React.useRef(null);
+
+  useEffect(() => {
+    return () => {
+      mediaStreamRef.current?.getTracks?.().forEach((t) => t.stop());
+      mediaStreamRef.current = null;
+      mediaRecorderRef.current = null;
+    };
+  }, []);
+
+  const toggleVoiceRecording = async () => {
+    if (isTranscribing) return;
+    if (isRecording) {
+      mediaRecorderRef.current?.stop?.();
+      return;
+    }
+    if (!navigator.mediaDevices?.getUserMedia) {
+      toast({
+        title: "Microphone not supported",
+        description: "Try another browser or device.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      mediaStreamRef.current = stream;
+      mediaChunksRef.current = [];
+      const mime = pickRecorderMime();
+      const recorder = mime ? new MediaRecorder(stream, { mimeType: mime }) : new MediaRecorder(stream);
+      mediaRecorderRef.current = recorder;
+
+      recorder.ondataavailable = (e) => {
+        if (e.data?.size > 0) mediaChunksRef.current.push(e.data);
+      };
+
+      recorder.onstop = async () => {
+        setIsRecording(false);
+        const streamDone = mediaStreamRef.current;
+        mediaStreamRef.current = null;
+        streamDone?.getTracks?.().forEach((t) => t.stop());
+
+        const blob = new Blob(mediaChunksRef.current, {
+          type: recorder.mimeType || "audio/webm",
+        });
+        mediaChunksRef.current = [];
+        mediaRecorderRef.current = null;
+
+        if (blob.size < 200) {
+          toast({
+            title: "Too short",
+            description: "Hold record and speak, then tap stop.",
+            variant: "destructive",
+          });
+          return;
+        }
+
+        setIsTranscribing(true);
+        try {
+          const dataUrl = await new Promise((resolve, reject) => {
+            const r = new FileReader();
+            r.onloadend = () => resolve(r.result);
+            r.onerror = () => reject(new Error("Could not read audio"));
+            r.readAsDataURL(blob);
+          });
+          const base64 = String(dataUrl).split(",")[1];
+          if (!base64) throw new Error("Could not parse recording");
+
+          const { text } = await api.integrations.Core.TranscribeAudio({
+            audioBase64: base64,
+            mimeType: blob.type || "audio/webm",
+            nameHint: `Voice note for patient ${patient?.name || "unknown"}`.slice(0, 220),
+          });
+
+          if (text?.trim()) {
+            setRawNarrative((prev) => `${prev.trimEnd()} ${text.trim()}`.trim());
+            toast({
+              title: "Transcribed",
+              description: "Voice note text added.",
+            });
+          }
+        } catch (err) {
+          toast({
+            title: "Transcription failed",
+            description: err?.message || "Please try again.",
+            variant: "destructive",
+          });
+        } finally {
+          setIsTranscribing(false);
+        }
+      };
+
+      recorder.start(250);
+      setIsRecording(true);
+    } catch (err) {
+      toast({
+        title: "Microphone blocked",
+        description: "Allow microphone access for this site and try again.",
+        variant: "destructive",
+      });
+    }
+  };
+
+  const submitNote = async (e) => {
+    e.preventDefault();
+    if (!rawNarrative.trim()) return;
+    await onSave({
+      patient_id: patient.id,
+      visit_date: visitDate,
+      source: "manual",
+      raw_narrative: rawNarrative.trim(),
+    });
+    setRawNarrative("");
+  };
+
+  return (
+    <form onSubmit={submitNote} className="mb-4 rounded-lg border border-gray-200 bg-gray-50 p-4">
+      <div className="flex items-center justify-between gap-3 mb-3">
+        <p className="text-sm font-medium text-gray-900">Add note (voice or typed)</p>
+        <Button
+          type="button"
+          variant={isRecording ? "destructive" : "outline"}
+          size="sm"
+          onClick={toggleVoiceRecording}
+          disabled={isTranscribing}
+          className="h-8"
+        >
+          {isTranscribing ? (
+            <>
+              <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" />
+              Transcribing
+            </>
+          ) : isRecording ? (
+            <>
+              <Square className="h-3.5 w-3.5 mr-1.5" />
+              Stop
+            </>
+          ) : (
+            <>
+              <Mic className="h-3.5 w-3.5 mr-1.5" />
+              Record
+            </>
+          )}
+        </Button>
+      </div>
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+        <div className="sm:col-span-1">
+          <Input type="date" value={visitDate} onChange={(e) => setVisitDate(e.target.value)} className="h-9" />
+        </div>
+        <div className="sm:col-span-2">
+          <Textarea
+            rows={3}
+            value={rawNarrative}
+            onChange={(e) => setRawNarrative(e.target.value)}
+            placeholder="Record a voice note or type your clinical note..."
+            className="bg-white"
+          />
+        </div>
+      </div>
+      <div className="mt-3 flex justify-end">
+        <Button type="submit" size="sm" disabled={!rawNarrative.trim() || isSaving || isTranscribing}>
+          {isSaving ? "Saving..." : "Save note"}
+        </Button>
+      </div>
+    </form>
+  );
+}
+
 export default function PatientCards() {
+  const { toast } = useToast();
+  const queryClient = useQueryClient();
   const [currentIndex, setCurrentIndex] = useState(0);
   const [searchQuery, setSearchQuery] = useState("");
 
@@ -345,6 +537,24 @@ export default function PatientCards() {
   }, [allRows, searchQuery]);
 
   const loading = loadingPatients || loadingTreatments || loadingNotes;
+
+  const createClinicalNoteMutation = useMutation({
+    mutationFn: (payload) => api.entities.ClinicalNote.create(payload),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["clinicalNotes"] });
+      toast({ title: "Note saved", description: "Added to patient file." });
+    },
+    onError: (err) => {
+      toast({
+        title: "Could not save note",
+        description:
+          err?.message?.includes("clinical_notes")
+            ? "Run database/add-clinical-notes.sql in Supabase first."
+            : err?.message || String(err),
+        variant: "destructive",
+      });
+    },
+  });
 
   const nextCard = () => {
     setCurrentIndex((prev) => (prev + 1) % rows.length);
@@ -556,6 +766,11 @@ export default function PatientCards() {
 
                 <TabsContent value="notes" className="mt-0">
                   <ScrollArea className="h-[400px] pr-3">
+                    <VoiceNoteComposer
+                      patient={patient}
+                      isSaving={createClinicalNoteMutation.isPending}
+                      onSave={(payload) => createClinicalNoteMutation.mutateAsync(payload)}
+                    />
                     <NotesTimeline notes={notes} />
                   </ScrollArea>
                 </TabsContent>
