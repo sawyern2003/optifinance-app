@@ -161,22 +161,22 @@ function QuickActions({ hasOutstanding, patientId }) {
   return (
     <div className="flex flex-wrap gap-2 py-4">
       {hasOutstanding && (
-        <Button size="sm" variant="default" className="bg-gray-900 hover:bg-gray-800">
+        <Button size="sm" variant="default" className="bg-gray-900 hover:bg-gray-800 text-white">
           <Bell className="h-3.5 w-3.5 mr-1.5" />
           Send reminder
         </Button>
       )}
-      <Button size="sm" variant="outline" asChild>
+      <Button size="sm" variant="outline" className="border-gray-300 text-gray-700 hover:bg-gray-50" asChild>
         <Link to={createPageUrl("Records")}>
           <CreditCard className="h-3.5 w-3.5 mr-1.5" />
           View records
         </Link>
       </Button>
-      <Button size="sm" variant="outline">
+      <Button size="sm" variant="outline" className="border-gray-300 text-gray-700 hover:bg-gray-50">
         <Plus className="h-3.5 w-3.5 mr-1.5" />
         Add note
       </Button>
-      <Button size="sm" variant="outline">
+      <Button size="sm" variant="outline" className="border-gray-300 text-gray-700 hover:bg-gray-50">
         <Calendar className="h-3.5 w-3.5 mr-1.5" />
         Follow up
       </Button>
