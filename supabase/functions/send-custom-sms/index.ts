@@ -8,8 +8,17 @@ const corsHeaders: Record<string, string> = {
 };
 
 function looksLikePhone(contact: string): boolean {
-  const s = String(contact || "").trim();
-  return !!s && !s.includes("@");
+  return extractPhoneNumber(contact) !== null;
+}
+
+function extractPhoneNumber(raw: string): string | null {
+  const s = String(raw || "").trim();
+  if (!s) return null;
+  const m = s.match(/(?:\+|00)?\d[\d\s\-()]{7,}\d/);
+  if (!m) return null;
+  let phone = m[0].trim().replace(/[\s()-]/g, "");
+  if (phone.startsWith("00")) phone = `+${phone.slice(2)}`;
+  return phone;
 }
 
 serve(async (req) => {
@@ -77,9 +86,12 @@ serve(async (req) => {
       );
     }
 
+    const phoneForSms = extractPhoneNumber(patientContact);
+    if (!phoneForSms) throw new Error("No valid phone number found in patientContact");
+
     const twilioUrl = `https://api.twilio.com/2010-04-01/Accounts/${twilioAccountSid}/Messages.json`;
     const formData = new URLSearchParams();
-    formData.append("To", String(patientContact).trim());
+    formData.append("To", phoneForSms);
     formData.append("From", twilioPhoneNumber);
     formData.append("Body", bodyText);
 
@@ -103,7 +115,7 @@ serve(async (req) => {
     // Optional log: if table exists, write message record.
     const logPayload = {
       patient_name: String(patientName),
-      patient_contact: String(patientContact).trim(),
+      patient_contact: phoneForSms,
       channel: "sms",
       direction: "outbound",
       status: "sent",

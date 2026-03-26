@@ -9,6 +9,7 @@ import {
   summarizeSendInvoiceResults,
 } from '@/api/invoices';
 import {
+  extractPhoneNumber,
   looksLikeEmail,
   looksLikePhone,
 } from '@/lib/contactGuards';
@@ -214,7 +215,7 @@ export default function Communications() {
     try {
       await api.functions.invoke('sendCustomSMS', {
         patientName: patient.patient_name,
-        patientContact: patient.patient_contact,
+        patientContact: extractPhoneNumber(patient.patient_contact),
         messageBody,
         relatedInvoiceId: firstInvoice?.id || null,
         metadata: { source: 'communications_custom' },

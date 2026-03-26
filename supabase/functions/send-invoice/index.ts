@@ -27,6 +27,17 @@ function extractEmailAddress(raw: string): string | null {
   return m ? m[0].trim().toLowerCase() : null;
 }
 
+/** First phone-like token in a string, normalized for Twilio. */
+function extractPhoneNumber(raw: string): string | null {
+  const s = String(raw || "").trim();
+  if (!s) return null;
+  const m = s.match(/(?:\+|00)?\d[\d\s\-()]{7,}\d/);
+  if (!m) return null;
+  let phone = m[0].trim().replace(/[\s()-]/g, "");
+  if (phone.startsWith("00")) phone = `+${phone.slice(2)}`;
+  return phone;
+}
+
 /** SendGrid/local-part safe (RFC-ish); avoids "Invalid from email address" from bad slug chars */
 function sanitizeEmailLocalPart(local: string): string {
   let t = String(local || "")
@@ -141,28 +152,28 @@ serve(async (req) => {
     /** One contact field: "both" must not run Twilio with an email (Twilio fails → email never runs). */
     const patientContactStr = String(invoice.patient_contact || "").trim();
     const extractedRoutingEmail = extractEmailAddress(patientContactStr);
-    const contactIsEmail = extractedRoutingEmail !== null;
-    const contactIsPhone =
-      patientContactStr.length > 0 && extractedRoutingEmail === null;
+    const extractedRoutingPhone = extractPhoneNumber(patientContactStr);
+    const contactHasEmail = extractedRoutingEmail !== null;
+    const contactHasPhone = extractedRoutingPhone !== null;
 
     let doSms = false;
     let doEmail = false;
     if (sendVia === "email") {
-      if (contactIsEmail) doEmail = true;
-      else if (contactIsPhone) doSms = true;
+      if (contactHasEmail) doEmail = true;
+      else if (contactHasPhone) doSms = true;
     } else if (sendVia === "sms") {
-      if (contactIsPhone) doSms = true;
-      else if (contactIsEmail) doEmail = true;
+      if (contactHasPhone) doSms = true;
+      else if (contactHasEmail) doEmail = true;
     } else if (sendVia === "both") {
-      if (contactIsEmail) doEmail = true;
-      else if (contactIsPhone) doSms = true;
+      if (contactHasEmail) doEmail = true;
+      if (contactHasPhone) doSms = true;
     }
 
     if (!doSms && !doEmail) {
       throw new Error(
         patientContactStr.length === 0
           ? "Patient contact is missing on the invoice."
-          : "Could not send: add an email address for email, or a phone number (no @) for SMS.",
+          : "Could not send: add a valid email and/or phone number in patient contact.",
       );
     }
 
@@ -211,7 +222,7 @@ serve(async (req) => {
 
       const twilioUrl = `https://api.twilio.com/2010-04-01/Accounts/${twilioAccountSid}/Messages.json`;
       const formData = new URLSearchParams();
-      formData.append("To", patientContactStr);
+      formData.append("To", extractedRoutingPhone!);
       formData.append("From", twilioPhoneNumber);
       formData.append("Body", smsMessage);
 

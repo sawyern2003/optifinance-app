@@ -1,12 +1,29 @@
-/** Patient contact on an invoice is either email or phone (single field). */
+/** Helpers for mixed contact fields (email + phone in one string). */
 
-export function looksLikeEmail(contact) {
-  return Boolean(contact?.trim()) && String(contact).includes("@");
+export function extractEmailAddress(contact) {
+  const s = String(contact || "").trim();
+  if (!s) return null;
+  const m = s.match(/[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[A-Za-z]{2,}/);
+  return m ? m[0].trim().toLowerCase() : null;
 }
 
-/** SMS / Twilio: must not be an email */
+export function extractPhoneNumber(contact) {
+  const s = String(contact || "").trim();
+  if (!s) return null;
+  // Accepts common formats and keeps leading + when present.
+  const m = s.match(/(?:\+|00)?\d[\d\s\-()]{7,}\d/);
+  if (!m) return null;
+  let phone = m[0].trim().replace(/[\s()-]/g, "");
+  if (phone.startsWith("00")) phone = `+${phone.slice(2)}`;
+  return phone;
+}
+
+export function looksLikeEmail(contact) {
+  return Boolean(extractEmailAddress(contact));
+}
+
 export function looksLikePhone(contact) {
-  return Boolean(contact?.trim()) && !String(contact).includes("@");
+  return Boolean(extractPhoneNumber(contact));
 }
 
 /**

@@ -7,6 +7,16 @@ const corsHeaders: Record<string, string> = {
   "Access-Control-Allow-Methods": "POST, OPTIONS",
 };
 
+function extractPhoneNumber(raw: string): string | null {
+  const s = String(raw || "").trim();
+  if (!s) return null;
+  const m = s.match(/(?:\+|00)?\d[\d\s\-()]{7,}\d/);
+  if (!m) return null;
+  let phone = m[0].trim().replace(/[\s()-]/g, "");
+  if (phone.startsWith("00")) phone = `+${phone.slice(2)}`;
+  return phone;
+}
+
 serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { status: 204, headers: { ...corsHeaders } });
@@ -91,7 +101,7 @@ serve(async (req) => {
     }
 
     // Get patient phone number
-    const patientPhone = invoice.patient_contact;
+    const patientPhone = extractPhoneNumber(invoice.patient_contact);
     if (!patientPhone) {
       throw new Error("Patient phone number not found");
     }

@@ -1,12 +1,5 @@
 import { useMemo } from 'react';
-
-/**
- * Helper to detect if contact looks like email
- */
-function looksLikeEmail(contact) {
-  if (!contact) return false;
-  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(contact.trim());
-}
+import { looksLikeEmail } from '@/lib/contactGuards';
 
 /**
  * Reconstructs message history from invoice data

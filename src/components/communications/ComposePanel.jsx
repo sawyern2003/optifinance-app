@@ -3,6 +3,7 @@ import { X, Send, Loader2, Mail, MessageSquare } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Textarea } from '@/components/ui/textarea';
+import { extractEmailAddress, extractPhoneNumber } from '@/lib/contactGuards';
 import {
   Select,
   SelectContent,
@@ -32,8 +33,10 @@ export function ComposePanel({
   const hasOutstanding = outstandingInvoices.length > 0;
 
   // Validate contact info
-  const hasEmail = patient.patient_contact && /@/.test(patient.patient_contact);
-  const hasPhone = patient.patient_contact && /^\+?[\d\s-()]+$/.test(patient.patient_contact);
+  const emailAddress = extractEmailAddress(patient.patient_contact);
+  const phoneNumber = extractPhoneNumber(patient.patient_contact);
+  const hasEmail = Boolean(emailAddress);
+  const hasPhone = Boolean(phoneNumber);
 
   const canSendEmail = hasEmail;
   const canSendSMS = hasPhone;
@@ -92,7 +95,7 @@ export function ComposePanel({
             <>
               <Alert>
                 <AlertDescription>
-                  Sending to {patient.patient_contact} via SMS.
+                  Sending to {phoneNumber} via SMS.
                 </AlertDescription>
               </Alert>
               <div>
@@ -156,7 +159,7 @@ export function ComposePanel({
               <Alert>
                 <MessageSquare className="w-4 h-4" />
                 <AlertDescription>
-                  Will send SMS reminder to {patient.patient_contact}
+                  Will send SMS reminder to {phoneNumber}
                 </AlertDescription>
               </Alert>
             </>
@@ -238,8 +241,8 @@ export function ComposePanel({
                 <Alert>
                   <AlertDescription>
                     {sendMethod === 'email'
-                      ? `Will send invoice PDF to ${patient.patient_contact}`
-                      : `Will send download link to ${patient.patient_contact}`}
+                      ? `Will send invoice PDF to ${emailAddress || patient.patient_contact}`
+                      : `Will send download link to ${phoneNumber || patient.patient_contact}`}
                   </AlertDescription>
                 </Alert>
               )}
