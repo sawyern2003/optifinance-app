@@ -10,6 +10,8 @@ import { useMemo } from 'react';
  */
 export function useCommunications(invoices, customMessages = [], filter = 'all', searchQuery = '') {
   return useMemo(() => {
+    const toPatientKey = (name) => String(name || '').trim().toLowerCase();
+
     // Filter invoices based on selected filter
     let filtered = invoices;
     if (filter === 'outstanding') {
@@ -20,72 +22,73 @@ export function useCommunications(invoices, customMessages = [], filter = 'all',
 
     // Group invoices by patient
     const grouped = {};
-    filtered.forEach(invoice => {
-      // Create unique key combining name and contact
-      const normalizedContact = (invoice.patient_contact || '').trim().toLowerCase();
-      const key = `${invoice.patient_name}::${normalizedContact}`;
-
+    const ensureGroup = (name, contact) => {
+      const key = toPatientKey(name);
+      if (!key) return null;
       if (!grouped[key]) {
         grouped[key] = {
           key,
-          patient_name: invoice.patient_name,
-          patient_contact: invoice.patient_contact,
+          patient_name: name,
+          patient_contact: contact || '',
           invoices: [],
           customMessages: [],
           outstandingBalance: 0,
           outstandingCount: 0,
           lastActivity: null,
+          contactSet: new Set(),
         };
       }
+      if (contact) {
+        grouped[key].contactSet.add(String(contact).trim());
+        // Prefer the latest non-empty contact for display.
+        grouped[key].patient_contact = String(contact).trim();
+      }
+      return grouped[key];
+    };
 
-      grouped[key].invoices.push(invoice);
+    filtered.forEach(invoice => {
+      const group = ensureGroup(invoice.patient_name, invoice.patient_contact);
+      if (!group) return;
+      group.invoices.push(invoice);
 
       // Calculate outstanding amounts
       if (invoice.status !== 'paid' && invoice.status !== 'Paid') {
-        grouped[key].outstandingBalance += Number(invoice.amount || 0);
-        grouped[key].outstandingCount += 1;
+        group.outstandingBalance += Number(invoice.amount || 0);
+        group.outstandingCount += 1;
       }
 
       // Track most recent activity
       const activityDate = new Date(invoice.updated_at || invoice.created_at);
-      if (!grouped[key].lastActivity || activityDate > grouped[key].lastActivity) {
-        grouped[key].lastActivity = activityDate;
+      if (!group.lastActivity || activityDate > group.lastActivity) {
+        group.lastActivity = activityDate;
       }
     });
 
-    // Convert to array
+    // Merge logged custom messages into same per-patient thread.
     for (const msg of customMessages || []) {
-      const normalizedContact = (msg.patient_contact || '').trim().toLowerCase();
-      const key = `${msg.patient_name}::${normalizedContact}`;
-      if (!grouped[key]) {
-        grouped[key] = {
-          key,
-          patient_name: msg.patient_name,
-          patient_contact: msg.patient_contact,
-          invoices: [],
-          customMessages: [],
-          outstandingBalance: 0,
-          outstandingCount: 0,
-          lastActivity: null,
-        };
-      }
-      grouped[key].customMessages.push(msg);
+      const group = ensureGroup(msg.patient_name, msg.patient_contact);
+      if (!group) continue;
+      group.customMessages.push(msg);
 
       const activityDate = new Date(msg.created_at || msg.updated_at || Date.now());
-      if (!grouped[key].lastActivity || activityDate > grouped[key].lastActivity) {
-        grouped[key].lastActivity = activityDate;
+      if (!group.lastActivity || activityDate > group.lastActivity) {
+        group.lastActivity = activityDate;
       }
     }
 
     // Convert to array
-    let conversations = Object.values(grouped);
+    let conversations = Object.values(grouped).map((conv) => ({
+      ...conv,
+      contacts: Array.from(conv.contactSet || []),
+    }));
 
     // Apply search filter
     if (searchQuery) {
       const query = searchQuery.toLowerCase();
       conversations = conversations.filter(conv =>
         conv.patient_name.toLowerCase().includes(query) ||
-        (conv.patient_contact || '').toLowerCase().includes(query)
+        (conv.patient_contact || '').toLowerCase().includes(query) ||
+        (conv.contacts || []).some((c) => String(c).toLowerCase().includes(query))
       );
     }
 
