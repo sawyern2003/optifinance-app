@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useMemo } from "react";
 import { api } from "@/api/api";
 import { invoicesAPI } from "@/api/invoices";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
@@ -84,6 +84,8 @@ export default function Records() {
   const [partialPaymentDialogOpen, setPartialPaymentDialogOpen] = useState(false);
   const [partialPaymentTreatment, setPartialPaymentTreatment] = useState(null);
   const [partialPaymentAmount, setPartialPaymentAmount] = useState('');
+  const [batchInvoiceDialogOpen, setBatchInvoiceDialogOpen] = useState(false);
+  const [batchInvoicePatientId, setBatchInvoicePatientId] = useState('');
   const [selectedTreatments, setSelectedTreatments] = useState([]);
   const [selectedExpenses, setSelectedExpenses] = useState([]);
   const [downloadingPdfId, setDownloadingPdfId] = useState(null);
@@ -808,6 +810,57 @@ export default function Records() {
     setDownloadingPdfId(null);
   };
 
+  const unpaidByPatient = useMemo(() => {
+    const map = new Map();
+    for (const t of treatments || []) {
+      if (t.payment_status !== 'pending' || !t.patient_id) continue;
+      const prev = map.get(t.patient_id) || {
+        patient_id: t.patient_id,
+        patient_name: t.patient_name || 'Patient',
+        count: 0,
+        total: 0,
+      };
+      prev.count += 1;
+      prev.total += Number(t.price_paid || 0);
+      map.set(t.patient_id, prev);
+    }
+    return Array.from(map.values()).sort((a, b) =>
+      String(a.patient_name).localeCompare(String(b.patient_name), undefined, {
+        sensitivity: 'base',
+      }),
+    );
+  }, [treatments]);
+
+  const openBatchInvoiceDialog = () => {
+    if (!unpaidByPatient.length) {
+      toast({
+        title: 'No unpaid treatments',
+        description: 'There are no pending treatments to batch invoice.',
+      });
+      return;
+    }
+    setBatchInvoicePatientId((prev) => prev || unpaidByPatient[0].patient_id);
+    setBatchInvoiceDialogOpen(true);
+  };
+
+  const runBatchInvoiceForPatient = async () => {
+    if (!batchInvoicePatientId) return;
+    const pending = (treatments || [])
+      .filter((t) => t.patient_id === batchInvoicePatientId && t.payment_status === 'pending')
+      .sort((a, b) => String(a.date || '').localeCompare(String(b.date || '')));
+    const seed = pending[0];
+    if (!seed) {
+      toast({
+        title: 'No unpaid treatments',
+        description: 'This patient has no pending treatments left.',
+      });
+      setBatchInvoiceDialogOpen(false);
+      return;
+    }
+    setBatchInvoiceDialogOpen(false);
+    await generateInvoice(seed);
+  };
+
   const getDateRange = () => {
     const now = new Date();
     switch(dateRangePreset) {
@@ -939,14 +992,25 @@ export default function Records() {
               {activeTab !== "invoices" && (
                 <div className="flex gap-3 items-center w-full md:w-auto">
                   {activeTab === "treatments" && (
-                    <Button
-                      onClick={autoAssignLeadPractitioner}
-                      variant="outline"
-                      className="border-[#f0e9d8] text-[#1a2845] hover:bg-[#fef9f0] rounded-xl whitespace-nowrap"
-                    >
-                      <Sparkles className="w-4 h-4 mr-2" />
-                      Auto-assign Lead
-                    </Button>
+                    <>
+                      <Button
+                        onClick={openBatchInvoiceDialog}
+                        variant="outline"
+                        className="border-[#f0e9d8] text-[#1a2845] hover:bg-[#fef9f0] rounded-xl whitespace-nowrap"
+                        disabled={unpaidByPatient.length === 0}
+                      >
+                        <FileText className="w-4 h-4 mr-2" />
+                        Batch invoice unpaid
+                      </Button>
+                      <Button
+                        onClick={autoAssignLeadPractitioner}
+                        variant="outline"
+                        className="border-[#f0e9d8] text-[#1a2845] hover:bg-[#fef9f0] rounded-xl whitespace-nowrap"
+                      >
+                        <Sparkles className="w-4 h-4 mr-2" />
+                        Auto-assign Lead
+                      </Button>
+                    </>
                   )}
                   <div className="relative flex-1 md:w-80">
                     <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400" />
@@ -1316,6 +1380,51 @@ export default function Records() {
             )}
           </div>
         </div>
+
+        {/* Partial Payment Dialog */}
+        <Dialog open={batchInvoiceDialogOpen} onOpenChange={setBatchInvoiceDialogOpen}>
+          <DialogContent className="sm:max-w-md">
+            <DialogHeader>
+              <DialogTitle className="text-xl font-semibold">Batch invoice unpaid treatments</DialogTitle>
+            </DialogHeader>
+            <div className="space-y-4 mt-2">
+              <p className="text-sm text-gray-600">
+                Choose a patient to generate one invoice for all their unpaid treatments.
+              </p>
+              <Select value={batchInvoicePatientId} onValueChange={setBatchInvoicePatientId}>
+                <SelectTrigger className="rounded-xl">
+                  <SelectValue placeholder="Select patient" />
+                </SelectTrigger>
+                <SelectContent>
+                  {unpaidByPatient.map((p) => (
+                    <SelectItem key={p.patient_id} value={p.patient_id}>
+                      {p.patient_name} - {p.count} unpaid - £{Number(p.total || 0).toFixed(2)}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+
+              <div className="flex gap-3 pt-2">
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="flex-1 rounded-xl border-gray-300"
+                  onClick={() => setBatchInvoiceDialogOpen(false)}
+                >
+                  Cancel
+                </Button>
+                <Button
+                  type="button"
+                  className="flex-1 bg-[#2C3E50] hover:bg-[#34495E] rounded-xl"
+                  onClick={runBatchInvoiceForPatient}
+                  disabled={!batchInvoicePatientId}
+                >
+                  Generate batch invoice
+                </Button>
+              </div>
+            </div>
+          </DialogContent>
+        </Dialog>
 
         {/* Partial Payment Dialog */}
         <Dialog open={partialPaymentDialogOpen} onOpenChange={setPartialPaymentDialogOpen}>
