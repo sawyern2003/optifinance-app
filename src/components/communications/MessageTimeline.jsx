@@ -56,7 +56,7 @@ export function MessageTimeline({
   let lastDate = null;
 
   return (
-    <ScrollArea ref={scrollRef} className="flex-1 p-6">
+    <ScrollArea ref={scrollRef} className="h-full p-6">
       <div className="max-w-3xl">
         {messages.map((message, index) => {
           const messageDate = new Date(message.timestamp);

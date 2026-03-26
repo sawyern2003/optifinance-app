@@ -32,6 +32,7 @@ export default function Communications() {
   const [filter, setFilter] = useState('outstanding');
   const [searchQuery, setSearchQuery] = useState('');
   const [busyInvoiceId, setBusyInvoiceId] = useState(null);
+  const [ephemeralMessages, setEphemeralMessages] = useState([]);
 
   // Fetch invoices
   const { data: invoices = [], isLoading } = useQuery({
@@ -55,7 +56,7 @@ export default function Communications() {
   // Group invoices by patient
   const rawConversations = useCommunications(
     invoices,
-    communicationMessages,
+    [...communicationMessages, ...ephemeralMessages],
     filter,
     searchQuery,
   );
@@ -251,6 +252,21 @@ export default function Communications() {
         metadata: { source: 'communications_custom' },
       });
 
+      // Immediate UX feedback in timeline even if DB logging is delayed/missing.
+      setEphemeralMessages((prev) => [
+        ...prev,
+        {
+          id: `tmp-${Date.now()}`,
+          patient_name: patient.patient_name,
+          patient_contact: patient.messagingPhone,
+          channel: 'sms',
+          direction: 'outbound',
+          status: 'sent',
+          message_body: messageBody,
+          created_at: new Date().toISOString(),
+        },
+      ]);
+
       toast({
         title: 'SMS sent',
         description: `Custom message sent to ${patient.patient_name}`,
@@ -331,7 +347,7 @@ export default function Communications() {
       </div>
 
       {/* Main Layout */}
-      <div className="flex-1 flex overflow-hidden">
+      <div className="flex-1 min-h-0 flex overflow-hidden">
         {/* Sidebar */}
         <PatientSidebar
           conversations={patientConversations}
