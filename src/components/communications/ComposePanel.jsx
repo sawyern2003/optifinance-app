@@ -33,8 +33,10 @@ export function ComposePanel({
   const hasOutstanding = outstandingInvoices.length > 0;
 
   // Validate contact info
-  const emailAddress = extractEmailAddress(patient.patient_contact);
-  const phoneNumber = extractPhoneNumber(patient.patient_contact);
+  const emailAddress =
+    patient.messagingEmail || extractEmailAddress(patient.patient_contact);
+  const phoneNumber =
+    patient.messagingPhone || extractPhoneNumber(patient.patient_contact);
   const hasEmail = Boolean(emailAddress);
   const hasPhone = Boolean(phoneNumber);
 

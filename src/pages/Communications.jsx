@@ -9,6 +9,7 @@ import {
   summarizeSendInvoiceResults,
 } from '@/api/invoices';
 import {
+  extractEmailAddress,
   extractPhoneNumber,
   looksLikeEmail,
   looksLikePhone,
@@ -45,13 +46,42 @@ export default function Communications() {
     initialData: [],
   });
 
+  const { data: patients = [] } = useQuery({
+    queryKey: ['patients'],
+    queryFn: () => api.entities.Patient.list('name'),
+    initialData: [],
+  });
+
   // Group invoices by patient
-  const patientConversations = useCommunications(
+  const rawConversations = useCommunications(
     invoices,
     communicationMessages,
     filter,
     searchQuery,
   );
+
+  const patientConversations = useMemo(() => {
+    const patientByName = new Map(
+      (patients || []).map((p) => [String(p.name || '').trim().toLowerCase(), p]),
+    );
+    return rawConversations.map((conv) => {
+      const p = patientByName.get(String(conv.patient_name || '').trim().toLowerCase());
+      const messagingPhone =
+        extractPhoneNumber(conv.patient_contact) ||
+        extractPhoneNumber(p?.phone) ||
+        extractPhoneNumber(p?.contact) ||
+        null;
+      const messagingEmail =
+        extractEmailAddress(conv.patient_contact) ||
+        extractEmailAddress(p?.contact) ||
+        null;
+      return {
+        ...conv,
+        messagingPhone,
+        messagingEmail,
+      };
+    });
+  }, [rawConversations, patients]);
 
   // Get selected patient
   const selectedPatient = useMemo(() => {
@@ -202,10 +232,10 @@ export default function Communications() {
   };
 
   const sendCustomSms = async (patient, messageBody) => {
-    if (!patient || !looksLikePhone(patient.patient_contact)) {
+    if (!patient || !patient.messagingPhone) {
       toast({
         title: 'Phone number required',
-        description: 'Patient contact must be a phone number to send SMS.',
+        description: 'No phone number found for this patient.',
         variant: 'destructive',
       });
       return;
@@ -215,7 +245,7 @@ export default function Communications() {
     try {
       await api.functions.invoke('sendCustomSMS', {
         patientName: patient.patient_name,
-        patientContact: extractPhoneNumber(patient.patient_contact),
+        patientContact: patient.messagingPhone,
         messageBody,
         relatedInvoiceId: firstInvoice?.id || null,
         metadata: { source: 'communications_custom' },
