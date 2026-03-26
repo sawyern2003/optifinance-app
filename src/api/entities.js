@@ -8,6 +8,7 @@ export const TreatmentEntry = backend.entities.TreatmentEntry;
 export const Expense = backend.entities.Expense;
 export const ExportHistory = backend.entities.ExportHistory;
 export const Invoice = backend.entities.Invoice;
+export const CommunicationMessage = backend.entities.CommunicationMessage;
 export const CompetitorPricing = backend.entities.CompetitorPricing;
 export const TaxSettings = backend.entities.TaxSettings;
 export const ChatHistory = backend.entities.ChatHistory;

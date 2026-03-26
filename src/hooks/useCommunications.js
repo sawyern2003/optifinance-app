@@ -3,11 +3,12 @@ import { useMemo } from 'react';
 /**
  * Groups invoices by patient and provides communication analytics
  * @param {Array} invoices - List of invoices from API
+ * @param {Array} customMessages - List of logged custom communication messages
  * @param {string} filter - 'outstanding' or 'all'
  * @param {string} searchQuery - Search term for patient names
  * @returns {Array} Patient conversations with grouped invoices
  */
-export function useCommunications(invoices, filter = 'all', searchQuery = '') {
+export function useCommunications(invoices, customMessages = [], filter = 'all', searchQuery = '') {
   return useMemo(() => {
     // Filter invoices based on selected filter
     let filtered = invoices;
@@ -30,6 +31,7 @@ export function useCommunications(invoices, filter = 'all', searchQuery = '') {
           patient_name: invoice.patient_name,
           patient_contact: invoice.patient_contact,
           invoices: [],
+          customMessages: [],
           outstandingBalance: 0,
           outstandingCount: 0,
           lastActivity: null,
@@ -52,6 +54,30 @@ export function useCommunications(invoices, filter = 'all', searchQuery = '') {
     });
 
     // Convert to array
+    for (const msg of customMessages || []) {
+      const normalizedContact = (msg.patient_contact || '').trim().toLowerCase();
+      const key = `${msg.patient_name}::${normalizedContact}`;
+      if (!grouped[key]) {
+        grouped[key] = {
+          key,
+          patient_name: msg.patient_name,
+          patient_contact: msg.patient_contact,
+          invoices: [],
+          customMessages: [],
+          outstandingBalance: 0,
+          outstandingCount: 0,
+          lastActivity: null,
+        };
+      }
+      grouped[key].customMessages.push(msg);
+
+      const activityDate = new Date(msg.created_at || msg.updated_at || Date.now());
+      if (!grouped[key].lastActivity || activityDate > grouped[key].lastActivity) {
+        grouped[key].lastActivity = activityDate;
+      }
+    }
+
+    // Convert to array
     let conversations = Object.values(grouped);
 
     // Apply search filter
@@ -69,5 +95,5 @@ export function useCommunications(invoices, filter = 'all', searchQuery = '') {
     );
 
     return conversations;
-  }, [invoices, filter, searchQuery]);
+  }, [invoices, customMessages, filter, searchQuery]);
 }

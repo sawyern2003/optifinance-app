@@ -38,8 +38,19 @@ export default function Communications() {
     initialData: [],
   });
 
+  const { data: communicationMessages = [] } = useQuery({
+    queryKey: ['communicationMessages'],
+    queryFn: () => api.entities.CommunicationMessage.list('-created_at'),
+    initialData: [],
+  });
+
   // Group invoices by patient
-  const patientConversations = useCommunications(invoices, filter, searchQuery);
+  const patientConversations = useCommunications(
+    invoices,
+    communicationMessages,
+    filter,
+    searchQuery,
+  );
 
   // Get selected patient
   const selectedPatient = useMemo(() => {
@@ -189,14 +200,54 @@ export default function Communications() {
     }
   };
 
+  const sendCustomSms = async (patient, messageBody) => {
+    if (!patient || !looksLikePhone(patient.patient_contact)) {
+      toast({
+        title: 'Phone number required',
+        description: 'Patient contact must be a phone number to send SMS.',
+        variant: 'destructive',
+      });
+      return;
+    }
+    const firstInvoice = patient.invoices?.[0] || null;
+    setBusyInvoiceId(firstInvoice?.id || `custom-${patient.key}`);
+    try {
+      await api.functions.invoke('sendCustomSMS', {
+        patientName: patient.patient_name,
+        patientContact: patient.patient_contact,
+        messageBody,
+        relatedInvoiceId: firstInvoice?.id || null,
+        metadata: { source: 'communications_custom' },
+      });
+
+      toast({
+        title: 'SMS sent',
+        description: `Custom message sent to ${patient.patient_name}`,
+        className: 'bg-green-50 border-green-200',
+      });
+      queryClient.invalidateQueries({ queryKey: ['communicationMessages'] });
+    } catch (e) {
+      toast({
+        title: 'SMS failed',
+        description: e?.message || 'Could not send custom SMS',
+        variant: 'destructive',
+      });
+    } finally {
+      setBusyInvoiceId(null);
+      setComposeMode(null);
+    }
+  };
+
   // Handle message send from compose panel
-  const handleSendMessage = async (invoice, method) => {
+  const handleSendMessage = async (invoice, method, customMessageBody) => {
     if (method === 'reminder') {
       await sendReminderSms(invoice);
     } else if (method === 'email') {
       await sendInvoiceEmail(invoice);
     } else if (method === 'sms') {
       await sendInvoiceSmsLink(invoice);
+    } else if (method === 'custom_sms') {
+      await sendCustomSms(selectedPatient, customMessageBody);
     }
   };
 

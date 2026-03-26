@@ -393,6 +393,20 @@ class Functions {
       if (data?.error) throw new Error(data.error);
       return { success: true, ...data };
     }
+
+    if (functionName === 'sendCustomSMS') {
+      const session = await ensureSession();
+      const { data, error, response } = await supabase.functions.invoke('send-custom-sms', {
+        body: payload,
+        headers: { Authorization: `Bearer ${session.access_token}` },
+      });
+      if (error) {
+        const msg = await edgeInvokeErrorMessage(error, response);
+        throw new Error(msg);
+      }
+      if (data?.error) throw new Error(data.error);
+      return { success: true, ...data };
+    }
     
     if (functionName === 'verifySubscription') {
       // Subscription verification is handled by route protection
@@ -420,6 +434,7 @@ export const backend = {
     Expense: new Entity('expenses'),
     ExportHistory: new Entity('export_history'),
     Invoice: new Entity('invoices'),
+    CommunicationMessage: new Entity('communication_messages'),
     CompetitorPricing: new Entity('competitor_pricing'),
     TaxSettings: new Entity('tax_settings'),
     ChatHistory: new Entity('chat_history'),

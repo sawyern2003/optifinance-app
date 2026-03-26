@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { X, Send, Loader2, Mail, MessageSquare } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Alert, AlertDescription } from '@/components/ui/alert';
+import { Textarea } from '@/components/ui/textarea';
 import {
   Select,
   SelectContent,
@@ -22,6 +23,7 @@ export function ComposePanel({
 }) {
   const [selectedInvoiceId, setSelectedInvoiceId] = useState('');
   const [sendMethod, setSendMethod] = useState('email');
+  const [customMessage, setCustomMessage] = useState('');
 
   const outstandingInvoices = patient.invoices.filter(
     inv => inv.status !== 'paid' && inv.status !== 'Paid'
@@ -45,6 +47,9 @@ export function ComposePanel({
       if (!selectedInvoiceId) return;
       const invoice = patient.invoices.find(inv => inv.id === selectedInvoiceId);
       onSend(invoice, sendMethod);
+    } else if (mode === 'custom') {
+      if (!customMessage.trim() || !canSendSMS) return;
+      onSend(null, 'custom_sms', customMessage.trim());
     }
   };
 
@@ -74,13 +79,40 @@ export function ComposePanel({
         </Alert>
       )}
 
-      {/* Custom message (coming soon) */}
+      {/* Custom message */}
       {mode === 'custom' && (
-        <Alert className="mb-4">
-          <AlertDescription>
-            Custom messaging feature coming soon! For now, you can send invoices and payment reminders.
-          </AlertDescription>
-        </Alert>
+        <div className="space-y-4 mb-4">
+          {!canSendSMS ? (
+            <Alert variant="destructive">
+              <AlertDescription>
+                Custom SMS requires a phone number. Current contact: {patient.patient_contact || 'none'}
+              </AlertDescription>
+            </Alert>
+          ) : (
+            <>
+              <Alert>
+                <AlertDescription>
+                  Sending to {patient.patient_contact} via SMS.
+                </AlertDescription>
+              </Alert>
+              <div>
+                <label className="text-sm font-medium mb-2 block">
+                  Message
+                </label>
+                <Textarea
+                  value={customMessage}
+                  onChange={(e) => setCustomMessage(e.target.value)}
+                  placeholder={`Hi ${patient.patient_name || 'there'}, just checking in after your treatment...`}
+                  rows={4}
+                  maxLength={1200}
+                />
+                <p className="mt-1 text-xs text-gray-500">
+                  {customMessage.length}/1200
+                </p>
+              </div>
+            </>
+          )}
+        </div>
       )}
 
       {/* Payment Reminder Mode */}
@@ -229,11 +261,12 @@ export function ComposePanel({
           onClick={handleSend}
           disabled={
             isSending ||
-            !selectedInvoiceId ||
-            mode === 'custom' ||
+            ((mode === 'reminder' || mode === 'invoice') && !selectedInvoiceId) ||
+            (mode === 'custom' && !customMessage.trim()) ||
             (mode === 'reminder' && (!hasOutstanding || !canSendSMS)) ||
             (mode === 'invoice' && sendMethod === 'email' && !canSendEmail) ||
-            (mode === 'invoice' && sendMethod === 'sms' && !canSendSMS)
+            (mode === 'invoice' && sendMethod === 'sms' && !canSendSMS) ||
+            (mode === 'custom' && !canSendSMS)
           }
           className="bg-[#1a2845] hover:bg-[#2a3f5f]"
         >

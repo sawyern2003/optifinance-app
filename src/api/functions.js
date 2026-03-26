@@ -6,6 +6,10 @@ export const sendInvoiceSMS = async (payload) => {
   return backend.functions.invoke('sendInvoiceSMS', payload);
 };
 
+export const sendCustomSMS = async (payload) => {
+  return backend.functions.invoke('sendCustomSMS', payload);
+};
+
 export const verifySubscription = async (payload) => {
   return backend.functions.invoke('verifySubscription', payload);
 };

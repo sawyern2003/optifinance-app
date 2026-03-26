@@ -31,7 +31,7 @@ export function MessageThread({
   isSending,
   resendingId
 }) {
-  const messages = useMessageHistory(patient.invoices);
+  const messages = useMessageHistory(patient.invoices, patient.customMessages || []);
   const initials = getInitials(patient.patient_name);
 
   return (

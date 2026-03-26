@@ -11,9 +11,10 @@ function looksLikeEmail(contact) {
 /**
  * Reconstructs message history from invoice data
  * @param {Array} invoices - List of invoices for a specific patient
+ * @param {Array} customMessages - Logged communication messages
  * @returns {Array} Timeline of communication events
  */
-export function useMessageHistory(invoices) {
+export function useMessageHistory(invoices, customMessages = []) {
   return useMemo(() => {
     const messages = [];
 
@@ -56,11 +57,25 @@ export function useMessageHistory(invoices) {
       }
     });
 
+    // Include logged custom communication entries (optional table).
+    customMessages.forEach((msg) => {
+      messages.push({
+        id: `custom-${msg.id}`,
+        type: msg.direction === 'outbound' ? 'sent' : 'system',
+        action: msg.channel === 'sms' ? 'custom_sent_sms' : `custom_sent_${msg.channel || 'sms'}`,
+        invoice: null,
+        timestamp: msg.created_at,
+        text: msg.message_body,
+        method: msg.channel || 'sms',
+        status: msg.status || 'sent',
+      });
+    });
+
     // Sort chronologically
     messages.sort((a, b) =>
       new Date(a.timestamp) - new Date(b.timestamp)
     );
 
     return messages;
-  }, [invoices]);
+  }, [invoices, customMessages]);
 }
