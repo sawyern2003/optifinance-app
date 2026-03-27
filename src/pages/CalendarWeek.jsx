@@ -118,9 +118,9 @@ export default function CalendarWeek() {
       return api.entities.Appointment.delete(id);
     },
     onSuccess: () => {
-      queryClient.invalidateQueries(['appointments']);
-      queryClient.invalidateQueries(['treatmentEntries']);
-      queryClient.invalidateQueries(['patients']);
+      queryClient.invalidateQueries({ queryKey: ['appointments'] });
+      queryClient.invalidateQueries({ queryKey: ['treatments'] });
+      queryClient.invalidateQueries({ queryKey: ['patients'] });
       toast({
         title: 'Appointment deleted',
         description: 'The appointment and associated records have been removed.',
