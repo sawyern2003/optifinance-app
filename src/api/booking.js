@@ -337,65 +337,35 @@ async function createTreatmentEntryViaRPC(appointment, clinicUserId) {
 }
 
 /**
- * Send booking confirmation - uses existing send-invoice edge function
- * which already has SendGrid and Twilio configured
+ * Send booking confirmation via dedicated edge function
  */
 async function sendSimpleConfirmation(appointment, clinicUserId) {
-  console.log('📧 Sending confirmation using send-custom-sms function...');
+  console.log('📧 Sending confirmation via edge function...');
 
   try {
-    // Use the existing send-custom-sms function which has Twilio configured
-    // We'll call it for SMS first
-    if (appointment.patient_phone) {
-      const appointmentDate = new Date(appointment.date + 'T' + appointment.time);
-      const formattedDate = appointmentDate.toLocaleDateString('en-GB', {
-        weekday: 'long',
-        day: 'numeric',
-        month: 'long',
-      });
+    const { data, error } = await supabase.functions.invoke('send-booking-confirmation', {
+      body: {
+        appointmentId: appointment.id,
+        clinicUserId: clinicUserId,
+      },
+    });
 
-      const { data: profile } = await supabase
-        .from('profiles')
-        .select('clinic_name')
-        .eq('id', clinicUserId)
-        .single();
-
-      const clinicName = profile?.clinic_name || 'The Clinic';
-
-      const smsMessage = `Hi ${appointment.patient_name}, your appointment at ${clinicName} is confirmed for ${formattedDate} at ${appointment.time} for ${appointment.treatment_name}. See you then!`;
-
-      try {
-        // Get user session to call authenticated function
-        const { data: { session } } = await supabase.auth.getSession();
-
-        if (session) {
-          const { data: smsData, error: smsError } = await supabase.functions.invoke('send-custom-sms', {
-            body: {
-              to: appointment.patient_phone,
-              message: smsMessage,
-            },
-            headers: {
-              Authorization: `Bearer ${session.access_token}`,
-            },
-          });
-
-          if (!smsError && smsData?.success) {
-            console.log('📱 SMS sent to:', appointment.patient_phone);
-          }
-        }
-      } catch (smsErr) {
-        console.warn('⚠️ SMS send failed:', smsErr);
-      }
+    if (error) {
+      console.error('⚠️ Edge function error:', error);
+      return { success: false, error: error.message };
     }
 
-    // Mark as confirmation attempted
-    await supabase
-      .from('appointments')
-      .update({ confirmation_sent: true })
-      .eq('id', appointment.id);
+    console.log('✅ Confirmation sent:', data);
 
-    console.log('✅ Confirmation process complete');
-    return { success: true };
+    if (data?.results?.email?.success) {
+      console.log('📧 Email sent to:', appointment.patient_email);
+    }
+
+    if (data?.results?.sms?.success) {
+      console.log('📱 SMS sent to:', appointment.patient_phone);
+    }
+
+    return { success: true, data };
   } catch (error) {
     console.error('⚠️ Failed to send confirmation:', error);
     return { success: false, error: error.message };
