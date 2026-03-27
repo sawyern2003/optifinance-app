@@ -75,7 +75,23 @@ FOR EACH ROW
 EXECUTE FUNCTION update_appointments_updated_at();
 
 -- =====================================================
--- PART 2: PROFILES TABLE UPDATES FOR BOOKING
+-- PART 2: TREATMENT ENTRIES - LINK TO APPOINTMENTS
+-- =====================================================
+
+-- Add appointment_id column to treatment_entries if it doesn't exist
+DO $$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM information_schema.columns
+                 WHERE table_name='treatment_entries' AND column_name='appointment_id') THEN
+    ALTER TABLE treatment_entries ADD COLUMN appointment_id UUID REFERENCES appointments(id) ON DELETE SET NULL;
+  END IF;
+END $$;
+
+-- Create index for faster lookups
+CREATE INDEX IF NOT EXISTS idx_treatment_entries_appointment ON treatment_entries(appointment_id);
+
+-- =====================================================
+-- PART 3: PROFILES TABLE UPDATES FOR BOOKING
 -- =====================================================
 
 -- Add booking columns to profiles table if they don't exist
@@ -96,7 +112,7 @@ END $$;
 CREATE INDEX IF NOT EXISTS idx_profiles_booking_slug ON profiles(booking_slug);
 
 -- =====================================================
--- PART 3: AVAILABILITY SETTINGS TABLE
+-- PART 4: AVAILABILITY SETTINGS TABLE
 -- =====================================================
 
 -- Create availability_settings table if it doesn't exist
@@ -167,7 +183,7 @@ FOR EACH ROW
 EXECUTE FUNCTION update_availability_settings_updated_at();
 
 -- =====================================================
--- PART 4: BOOKING SLUG GENERATION
+-- PART 5: BOOKING SLUG GENERATION
 -- =====================================================
 
 -- Create or replace function to generate unique booking slug
@@ -207,7 +223,7 @@ END;
 $$ LANGUAGE plpgsql;
 
 -- =====================================================
--- PART 5: AUTO-GENERATE BOOKING SLUGS FOR EXISTING USERS
+-- PART 6: AUTO-GENERATE BOOKING SLUGS FOR EXISTING USERS
 -- =====================================================
 
 -- Initialize booking slugs for existing profiles that don't have one
@@ -233,7 +249,7 @@ BEGIN
 END $$;
 
 -- =====================================================
--- PART 6: AUTO-GENERATE SLUG TRIGGER FOR NEW PROFILES
+-- PART 7: AUTO-GENERATE SLUG TRIGGER FOR NEW PROFILES
 -- =====================================================
 
 -- Create or replace trigger function to auto-generate booking slug
