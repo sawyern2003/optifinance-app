@@ -298,33 +298,40 @@ async function createTreatmentEntryViaRPC(appointment, clinicUserId) {
 }
 
 /**
- * Send simple confirmation (without edge function dependency)
+ * Send booking confirmation via edge function (Email + SMS)
  */
 async function sendSimpleConfirmation(appointment, clinicUserId) {
-  // For now, just log that we would send email
-  // You can integrate with Resend, SendGrid, or other email service later
+  console.log('📧 Sending confirmation via edge function...');
 
-  const { data: profile } = await supabase
-    .from('profiles')
-    .select('clinic_name, invoice_from_email')
-    .eq('id', clinicUserId)
-    .single();
+  try {
+    const { data, error } = await supabase.functions.invoke('send-booking-confirmation', {
+      body: {
+        appointmentId: appointment.id,
+        clinicUserId: clinicUserId,
+      },
+    });
 
-  const clinicName = profile?.clinic_name || 'The Clinic';
+    if (error) {
+      console.error('❌ Edge function error:', error);
+      throw error;
+    }
 
-  console.log('📧 Would send email to:', appointment.patient_email);
-  console.log('Subject: Appointment Confirmed -', clinicName);
-  console.log('Treatment:', appointment.treatment_name);
-  console.log('Date:', appointment.date, 'at', appointment.time);
+    console.log('✅ Confirmation sent:', data);
 
-  // Mark as sent (even though we're not actually sending yet)
-  await supabase
-    .from('appointments')
-    .update({ confirmation_sent: true })
-    .eq('id', appointment.id);
+    if (data?.results?.email?.success) {
+      console.log('📧 Email sent to:', appointment.patient_email);
+    }
 
-  // TODO: Integrate actual email service (Resend, SendGrid, etc.)
-  return true;
+    if (data?.results?.sms?.success) {
+      console.log('📱 SMS sent to:', appointment.patient_phone);
+    }
+
+    return data;
+  } catch (error) {
+    console.error('⚠️ Failed to send confirmation:', error);
+    // Don't throw - booking should still succeed even if confirmation fails
+    return { success: false, error: error.message };
+  }
 }
 
 /**
