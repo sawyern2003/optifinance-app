@@ -175,37 +175,76 @@ export async function createPublicBooking(bookingData) {
       } else if (existingPatients && existingPatients.length > 0) {
         console.log('📋 Found', existingPatients.length, 'existing patients');
         console.log('🔍 Looking for email:', bookingData.patient_email);
+        console.log('🔍 Looking for phone:', bookingData.patient_phone);
         console.log('🔍 Looking for name:', bookingData.patient_name);
         console.log('📝 Patient emails in DB:', existingPatients.map(p => p.email));
+        console.log('📝 Patient phones in DB:', existingPatients.map(p => p.contact));
         console.log('📝 Patient names in DB:', existingPatients.map(p => p.name));
 
         let matchedPatient = null;
 
-        // Try to match by email first
+        // Try to match by email first (exact match)
         if (bookingData.patient_email) {
           matchedPatient = existingPatients.find(p => {
             const dbEmail = p.email?.toLowerCase().trim();
             const searchEmail = bookingData.patient_email.toLowerCase().trim();
-            console.log(`Comparing: "${dbEmail}" === "${searchEmail}"`, dbEmail === searchEmail);
+            if (!dbEmail) return false;
+            console.log(`Email comparing: "${dbEmail}" === "${searchEmail}"`, dbEmail === searchEmail);
             return dbEmail === searchEmail;
           });
           if (matchedPatient) {
             console.log('✅ Matched patient by email:', matchedPatient.name);
-          } else {
-            console.log('❌ No email match found');
           }
         }
 
-        // If no email match, try by name
-        if (!matchedPatient && bookingData.patient_name) {
+        // If no email match, try by phone (exact match)
+        if (!matchedPatient && bookingData.patient_phone) {
           matchedPatient = existingPatients.find(p => {
-            const dbName = p.name?.toLowerCase().trim();
-            const searchName = bookingData.patient_name.toLowerCase().trim();
-            console.log(`Comparing: "${dbName}" === "${searchName}"`, dbName === searchName);
-            return dbName === searchName;
+            const dbPhone = p.contact?.replace(/\s/g, '').toLowerCase().trim();
+            const searchPhone = bookingData.patient_phone.replace(/\s/g, '').toLowerCase().trim();
+            if (!dbPhone) return false;
+            console.log(`Phone comparing: "${dbPhone}" === "${searchPhone}"`, dbPhone === searchPhone);
+            return dbPhone === searchPhone;
           });
           if (matchedPatient) {
-            console.log('✅ Matched patient by name:', matchedPatient.name);
+            console.log('✅ Matched patient by phone:', matchedPatient.name);
+          }
+        }
+
+        // If no email/phone match, try fuzzy name matching
+        if (!matchedPatient && bookingData.patient_name) {
+          const searchName = bookingData.patient_name.toLowerCase().trim();
+          const searchWords = searchName.split(/\s+/);
+
+          matchedPatient = existingPatients.find(p => {
+            const dbName = p.name?.toLowerCase().trim();
+            if (!dbName) return false;
+
+            // Exact match
+            if (dbName === searchName) {
+              console.log(`Name exact match: "${dbName}" === "${searchName}"`);
+              return true;
+            }
+
+            // Check if all words from booking name appear in patient name
+            const allWordsMatch = searchWords.every(word => dbName.includes(word));
+            if (allWordsMatch) {
+              console.log(`Name fuzzy match: "${dbName}" contains all words from "${searchName}"`);
+              return true;
+            }
+
+            // Check if patient name appears in booking name
+            if (searchName.includes(dbName)) {
+              console.log(`Name partial match: "${searchName}" contains "${dbName}"`);
+              return true;
+            }
+
+            console.log(`Name no match: "${dbName}" vs "${searchName}"`);
+            return false;
+          });
+
+          if (matchedPatient) {
+            console.log('✅ Matched patient by name (fuzzy):', matchedPatient.name);
           } else {
             console.log('❌ No name match found');
           }

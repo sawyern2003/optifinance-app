@@ -13,15 +13,19 @@ serve(async (req) => {
   }
 
   try {
+    // No auth required - public booking confirmations
+    // We use service role key below to access data
+
     const { appointmentId, clinicUserId } = await req.json();
 
     if (!appointmentId || !clinicUserId) {
       throw new Error("appointmentId and clinicUserId required");
     }
 
+    // Use service role key to bypass RLS and access all data
     const supabaseClient = createClient(
       Deno.env.get("SUPABASE_URL") ?? "",
-      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "", // Service role to access appointments
+      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "",
     );
 
     // Get appointment details
