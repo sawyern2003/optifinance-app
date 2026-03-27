@@ -6,6 +6,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/components/ui/use-toast";
 import { Loader2, Building2, User, Mail, Landmark, Image } from "lucide-react";
+import { BookingSettings } from "@/components/settings/BookingSettings";
 
 export default function Settings() {
   const { toast } = useToast();
@@ -322,6 +323,17 @@ export default function Settings() {
               </Button>
             </div>
           </form>
+        </div>
+
+        {/* Online Booking Settings */}
+        <div className="bg-white rounded-lg border border-gray-200 p-8 mt-6">
+          <div className="mb-6">
+            <h1 className="text-2xl font-semibold text-[#1a2845] mb-2">Online Booking</h1>
+            <p className="text-sm text-gray-500 font-light">
+              Allow patients to book appointments online via your personal booking page
+            </p>
+          </div>
+          <BookingSettings />
         </div>
       </div>
     </div>

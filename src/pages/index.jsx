@@ -29,13 +29,15 @@ import Settings from "./Settings";
 
 import VoiceDiary from "./VoiceDiary";
 
-import Calendar from "./Calendar";
+import Calendar from "./CalendarWeek";
 
 import Checkout from "./Checkout";
 
 import Billing from "./Billing";
 
 import SubscriptionPricing from "./SubscriptionPricing";
+
+import PublicBooking from "./PublicBooking";
 
 import { BrowserRouter as Router, Route, Routes, useLocation, Navigate } from 'react-router-dom';
 import { useState, useEffect } from 'react';
@@ -172,6 +174,7 @@ function PagesContent() {
     return (
         <Routes>
             <Route path="/auth" element={<Auth />} />
+            <Route path="/book/:slug" element={<PublicBooking />} />
             <Route path="/*" element={
                 <ProtectedRoute>
                     <Layout currentPageName={currentPage}>

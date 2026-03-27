@@ -449,6 +449,7 @@ export const backend = {
     ChatHistory: new Entity('chat_history'),
     ClinicalNote: new Entity('clinical_notes'),
     Appointment: new Entity('appointments'),
+    AvailabilitySettings: new Entity('availability_settings'),
   },
   auth: new Auth(),
   integrations: new Integrations(),
