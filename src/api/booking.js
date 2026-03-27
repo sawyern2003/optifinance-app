@@ -174,31 +174,46 @@ export async function createPublicBooking(bookingData) {
         console.error('❌ Error fetching patients:', patientsError);
       } else if (existingPatients && existingPatients.length > 0) {
         console.log('📋 Found', existingPatients.length, 'existing patients');
+        console.log('🔍 Looking for email:', bookingData.patient_email);
+        console.log('🔍 Looking for name:', bookingData.patient_name);
+        console.log('📝 Patient emails in DB:', existingPatients.map(p => p.email));
+        console.log('📝 Patient names in DB:', existingPatients.map(p => p.name));
 
         let matchedPatient = null;
 
         // Try to match by email first
         if (bookingData.patient_email) {
-          matchedPatient = existingPatients.find(p =>
-            p.email?.toLowerCase() === bookingData.patient_email.toLowerCase()
-          );
+          matchedPatient = existingPatients.find(p => {
+            const dbEmail = p.email?.toLowerCase().trim();
+            const searchEmail = bookingData.patient_email.toLowerCase().trim();
+            console.log(`Comparing: "${dbEmail}" === "${searchEmail}"`, dbEmail === searchEmail);
+            return dbEmail === searchEmail;
+          });
           if (matchedPatient) {
             console.log('✅ Matched patient by email:', matchedPatient.name);
+          } else {
+            console.log('❌ No email match found');
           }
         }
 
         // If no email match, try by name
         if (!matchedPatient && bookingData.patient_name) {
-          matchedPatient = existingPatients.find(p =>
-            p.name?.toLowerCase() === bookingData.patient_name.toLowerCase()
-          );
+          matchedPatient = existingPatients.find(p => {
+            const dbName = p.name?.toLowerCase().trim();
+            const searchName = bookingData.patient_name.toLowerCase().trim();
+            console.log(`Comparing: "${dbName}" === "${searchName}"`, dbName === searchName);
+            return dbName === searchName;
+          });
           if (matchedPatient) {
             console.log('✅ Matched patient by name:', matchedPatient.name);
+          } else {
+            console.log('❌ No name match found');
           }
         }
 
         if (matchedPatient) {
           patientId = matchedPatient.id;
+          console.log('🎯 Using patient_id:', patientId);
         } else {
           console.log('ℹ️ No matching patient found, will create new patient reference');
         }
@@ -230,11 +245,14 @@ export async function createPublicBooking(bookingData) {
 
     // Try to create treatment entry using Supabase RPC or direct insert with service role
     console.log('💉 Creating treatment entry...');
+    console.log('💉 Appointment data:', appointment);
+    console.log('💉 Patient ID to use:', appointment.patient_id);
     try {
       const treatmentResult = await createTreatmentEntryViaRPC(appointment, bookingData.user_id);
       console.log('✅ Treatment entry created:', treatmentResult);
     } catch (treatmentError) {
       console.error('⚠️ Failed to create treatment entry:', treatmentError);
+      console.error('⚠️ Error details:', treatmentError.message, treatmentError.details);
       console.log('Booking still successful, but treatment entry needs manual creation');
     }
 
