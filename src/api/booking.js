@@ -343,18 +343,31 @@ async function sendSimpleConfirmation(appointment, clinicUserId) {
   console.log('📧 Sending confirmation via edge function...');
 
   try {
-    const { data, error } = await supabase.functions.invoke('send-booking-confirmation', {
-      body: {
+    // Get Supabase URL and anon key from environment
+    const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
+    const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
+
+    // Call edge function directly with fetch to ensure anon key is passed
+    const response = await fetch(`${supabaseUrl}/functions/v1/send-booking-confirmation`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${supabaseAnonKey}`,
+        'apikey': supabaseAnonKey,
+      },
+      body: JSON.stringify({
         appointmentId: appointment.id,
         clinicUserId: clinicUserId,
-      },
+      }),
     });
 
-    if (error) {
-      console.error('⚠️ Edge function error:', error);
-      return { success: false, error: error.message };
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error('⚠️ Edge function error:', response.status, errorText);
+      return { success: false, error: `HTTP ${response.status}: ${errorText}` };
     }
 
+    const data = await response.json();
     console.log('✅ Confirmation sent:', data);
 
     if (data?.results?.email?.success) {
