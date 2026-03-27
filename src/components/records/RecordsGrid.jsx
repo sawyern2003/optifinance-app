@@ -48,6 +48,8 @@ export function RecordsGrid({
     return <EmptyState type={type} />;
   }
 
+  const anySelected = selectedItems.length > 0;
+
   // Render cards
   return (
     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 p-6">
@@ -60,12 +62,14 @@ export function RecordsGrid({
               key={item.id}
               treatment={item}
               isSelected={isSelected}
-              onSelect={() => onSelectItem?.(item.id)}
+              onSelect={onSelectItem}
               onEdit={() => onEdit?.(item, 'treatment')}
               onGenerateInvoice={onGenerateInvoice}
               onDelete={() => onDelete?.(item, 'treatment')}
               practitioners={practitioners}
               invoices={invoices}
+              showCheckbox={true}
+              anySelected={anySelected}
             />
           );
         } else {
@@ -74,9 +78,11 @@ export function RecordsGrid({
               key={item.id}
               expense={item}
               isSelected={isSelected}
-              onSelect={() => onSelectItem?.(item.id)}
+              onSelect={onSelectItem}
               onEdit={() => onEdit?.(item, 'expense')}
               onDelete={() => onDelete?.(item, 'expense')}
+              showCheckbox={true}
+              anySelected={anySelected}
             />
           );
         }

@@ -197,4 +197,19 @@ button:focus-visible {
   .animate-slide-in {
     animation: slide-in 0.3s ease-out;
   }
+
+  /* Slide-down animation for bulk actions bar */
+  @keyframes slide-down {
+    from {
+      transform: translateY(-100%);
+      opacity: 0;
+    }
+    to {
+      transform: translateY(0);
+      opacity: 1;
+    }
+  }
+  .animate-slide-down {
+    animation: slide-down 0.3s ease-out;
+  }
 }

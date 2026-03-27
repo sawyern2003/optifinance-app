@@ -44,6 +44,10 @@ function composeNotesWithCourse(notes, courseNumber) {
   return clean ? `Course ${courseNumber}: ${clean}` : `Course ${courseNumber}`;
 }
 
+function normalizePatientName(name) {
+  return String(name || "").trim().toLowerCase();
+}
+
 function batchInvoicePriceLabel(treatment) {
   const charged = Number(treatment?.price_paid || 0);
   const ffApplied =
@@ -85,7 +89,10 @@ export default function Records() {
   const [partialPaymentTreatment, setPartialPaymentTreatment] = useState(null);
   const [partialPaymentAmount, setPartialPaymentAmount] = useState('');
   const [batchInvoiceDialogOpen, setBatchInvoiceDialogOpen] = useState(false);
-  const [batchInvoicePatientId, setBatchInvoicePatientId] = useState('');
+  const [batchInvoicePatientKey, setBatchInvoicePatientKey] = useState('');
+  const [requestedBatchPatientId, setRequestedBatchPatientId] = useState(null);
+  const [requestedBatchOpen, setRequestedBatchOpen] = useState(false);
+  const [isGeneratingAllBatches, setIsGeneratingAllBatches] = useState(false);
   const [selectedTreatments, setSelectedTreatments] = useState([]);
   const [selectedExpenses, setSelectedExpenses] = useState([]);
   const [downloadingPdfId, setDownloadingPdfId] = useState(null);
@@ -93,9 +100,19 @@ export default function Records() {
   useEffect(() => {
     const params = new URLSearchParams(location.search || "");
     const tab = params.get("tab");
+    const shouldOpenBatch = params.get("batch") === "1";
+    const patientFromQuery = params.get("patient") || "";
     if (tab === "invoices") setActiveTab("invoices");
     if (tab === "treatments") setActiveTab("treatments");
     if (tab === "expenses") setActiveTab("expenses");
+    if (shouldOpenBatch) {
+      setActiveTab("treatments");
+      setRequestedBatchOpen(true);
+      setRequestedBatchPatientId(patientFromQuery);
+    } else {
+      setRequestedBatchOpen(false);
+      setRequestedBatchPatientId(null);
+    }
   }, [location.search]);
 
   const { data: treatments, isLoading: loadingTreatments } = useQuery({
@@ -708,17 +725,25 @@ export default function Records() {
     }
   };
 
-  const generateInvoice = async (treatment) => {
+  const generateInvoice = async (treatment, batchOptions = null) => {
     setGeneratingInvoice(treatment.id);
     const invoiceNumber = generateInvoiceNumber();
-    const patient = patients.find((p) => p.id === treatment.patient_id);
+    const patient = treatment.patient_id
+      ? patients.find((p) => p.id === treatment.patient_id)
+      : patients.find((p) => normalizePatientName(p.name) === normalizePatientName(treatment.patient_name));
 
     try {
       const pendingForPatient = (treatments || [])
         .filter(
-          (t) =>
-            t.patient_id === treatment.patient_id &&
-            t.payment_status === "pending",
+          (t) => {
+            if (t.payment_status !== "pending") return false;
+            if (batchOptions?.patient_id) return t.patient_id === batchOptions.patient_id;
+            if (batchOptions?.patient_name) {
+              return normalizePatientName(t.patient_name) === normalizePatientName(batchOptions.patient_name);
+            }
+            if (treatment.patient_id) return t.patient_id === treatment.patient_id;
+            return normalizePatientName(t.patient_name) === normalizePatientName(treatment.patient_name);
+          },
         )
         .sort((a, b) => String(a.date || "").localeCompare(String(b.date || "")));
       const invoiceItems =
@@ -758,7 +783,7 @@ export default function Records() {
         invoice_number: invoiceNumber,
         treatment_entry_id: invoiceItems[0]?.id || treatment.id,
         patient_name: treatment.patient_name || 'Patient',
-        patient_contact: patient?.contact || '',
+        patient_contact: patient?.contact || patient?.phone || '',
         treatment_name: treatmentLabel,
         treatment_date: earliestDate,
         amount: totalAmount,
@@ -813,16 +838,21 @@ export default function Records() {
   const unpaidByPatient = useMemo(() => {
     const map = new Map();
     for (const t of treatments || []) {
-      if (t.payment_status !== 'pending' || !t.patient_id) continue;
-      const prev = map.get(t.patient_id) || {
+      if (t.payment_status !== 'pending') continue;
+      const patientName = String(t.patient_name || "Patient");
+      const key = t.patient_id
+        ? `id:${t.patient_id}`
+        : `name:${normalizePatientName(patientName)}`;
+      const prev = map.get(key) || {
+        key,
         patient_id: t.patient_id,
-        patient_name: t.patient_name || 'Patient',
+        patient_name: patientName,
         count: 0,
         total: 0,
       };
       prev.count += 1;
       prev.total += Number(t.price_paid || 0);
-      map.set(t.patient_id, prev);
+      map.set(key, prev);
     }
     return Array.from(map.values()).sort((a, b) =>
       String(a.patient_name).localeCompare(String(b.patient_name), undefined, {
@@ -839,14 +869,20 @@ export default function Records() {
       });
       return;
     }
-    setBatchInvoicePatientId((prev) => prev || unpaidByPatient[0].patient_id);
+    setBatchInvoicePatientKey((prev) => prev || unpaidByPatient[0].key);
     setBatchInvoiceDialogOpen(true);
   };
 
   const runBatchInvoiceForPatient = async () => {
-    if (!batchInvoicePatientId) return;
+    if (!batchInvoicePatientKey) return;
+    const selected = unpaidByPatient.find((p) => p.key === batchInvoicePatientKey);
+    if (!selected) return;
     const pending = (treatments || [])
-      .filter((t) => t.patient_id === batchInvoicePatientId && t.payment_status === 'pending')
+      .filter((t) => {
+        if (t.payment_status !== "pending") return false;
+        if (selected.patient_id) return t.patient_id === selected.patient_id;
+        return normalizePatientName(t.patient_name) === normalizePatientName(selected.patient_name);
+      })
       .sort((a, b) => String(a.date || '').localeCompare(String(b.date || '')));
     const seed = pending[0];
     if (!seed) {
@@ -858,8 +894,66 @@ export default function Records() {
       return;
     }
     setBatchInvoiceDialogOpen(false);
-    await generateInvoice(seed);
+    await generateInvoice(seed, {
+      patient_id: selected.patient_id || null,
+      patient_name: selected.patient_name,
+    });
   };
+
+  const runBatchInvoiceForAllPatients = async () => {
+    if (!unpaidByPatient.length || isGeneratingAllBatches) return;
+    setIsGeneratingAllBatches(true);
+    let created = 0;
+    try {
+      for (const group of unpaidByPatient) {
+        const pending = (treatments || [])
+          .filter((t) => {
+            if (t.payment_status !== "pending") return false;
+            if (group.patient_id) return t.patient_id === group.patient_id;
+            return normalizePatientName(t.patient_name) === normalizePatientName(group.patient_name);
+          })
+          .sort((a, b) => String(a.date || '').localeCompare(String(b.date || '')));
+        const seed = pending[0];
+        if (!seed) continue;
+        await generateInvoice(seed, {
+          patient_id: group.patient_id || null,
+          patient_name: group.patient_name,
+        });
+        created += 1;
+      }
+      toast({
+        title: "Batch invoices generated",
+        description: `Created ${created} invoice${created === 1 ? "" : "s"} for unpaid treatments.`,
+      });
+    } finally {
+      setIsGeneratingAllBatches(false);
+    }
+  };
+
+  useEffect(() => {
+    if (!requestedBatchOpen || loadingTreatments) return;
+    if (!unpaidByPatient.length) {
+      toast({
+        title: "No unpaid treatments",
+        description: "There are no pending treatments to batch invoice.",
+      });
+      setRequestedBatchOpen(false);
+      setRequestedBatchPatientId(null);
+      return;
+    }
+
+    const requestedExists =
+      requestedBatchPatientId &&
+      unpaidByPatient.some((p) => p.patient_id === requestedBatchPatientId);
+    const nextPatientKey = requestedExists
+      ? unpaidByPatient.find((p) => p.patient_id === requestedBatchPatientId)?.key
+      : unpaidByPatient[0].key;
+
+    setBatchInvoicePatientKey(nextPatientKey || unpaidByPatient[0].key);
+    setBatchInvoiceDialogOpen(true);
+    setRequestedBatchOpen(false);
+    setRequestedBatchPatientId(null);
+  }, [requestedBatchOpen, requestedBatchPatientId, unpaidByPatient, loadingTreatments, toast]);
 
   const getDateRange = () => {
     const now = new Date();
@@ -1000,7 +1094,15 @@ export default function Records() {
                         disabled={unpaidByPatient.length === 0}
                       >
                         <FileText className="w-4 h-4 mr-2" />
-                        Batch invoice unpaid
+                        Batch invoice by patient
+                      </Button>
+                      <Button
+                        onClick={runBatchInvoiceForAllPatients}
+                        className="bg-[#2C3E50] hover:bg-[#34495E] text-white rounded-xl whitespace-nowrap"
+                        disabled={unpaidByPatient.length === 0 || isGeneratingAllBatches}
+                      >
+                        <FileText className="w-4 h-4 mr-2" />
+                        {isGeneratingAllBatches ? "Generating..." : "Generate all unpaid batches"}
                       </Button>
                       <Button
                         onClick={autoAssignLeadPractitioner}
@@ -1391,13 +1493,13 @@ export default function Records() {
               <p className="text-sm text-gray-600">
                 Choose a patient to generate one invoice for all their unpaid treatments.
               </p>
-              <Select value={batchInvoicePatientId} onValueChange={setBatchInvoicePatientId}>
+              <Select value={batchInvoicePatientKey} onValueChange={setBatchInvoicePatientKey}>
                 <SelectTrigger className="rounded-xl">
                   <SelectValue placeholder="Select patient" />
                 </SelectTrigger>
                 <SelectContent>
                   {unpaidByPatient.map((p) => (
-                    <SelectItem key={p.patient_id} value={p.patient_id}>
+                    <SelectItem key={p.key} value={p.key}>
                       {p.patient_name} - {p.count} unpaid - £{Number(p.total || 0).toFixed(2)}
                     </SelectItem>
                   ))}
@@ -1417,7 +1519,7 @@ export default function Records() {
                   type="button"
                   className="flex-1 bg-[#2C3E50] hover:bg-[#34495E] rounded-xl"
                   onClick={runBatchInvoiceForPatient}
-                  disabled={!batchInvoicePatientId}
+                  disabled={!batchInvoicePatientKey}
                 >
                   Generate batch invoice
                 </Button>

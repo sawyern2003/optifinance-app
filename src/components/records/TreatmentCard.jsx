@@ -3,6 +3,7 @@ import { format } from 'date-fns';
 import { Calendar, Clock, User, FileText, Pencil, MoreVertical } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
+import { Checkbox } from '@/components/ui/checkbox';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -32,7 +33,9 @@ export function TreatmentCard({
   onGenerateInvoice,
   onDelete,
   practitioners = [],
-  invoices = []
+  invoices = [],
+  showCheckbox = false,
+  anySelected = false
 }) {
   const initials = getInitials(treatment.patient_name);
   const practitioner = practitioners.find(p => p.id === treatment.practitioner_id);
@@ -89,10 +92,26 @@ export function TreatmentCard({
     <div
       className={`
         bg-white rounded-2xl p-6 border transition-all duration-200 hover:shadow-md
-        hover:border-[#d4a740] hover:-translate-y-1 cursor-pointer group
+        hover:border-[#d4a740] hover:-translate-y-1 cursor-pointer group relative
         ${isSelected ? 'border-[#d4a740] ring-2 ring-[#d4a740]/20' : 'border-gray-100'}
       `}
     >
+      {/* Selection Checkbox */}
+      {(showCheckbox || anySelected) && (
+        <div
+          className={`absolute top-3 left-3 z-10 transition-opacity duration-200 ${
+            anySelected ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'
+          }`}
+          onClick={(e) => e.stopPropagation()}
+        >
+          <Checkbox
+            checked={isSelected}
+            onCheckedChange={(checked) => onSelect?.(treatment.id, checked)}
+            className="h-5 w-5 border-2 border-gray-300 data-[state=checked]:bg-[#1a2845] data-[state=checked]:border-[#1a2845]"
+          />
+        </div>
+      )}
+
       {/* Header with avatar and treatment name */}
       <div className="flex items-start justify-between mb-4">
         <div className="flex items-center gap-3 flex-1 min-w-0">

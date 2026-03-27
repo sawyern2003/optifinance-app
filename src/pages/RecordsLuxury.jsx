@@ -12,6 +12,7 @@ import { RecordsGrid } from "@/components/records/RecordsGrid";
 import { FilterSidebar } from "@/components/records/FilterSidebar";
 import { TreatmentEditPanel } from "@/components/records/TreatmentEditPanel";
 import { ExpenseEditPanel } from "@/components/records/ExpenseEditPanel";
+import { BulkActionsBar } from "@/components/records/BulkActionsBar";
 import {
   friendsFamilyInvoiceFields,
 } from "@/lib/invoiceFriendsFamily";
@@ -31,6 +32,7 @@ export default function RecordsLuxury() {
   // Modal/Dialog state
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
   const [itemToDelete, setItemToDelete] = useState(null);
+  const [bulkDeleteConfirmOpen, setBulkDeleteConfirmOpen] = useState(false);
   const [generatingInvoice, setGeneratingInvoice] = useState(null);
 
   // Edit panel state
@@ -162,6 +164,44 @@ export default function RecordsLuxury() {
     },
   });
 
+  // Bulk delete mutation
+  const bulkDeleteMutation = useMutation({
+    mutationFn: async ({ ids, type }) => {
+      const entity = type === 'treatment' ? api.entities.TreatmentEntry : api.entities.Expense;
+      await Promise.all(ids.map(id => entity.delete(id)));
+    },
+    onSuccess: (_, { type }) => {
+      const queryKey = type === 'treatment' ? 'treatments' : 'expenses';
+      queryClient.invalidateQueries({ queryKey: [queryKey] });
+      setBulkDeleteConfirmOpen(false);
+
+      if (type === 'treatment') {
+        const count = selectedTreatments.length;
+        setSelectedTreatments([]);
+        toast({
+          title: `${count} treatment${count === 1 ? '' : 's'} deleted`,
+          description: 'The selected treatments have been removed.',
+          className: 'bg-green-50 border-green-200',
+        });
+      } else {
+        const count = selectedExpenses.length;
+        setSelectedExpenses([]);
+        toast({
+          title: `${count} expense${count === 1 ? '' : 's'} deleted`,
+          description: 'The selected expenses have been removed.',
+          className: 'bg-green-50 border-green-200',
+        });
+      }
+    },
+    onError: (err, { type }) => {
+      toast({
+        title: 'Bulk delete failed',
+        description: err?.message || 'Could not delete all items. Please try again.',
+        variant: 'destructive',
+      });
+    },
+  });
+
   // Delete handlers
   const handleDeleteClick = (item, type) => {
     setItemToDelete({ ...item, type });
@@ -214,6 +254,39 @@ export default function RecordsLuxury() {
       id: editingItem.id,
       data: data
     });
+  };
+
+  // Bulk operation handlers
+  const handleClearSelection = () => {
+    if (activeTab === 'treatments') {
+      setSelectedTreatments([]);
+    } else {
+      setSelectedExpenses([]);
+    }
+  };
+
+  const handleSelectAll = () => {
+    if (activeTab === 'treatments') {
+      const allIds = filteredTreatments.map(t => t.id);
+      const allSelected = selectedTreatments.length === allIds.length;
+      setSelectedTreatments(allSelected ? [] : allIds);
+    } else {
+      const allIds = filteredExpenses.map(e => e.id);
+      const allSelected = selectedExpenses.length === allIds.length;
+      setSelectedExpenses(allSelected ? [] : allIds);
+    }
+  };
+
+  const handleBulkDeleteClick = () => {
+    setBulkDeleteConfirmOpen(true);
+  };
+
+  const confirmBulkDelete = () => {
+    if (activeTab === 'treatments') {
+      bulkDeleteMutation.mutate({ ids: selectedTreatments, type: 'treatment' });
+    } else {
+      bulkDeleteMutation.mutate({ ids: selectedExpenses, type: 'expense' });
+    }
   };
 
   // Generate invoice
@@ -361,14 +434,14 @@ export default function RecordsLuxury() {
   }, [activeTab, filteredTreatments, filteredExpenses]);
 
   // Toggle selection
-  const toggleSelectItem = (id) => {
+  const toggleSelectItem = (id, checked) => {
     if (activeTab === 'treatments') {
       setSelectedTreatments(prev =>
-        prev.includes(id) ? prev.filter(i => i !== id) : [...prev, id]
+        checked ? [...prev, id] : prev.filter(i => i !== id)
       );
     } else {
       setSelectedExpenses(prev =>
-        prev.includes(id) ? prev.filter(i => i !== id) : [...prev, id]
+        checked ? [...prev, id] : prev.filter(i => i !== id)
       );
     }
   };
@@ -445,6 +518,28 @@ export default function RecordsLuxury() {
 
         {/* Content */}
         <div className="flex-1 overflow-y-auto">
+          {/* Bulk Actions Bar */}
+          {activeTab === "treatments" && (
+            <BulkActionsBar
+              selectedCount={selectedTreatments.length}
+              totalCount={filteredTreatments.length}
+              onClearSelection={handleClearSelection}
+              onSelectAll={handleSelectAll}
+              onBulkDelete={handleBulkDeleteClick}
+              type="treatments"
+            />
+          )}
+          {activeTab === "expenses" && (
+            <BulkActionsBar
+              selectedCount={selectedExpenses.length}
+              totalCount={filteredExpenses.length}
+              onClearSelection={handleClearSelection}
+              onSelectAll={handleSelectAll}
+              onBulkDelete={handleBulkDeleteClick}
+              type="expenses"
+            />
+          )}
+
           {activeTab === "treatments" ? (
             <RecordsGrid
               items={filteredTreatments}
@@ -554,6 +649,52 @@ export default function RecordsLuxury() {
                 className="flex-1 bg-red-600 hover:bg-red-700 rounded-xl"
               >
                 Delete
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Bulk Delete Confirmation Dialog */}
+      <Dialog open={bulkDeleteConfirmOpen} onOpenChange={setBulkDeleteConfirmOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="text-xl font-semibold">
+              Confirm Bulk Deletion
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 mt-4">
+            <p className="text-gray-700">
+              Are you sure you want to delete{' '}
+              <span className="font-semibold">
+                {activeTab === 'treatments' ? selectedTreatments.length : selectedExpenses.length}{' '}
+                {activeTab === 'treatments'
+                  ? selectedTreatments.length === 1 ? 'treatment' : 'treatments'
+                  : selectedExpenses.length === 1 ? 'expense' : 'expenses'}
+              </span>
+              ?
+            </p>
+            <div className="bg-red-50 border border-red-200 rounded-lg p-4">
+              <p className="text-sm text-red-800 font-medium">
+                ⚠️ This will permanently delete all selected items
+              </p>
+            </div>
+            <p className="text-sm text-red-600 font-medium">This action cannot be undone.</p>
+            <div className="flex gap-3 pt-4">
+              <Button
+                variant="outline"
+                onClick={() => setBulkDeleteConfirmOpen(false)}
+                className="flex-1 rounded-xl border-gray-300"
+                disabled={bulkDeleteMutation.isPending}
+              >
+                Cancel
+              </Button>
+              <Button
+                onClick={confirmBulkDelete}
+                className="flex-1 bg-red-600 hover:bg-red-700 rounded-xl"
+                disabled={bulkDeleteMutation.isPending}
+              >
+                {bulkDeleteMutation.isPending ? 'Deleting...' : 'Delete All'}
               </Button>
             </div>
           </div>

@@ -3,6 +3,7 @@ import { Link } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { format, formatDistanceToNow, differenceInDays } from "date-fns";
 import { api } from "@/api/api";
+import { invoicesAPI } from "@/api/invoices";
 import { createPageUrl } from "@/utils";
 import { motion, AnimatePresence } from "framer-motion";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -12,6 +13,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/components/ui/use-toast";
+import { friendsFamilyInvoiceFields } from "@/lib/invoiceFriendsFamily";
 import {
   CreditCard,
   FileText,
@@ -43,6 +45,44 @@ function patientInitials(name) {
   if (parts.length === 0) return "?";
   if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
   return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
+}
+
+function generateInvoiceNumber() {
+  const date = new Date();
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const random = Math.floor(Math.random() * 10000).toString().padStart(4, "0");
+  return `INV-${year}${month}-${random}`;
+}
+
+const COURSE_NOTE_RE = /^\s*Course\s*(\d{1,2})\s*[:\-]\s*/i;
+
+function parseCourseNumberFromNotes(notes) {
+  const m = String(notes || "").match(COURSE_NOTE_RE);
+  return m?.[1] || "";
+}
+
+function stripCoursePrefix(notes) {
+  return String(notes || "").replace(COURSE_NOTE_RE, "").trim();
+}
+
+function batchInvoicePriceLabel(treatment) {
+  const charged = Number(treatment?.price_paid || 0);
+  const ffApplied =
+    treatment?.friends_family_discount_applied === true ||
+    treatment?.friends_family_discount_applied === "true";
+  const listPrice =
+    treatment?.friends_family_list_price != null &&
+    treatment?.friends_family_list_price !== ""
+      ? Number(treatment.friends_family_list_price)
+      : null;
+  if (ffApplied && Number.isFinite(listPrice) && listPrice > charged + 0.005) {
+    return `£${charged.toFixed(2)} (£${listPrice.toFixed(2)} -> £${charged.toFixed(2)} after discount)`;
+  }
+  if (ffApplied) {
+    return `£${charged.toFixed(2)} (after discount)`;
+  }
+  return `£${charged.toFixed(2)}`;
 }
 
 function aggregateByPatient(patients, treatmentEntries, clinicalNotes) {
@@ -199,7 +239,7 @@ function FinancialSummary({ totalBilled, totalPaid, outstanding }) {
 }
 
 // Quick Actions Component
-function QuickActions({ hasOutstanding, patientId, onAddNote }) {
+function QuickActions({ hasOutstanding, patientId, onAddNote, onInvoiceAllUnpaid, invoiceGenerating }) {
   return (
     <div className="flex flex-wrap gap-2 py-4">
       {hasOutstanding && (
@@ -214,6 +254,20 @@ function QuickActions({ hasOutstanding, patientId, onAddNote }) {
           View records
         </Link>
       </Button>
+      {hasOutstanding && (
+        <Button
+          size="sm"
+          variant="outline"
+          className="border-gray-300 text-gray-700 hover:bg-gray-50"
+          onClick={onInvoiceAllUnpaid}
+          disabled={invoiceGenerating}
+        >
+          <>
+            <FileText className="h-3.5 w-3.5 mr-1.5" />
+            {invoiceGenerating ? "Generating invoice..." : "Invoice all unpaid treatments"}
+          </>
+        </Button>
+      )}
       <Button
         size="sm"
         variant="outline"
@@ -552,6 +606,7 @@ export default function PatientCards() {
   const [searchQuery, setSearchQuery] = useState("");
   const [activeTab, setActiveTab] = useState("treatments");
   const [focusNoteToken, setFocusNoteToken] = useState(0);
+  const [generatingBatchPatientId, setGeneratingBatchPatientId] = useState(null);
 
   const { data: patients = [], isLoading: loadingPatients } = useQuery({
     queryKey: ["patients"],
@@ -568,6 +623,12 @@ export default function PatientCards() {
   const { data: clinicalNotesAll = [], isLoading: loadingNotes } = useQuery({
     queryKey: ["clinicalNotes"],
     queryFn: () => api.entities.ClinicalNote.list("-visit_date"),
+    initialData: [],
+  });
+
+  const { data: treatmentCatalog = [] } = useQuery({
+    queryKey: ["treatmentCatalog"],
+    queryFn: () => api.entities.TreatmentCatalog.list("treatment_name"),
     initialData: [],
   });
 
@@ -613,6 +674,82 @@ export default function PatientCards() {
   const jumpToAddNote = () => {
     setActiveTab("notes");
     setFocusNoteToken((p) => p + 1);
+  };
+
+  const generateBatchInvoiceForPatient = async (row) => {
+    const patientId = row?.patient?.id;
+    if (!patientId) return;
+    const pending = (row.treatments || [])
+      .filter((t) => t.payment_status === "pending")
+      .sort((a, b) => String(a.date || "").localeCompare(String(b.date || "")));
+    if (!pending.length) {
+      toast({
+        title: "No unpaid treatments",
+        description: "This patient has no pending treatments to invoice.",
+      });
+      return;
+    }
+
+    setGeneratingBatchPatientId(patientId);
+    try {
+      const seed = pending[0];
+      const patient = row.patient || {};
+      const invoiceItems = pending;
+      const totalAmount = invoiceItems.reduce((sum, t) => sum + Number(t.price_paid || 0), 0);
+      const earliestDate = invoiceItems[0]?.date || seed.date;
+      const uniqueNames = Array.from(
+        new Set(invoiceItems.map((t) => String(t.treatment_name || "").trim()).filter(Boolean)),
+      );
+      const treatmentLabel =
+        uniqueNames.length <= 2
+          ? uniqueNames.join(" + ")
+          : `${uniqueNames.slice(0, 2).join(" + ")} +${uniqueNames.length - 2} more`;
+      const batchNotes = [
+        "Batch invoice items:",
+        ...invoiceItems.map((t) => {
+          const note = String(t.notes || "").trim();
+          const course = parseCourseNumberFromNotes(note);
+          const cleanNote = stripCoursePrefix(note);
+          const coursePart = course ? ` (Course ${course})` : "";
+          const notePart = cleanNote ? ` | Notes: ${cleanNote}` : "";
+          return `- ${t.date} | ${t.treatment_name}${coursePart} | ${batchInvoicePriceLabel(t)}${notePart}`;
+        }),
+        `Batch treatment IDs: ${invoiceItems.map((t) => t.id).filter(Boolean).join(",")}`,
+      ].join("\n");
+
+      const createdInvoice = await api.entities.Invoice.create({
+        invoice_number: generateInvoiceNumber(),
+        treatment_entry_id: seed.id,
+        patient_name: patient.name || seed.patient_name || "Patient",
+        patient_contact: patient.contact || patient.phone || "",
+        treatment_name: treatmentLabel,
+        treatment_date: earliestDate,
+        amount: totalAmount,
+        practitioner_name: seed.practitioner_name || "",
+        issue_date: format(new Date(), "yyyy-MM-dd"),
+        status: "draft",
+        notes: batchNotes,
+        ...friendsFamilyInvoiceFields(seed, treatmentCatalog, [patient]),
+      });
+
+      const result = await invoicesAPI.generateInvoicePDF(createdInvoice.id);
+      await queryClient.invalidateQueries({ queryKey: ["invoices"] });
+      if (result?.pdfUrl) {
+        window.open(result.pdfUrl, "_blank");
+      }
+      toast({
+        title: "Batch invoice ready",
+        description: `Generated one PDF for ${invoiceItems.length} unpaid treatments.`,
+      });
+    } catch (error) {
+      toast({
+        title: "Failed to generate batch invoice",
+        description: error?.message || "Please try again.",
+        variant: "destructive",
+      });
+    } finally {
+      setGeneratingBatchPatientId(null);
+    }
   };
 
   useEffect(() => {
@@ -794,7 +931,13 @@ export default function PatientCards() {
               />
 
               {/* Quick Actions */}
-              <QuickActions hasOutstanding={outstanding > 0} patientId={patient.id} onAddNote={jumpToAddNote} />
+              <QuickActions
+                hasOutstanding={outstanding > 0}
+                patientId={patient.id}
+                onAddNote={jumpToAddNote}
+                onInvoiceAllUnpaid={() => generateBatchInvoiceForPatient(currentPatient)}
+                invoiceGenerating={generatingBatchPatientId === patient.id}
+              />
 
               {/* Tabs for History */}
               <Tabs value={activeTab} onValueChange={setActiveTab} className="mt-6">
