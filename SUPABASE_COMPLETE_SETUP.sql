@@ -271,6 +271,82 @@ FOR EACH ROW
 EXECUTE FUNCTION auto_generate_booking_slug();
 
 -- =====================================================
+-- PART 8: RPC FUNCTION FOR CREATING TREATMENT FROM BOOKING
+-- =====================================================
+
+-- Create RPC function that can bypass RLS to create treatment entries from public bookings
+CREATE OR REPLACE FUNCTION create_treatment_from_booking(
+  p_user_id UUID,
+  p_appointment_id UUID,
+  p_date DATE,
+  p_patient_id UUID,
+  p_patient_name TEXT,
+  p_treatment_name TEXT,
+  p_price DECIMAL,
+  p_notes TEXT
+)
+RETURNS UUID
+SECURITY DEFINER
+SET search_path = public
+LANGUAGE plpgsql
+AS $$
+DECLARE
+  v_treatment_id UUID;
+  v_catalog_treatment_id UUID;
+  v_product_cost DECIMAL := 0;
+BEGIN
+  -- Try to find treatment in catalog
+  SELECT id, typical_product_cost
+  INTO v_catalog_treatment_id, v_product_cost
+  FROM treatment_catalog
+  WHERE user_id = p_user_id
+    AND (
+      LOWER(treatment_name) LIKE '%' || LOWER(p_treatment_name) || '%'
+      OR LOWER(p_treatment_name) LIKE '%' || LOWER(treatment_name) || '%'
+    )
+  LIMIT 1;
+
+  -- Create treatment entry
+  INSERT INTO treatment_entries (
+    user_id,
+    date,
+    patient_id,
+    patient_name,
+    treatment_id,
+    treatment_name,
+    price_paid,
+    payment_status,
+    amount_paid,
+    product_cost,
+    profit,
+    notes,
+    appointment_id
+  ) VALUES (
+    p_user_id,
+    p_date,
+    p_patient_id,
+    p_patient_name,
+    v_catalog_treatment_id,
+    p_treatment_name,
+    COALESCE(p_price, 0),
+    'pending',
+    0,
+    COALESCE(v_product_cost, 0),
+    0 - COALESCE(v_product_cost, 0),
+    p_notes,
+    p_appointment_id
+  )
+  RETURNING id INTO v_treatment_id;
+
+  RETURN v_treatment_id;
+END;
+$$;
+
+-- Grant execute permission to anon and authenticated users
+GRANT EXECUTE ON FUNCTION create_treatment_from_booking(UUID, UUID, DATE, UUID, TEXT, TEXT, DECIMAL, TEXT) TO anon;
+GRANT EXECUTE ON FUNCTION create_treatment_from_booking(UUID, UUID, DATE, UUID, TEXT, TEXT, DECIMAL, TEXT) TO authenticated;
+
+-- =====================================================
 -- SETUP COMPLETE!
 -- =====================================================
 
