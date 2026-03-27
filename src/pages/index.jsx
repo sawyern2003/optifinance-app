@@ -29,6 +29,8 @@ import Settings from "./Settings";
 
 import VoiceDiary from "./VoiceDiary";
 
+import Calendar from "./Calendar";
+
 import Checkout from "./Checkout";
 
 import Billing from "./Billing";
@@ -70,7 +72,9 @@ const PAGES = {
     Settings: Settings,
     
     VoiceDiary: VoiceDiary,
-    
+
+    Calendar: Calendar,
+
     Checkout: Checkout,
     
     Billing: Billing,
@@ -187,6 +191,7 @@ function PagesContent() {
                             <Route path="/Pricing" element={<Pricing />} />
                             <Route path="/QuickAdd" element={<QuickAdd />} />
                             <Route path="/VoiceDiary" element={<VoiceDiary />} />
+                            <Route path="/Calendar" element={<Calendar />} />
                             <Route path="/Records" element={<RecordsLuxury />} />
                             <Route path="/Checkout" element={<Checkout />} />
                             <Route path="/Billing" element={<Billing />} />

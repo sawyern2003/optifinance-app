@@ -69,12 +69,21 @@ class Entity {
 
   async create(data) {
     try {
+      // For appointments table, automatically add user_id
+      let insertData = { ...data };
+      if (this.tableName === 'appointments') {
+        const { data: { user } } = await supabase.auth.getUser();
+        if (user) {
+          insertData.user_id = user.id;
+        }
+      }
+
       const { data: result, error } = await supabase
         .from(this.tableName)
-        .insert([data])
+        .insert([insertData])
         .select()
         .single();
-      
+
       if (error) throw error;
       return result;
     } catch (error) {
@@ -439,6 +448,7 @@ export const backend = {
     TaxSettings: new Entity('tax_settings'),
     ChatHistory: new Entity('chat_history'),
     ClinicalNote: new Entity('clinical_notes'),
+    Appointment: new Entity('appointments'),
   },
   auth: new Auth(),
   integrations: new Integrations(),

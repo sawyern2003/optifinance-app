@@ -120,7 +120,7 @@ export function PatientSidebar({
               <p className="text-sm">
                 {searchQuery
                   ? `No patients found matching "${searchQuery}"`
-                  : 'No patients with invoices'}
+                  : 'No patients found'}
               </p>
             </div>
           )}

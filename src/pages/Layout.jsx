@@ -2,8 +2,9 @@
 import React, { useState, useEffect } from "react";
 import { Link, useLocation } from "react-router-dom";
 import { createPageUrl } from "@/utils";
-import { LayoutDashboard, Plus, FileText, BarChart3, Settings, LogOut, TrendingUp, MessageSquare, CircleDot, Send, ContactRound } from "lucide-react";
+import { LayoutDashboard, Plus, FileText, BarChart3, Settings, LogOut, TrendingUp, MessageSquare, CircleDot, Send, ContactRound, Calendar } from "lucide-react";
 import { api } from "@/api/api";
+import { FloatingVoiceAssistant } from "@/components/FloatingVoiceAssistant";
 
 const navigationItems = [
   {
@@ -25,6 +26,11 @@ const navigationItems = [
     title: "Quick Add",
     url: createPageUrl("QuickAdd"),
     icon: Plus,
+  },
+  {
+    title: "Calendar",
+    url: createPageUrl("Calendar"),
+    icon: Calendar,
   },
   {
     title: "Records",
@@ -274,6 +280,9 @@ export default function Layout({ children, currentPageName }) {
             {children}
           </div>
         </main>
+
+        {/* Global Voice Assistant - appears on all pages */}
+        <FloatingVoiceAssistant />
       </div>
     </>
   );

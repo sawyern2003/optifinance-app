@@ -12,6 +12,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { useToast } from "@/components/ui/use-toast";
 import { friendsFamilyInvoiceFields } from "@/lib/invoiceFriendsFamily";
 import {
@@ -31,6 +32,7 @@ import {
   Clock,
   Mic,
   Square,
+  Trash2,
 } from "lucide-react";
 
 function money(n) {
@@ -239,7 +241,15 @@ function FinancialSummary({ totalBilled, totalPaid, outstanding }) {
 }
 
 // Quick Actions Component
-function QuickActions({ hasOutstanding, patientId, onAddNote, onInvoiceAllUnpaid, invoiceGenerating }) {
+function QuickActions({
+  hasOutstanding,
+  patientId,
+  onAddNote,
+  onInvoiceAllUnpaid,
+  invoiceGenerating,
+  onRemovePatient,
+  removePatientLoading,
+}) {
   return (
     <div className="flex flex-wrap gap-2 py-4">
       {hasOutstanding && (
@@ -280,6 +290,16 @@ function QuickActions({ hasOutstanding, patientId, onAddNote, onInvoiceAllUnpaid
       <Button size="sm" variant="outline" className="border-gray-300 text-gray-700 hover:bg-gray-50">
         <Calendar className="h-3.5 w-3.5 mr-1.5" />
         Follow up
+      </Button>
+      <Button
+        size="sm"
+        variant="outline"
+        className="border-rose-200 text-rose-700 hover:bg-rose-50"
+        onClick={onRemovePatient}
+        disabled={removePatientLoading}
+      >
+        <Trash2 className="h-3.5 w-3.5 mr-1.5" />
+        {removePatientLoading ? "Removing..." : "Remove patient"}
       </Button>
     </div>
   );
@@ -607,6 +627,8 @@ export default function PatientCards() {
   const [activeTab, setActiveTab] = useState("treatments");
   const [focusNoteToken, setFocusNoteToken] = useState(0);
   const [generatingBatchPatientId, setGeneratingBatchPatientId] = useState(null);
+  const [deletePatientDialogOpen, setDeletePatientDialogOpen] = useState(false);
+  const [patientToDelete, setPatientToDelete] = useState(null);
 
   const { data: patients = [], isLoading: loadingPatients } = useQuery({
     queryKey: ["patients"],
@@ -663,6 +685,31 @@ export default function PatientCards() {
     },
   });
 
+  const deletePatientMutation = useMutation({
+    mutationFn: (id) => api.entities.Patient.delete(id),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["patients"] });
+      queryClient.invalidateQueries({ queryKey: ["treatmentEntriesCatalogue"] });
+      queryClient.invalidateQueries({ queryKey: ["clinicalNotes"] });
+      setDeletePatientDialogOpen(false);
+      setPatientToDelete(null);
+      setCurrentIndex(0);
+      toast({
+        title: "Patient removed",
+        description: "The patient was removed from patient cards.",
+      });
+    },
+    onError: (err) => {
+      toast({
+        title: "Could not remove patient",
+        description:
+          err?.message ||
+          "This patient may still have related records. Remove linked data first and try again.",
+        variant: "destructive",
+      });
+    },
+  });
+
   const nextCard = () => {
     setCurrentIndex((prev) => (prev + 1) % rows.length);
   };
@@ -674,6 +721,16 @@ export default function PatientCards() {
   const jumpToAddNote = () => {
     setActiveTab("notes");
     setFocusNoteToken((p) => p + 1);
+  };
+
+  const openRemovePatientDialog = (row) => {
+    setPatientToDelete(row?.patient || null);
+    setDeletePatientDialogOpen(true);
+  };
+
+  const confirmRemovePatient = async () => {
+    if (!patientToDelete?.id) return;
+    await deletePatientMutation.mutateAsync(patientToDelete.id);
   };
 
   const generateBatchInvoiceForPatient = async (row) => {
@@ -937,6 +994,10 @@ export default function PatientCards() {
                 onAddNote={jumpToAddNote}
                 onInvoiceAllUnpaid={() => generateBatchInvoiceForPatient(currentPatient)}
                 invoiceGenerating={generatingBatchPatientId === patient.id}
+                onRemovePatient={() => openRemovePatientDialog(currentPatient)}
+                removePatientLoading={
+                  deletePatientMutation.isPending && patientToDelete?.id === patient.id
+                }
               />
 
               {/* Tabs for History */}
@@ -995,6 +1056,48 @@ export default function PatientCards() {
           </div>
         )}
       </div>
+
+      <Dialog open={deletePatientDialogOpen} onOpenChange={setDeletePatientDialogOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="text-xl font-semibold flex items-center gap-2">
+              <Trash2 className="w-5 h-5 text-rose-600" />
+              Remove patient
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 mt-2">
+            <p className="text-sm text-gray-700">
+              Are you sure you want to remove{" "}
+              <span className="font-semibold text-gray-900">
+                {patientToDelete?.name || "this patient"}
+              </span>
+              ?
+            </p>
+            <p className="text-xs text-gray-500">
+              If linked records exist, deletion may be blocked until those records are removed.
+            </p>
+            <div className="flex gap-3 pt-2">
+              <Button
+                type="button"
+                variant="outline"
+                className="flex-1 rounded-xl border-gray-300"
+                onClick={() => setDeletePatientDialogOpen(false)}
+                disabled={deletePatientMutation.isPending}
+              >
+                Cancel
+              </Button>
+              <Button
+                type="button"
+                className="flex-1 bg-rose-600 hover:bg-rose-700 rounded-xl"
+                onClick={confirmRemovePatient}
+                disabled={!patientToDelete?.id || deletePatientMutation.isPending}
+              >
+                {deletePatientMutation.isPending ? "Removing..." : "Remove patient"}
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

@@ -29,7 +29,7 @@ export default function Communications() {
   const [selectedPatientKey, setSelectedPatientKey] = useState(null);
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [composeMode, setComposeMode] = useState(null);
-  const [filter, setFilter] = useState('outstanding');
+  const [filter, setFilter] = useState('all');
   const [searchQuery, setSearchQuery] = useState('');
   const [busyInvoiceId, setBusyInvoiceId] = useState(null);
   const [ephemeralMessages, setEphemeralMessages] = useState([]);
@@ -53,20 +53,47 @@ export default function Communications() {
     initialData: [],
   });
 
+  const { data: treatmentEntries = [] } = useQuery({
+    queryKey: ['treatments'],
+    queryFn: () => api.entities.TreatmentEntry.list('-date'),
+    initialData: [],
+  });
+
   // Group invoices by patient
   const rawConversations = useCommunications(
     invoices,
     [...communicationMessages, ...ephemeralMessages],
-    filter,
+    'all',
     searchQuery,
   );
 
   const patientConversations = useMemo(() => {
+    const outstandingByName = new Map();
+    for (const t of treatmentEntries || []) {
+      const key = String(t.patient_name || '').trim().toLowerCase();
+      if (!key) continue;
+      const pricePaid = Number(t.price_paid || 0);
+      const amountPaid = Number(t.amount_paid || 0);
+      let outstandingForTreatment = 0;
+      if (t.payment_status === 'pending') {
+        outstandingForTreatment = Math.max(0, pricePaid);
+      } else if (t.payment_status === 'partially_paid') {
+        outstandingForTreatment = Math.max(0, pricePaid - amountPaid);
+      }
+      if (outstandingForTreatment <= 0) continue;
+      const prev = outstandingByName.get(key) || { balance: 0, count: 0 };
+      prev.balance += outstandingForTreatment;
+      prev.count += 1;
+      outstandingByName.set(key, prev);
+    }
+
     const patientByName = new Map(
       (patients || []).map((p) => [String(p.name || '').trim().toLowerCase(), p]),
     );
-    return rawConversations.map((conv) => {
-      const p = patientByName.get(String(conv.patient_name || '').trim().toLowerCase());
+    let conversations = rawConversations.map((conv) => {
+      const patientKey = String(conv.patient_name || '').trim().toLowerCase();
+      const p = patientByName.get(patientKey);
+      const outstanding = outstandingByName.get(patientKey) || { balance: 0, count: 0 };
       const messagingPhone =
         extractPhoneNumber(conv.patient_contact) ||
         extractPhoneNumber(p?.phone) ||
@@ -78,11 +105,43 @@ export default function Communications() {
         null;
       return {
         ...conv,
+        outstandingBalance: Number(outstanding.balance || 0),
+        outstandingCount: Number(outstanding.count || 0),
         messagingPhone,
         messagingEmail,
       };
     });
-  }, [rawConversations, patients]);
+
+    // Include patients with no invoice/message history so a new chat can be started.
+    const existingKeys = new Set(conversations.map((c) => String(c.key || '').trim().toLowerCase()));
+    for (const p of patients || []) {
+      const key = String(p.name || '').trim().toLowerCase();
+      if (!key || existingKeys.has(key)) continue;
+      const contact = p.contact || p.email || p.phone || '';
+      conversations.push({
+        key,
+        patient_name: p.name || 'Patient',
+        patient_contact: contact,
+        invoices: [],
+        customMessages: [],
+        contacts: [contact].filter(Boolean),
+        outstandingBalance: Number((outstandingByName.get(key) || { balance: 0 }).balance || 0),
+        outstandingCount: Number((outstandingByName.get(key) || { count: 0 }).count || 0),
+        lastActivity: null,
+        messagingPhone: extractPhoneNumber(contact) || extractPhoneNumber(p.phone) || null,
+        messagingEmail:
+          extractEmailAddress(contact) ||
+          extractEmailAddress(p.contact) ||
+          extractEmailAddress(p.email) ||
+          null,
+      });
+    }
+
+    if (filter === 'outstanding') {
+      conversations = conversations.filter((c) => Number(c.outstandingBalance || 0) > 0);
+    }
+    return conversations;
+  }, [rawConversations, patients, treatmentEntries, filter]);
 
   // Get selected patient
   const selectedPatient = useMemo(() => {
