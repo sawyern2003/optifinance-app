@@ -95,17 +95,9 @@ serve(async (req) => {
     if (appointment.patient_email) {
       const sendgridApiKey = Deno.env.get("SENDGRID_API_KEY");
       const resendApiKey = Deno.env.get("RESEND_API_KEY");
-      const invoiceSendDomain = Deno.env.get("INVOICE_SEND_DOMAIN") || "";
 
-      // Use same email format as invoices
-      let fromEmail = profile?.invoice_from_email;
-      if (!fromEmail && invoiceSendDomain && profile?.invoice_send_slug) {
-        fromEmail = `${profile.invoice_send_slug}@${invoiceSendDomain}`;
-      }
-      if (!fromEmail) {
-        fromEmail = "noreply@yourdomain.com"; // Fallback
-      }
-
+      // Use dedicated booking email address
+      const fromEmail = "bookings@optimedix.ai";
       const fromHeader = `"${senderName}" <${fromEmail}>`;
 
       const emailHtml = `

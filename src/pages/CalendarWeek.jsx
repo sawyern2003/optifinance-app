@@ -1,6 +1,7 @@
 import React, { useState, useMemo } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { api } from '@/api/api';
+import { supabase } from '@/config/supabase';
 import { ChevronLeft, ChevronRight, Plus, X, Calendar as CalendarIcon, Clock } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useToast } from '@/components/ui/use-toast';
@@ -100,12 +101,29 @@ export default function CalendarWeek() {
 
   // Delete appointment mutation
   const deleteMutation = useMutation({
-    mutationFn: (id) => api.entities.Appointment.delete(id),
+    mutationFn: async (id) => {
+      // First, find and delete associated treatment entry
+      const { data: treatments } = await supabase
+        .from('treatment_entries')
+        .select('id')
+        .eq('appointment_id', id);
+
+      if (treatments && treatments.length > 0) {
+        for (const treatment of treatments) {
+          await api.entities.TreatmentEntry.delete(treatment.id);
+        }
+      }
+
+      // Then delete the appointment
+      return api.entities.Appointment.delete(id);
+    },
     onSuccess: () => {
       queryClient.invalidateQueries(['appointments']);
+      queryClient.invalidateQueries(['treatmentEntries']);
+      queryClient.invalidateQueries(['patients']);
       toast({
         title: 'Appointment deleted',
-        description: 'The appointment has been removed.',
+        description: 'The appointment and associated records have been removed.',
       });
     },
   });
