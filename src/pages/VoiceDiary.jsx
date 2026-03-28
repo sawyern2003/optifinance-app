@@ -574,24 +574,26 @@ export default function VoiceDiary() {
       <div className="relative z-10 h-screen grid grid-cols-1 lg:grid-cols-2 gap-0">
         {/* LEFT: Orb Command Center */}
         <div className="flex items-center justify-center p-16 relative min-h-screen">
-          {/* Orbital stats */}
-          <div className="absolute left-0 right-0 top-1/2 -translate-y-1/2 h-[600px] flex items-center justify-center pointer-events-none">
-            {/* Top stat - Today */}
-            <div className="absolute top-1/4 left-1/2 -translate-x-1/2 -translate-y-1/2 text-center">
-              <div className="text-5xl font-extralight text-white/90 mb-1">{todayTreatments.length}</div>
-              <div className="text-xs text-white/40 tracking-[0.3em] uppercase">Patients Today</div>
-            </div>
+          {/* Orbital stats - positioned around the center where orb is */}
+          <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+            <div className="relative w-[700px] h-[700px]">
+              {/* Top stat - Today */}
+              <div className="absolute top-0 left-1/2 -translate-x-1/2 text-center">
+                <div className="text-5xl font-extralight text-white/90 mb-1">{todayTreatments.length}</div>
+                <div className="text-xs text-white/40 tracking-[0.3em] uppercase">Patients Today</div>
+              </div>
 
-            {/* Bottom left stat - Revenue */}
-            <div className="absolute bottom-1/4 left-1/4 text-center">
-              <div className="text-5xl font-extralight text-white/90 mb-1">£{todayRevenue.toFixed(0)}</div>
-              <div className="text-xs text-white/40 tracking-[0.3em] uppercase">Revenue</div>
-            </div>
+              {/* Bottom left stat - Revenue */}
+              <div className="absolute bottom-0 left-8 text-center">
+                <div className="text-5xl font-extralight text-white/90 mb-1">£{todayRevenue.toFixed(0)}</div>
+                <div className="text-xs text-white/40 tracking-[0.3em] uppercase">Revenue</div>
+              </div>
 
-            {/* Bottom right stat - Pending */}
-            <div className="absolute bottom-1/4 right-1/4 text-center">
-              <div className="text-5xl font-extralight text-white/90 mb-1">{pendingInvoices}</div>
-              <div className="text-xs text-white/40 tracking-[0.3em] uppercase">Pending</div>
+              {/* Bottom right stat - Pending */}
+              <div className="absolute bottom-0 right-8 text-center">
+                <div className="text-5xl font-extralight text-white/90 mb-1">{pendingInvoices}</div>
+                <div className="text-xs text-white/40 tracking-[0.3em] uppercase">Pending</div>
+              </div>
             </div>
           </div>
 
