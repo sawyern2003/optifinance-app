@@ -108,7 +108,7 @@ export function FloatingVoiceAssistant() {
 
       // Transcribe audio using Whisper
       const transcribeResult = await api.integrations.Core.TranscribeAudio({
-        audio: base64Audio,
+        audioBase64: base64Audio,
         nameHint: '' // Could pass patient names here for better accuracy
       });
 
