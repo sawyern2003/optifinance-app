@@ -26,6 +26,12 @@ export default function VoiceDiary() {
   const [completedAction, setCompletedAction] = useState(null);
   const [inConversation, setInConversation] = useState(false);
 
+  // Patient notes mode
+  const [notesMode, setNotesMode] = useState(false);
+  const [selectedPatient, setSelectedPatient] = useState(null);
+  const [showPatientSelector, setShowPatientSelector] = useState(false);
+  const [patientSearch, setPatientSearch] = useState('');
+
   const mediaRecorderRef = useRef(null);
   const audioChunksRef = useRef([]);
   const audioContextRef = useRef(null);
@@ -136,7 +142,13 @@ export default function VoiceDiary() {
 
         if (audioChunksRef.current.length > 0) {
           const audioBlob = new Blob(audioChunksRef.current, { type: 'audio/webm' });
-          await processAudio(audioBlob);
+
+          // Handle notes mode differently
+          if (notesMode) {
+            await processPatientNote(audioBlob);
+          } else {
+            await processAudio(audioBlob);
+          }
         }
       };
 
@@ -330,6 +342,119 @@ export default function VoiceDiary() {
     }
   };
 
+  // Patient notes functions
+  const startPatientNotes = () => {
+    setShowPatientSelector(true);
+  };
+
+  const selectPatientForNotes = async (patient) => {
+    setSelectedPatient(patient);
+    setShowPatientSelector(false);
+    setNotesMode(true);
+    await startListening();
+  };
+
+  const exitNotesMode = () => {
+    setNotesMode(false);
+    setSelectedPatient(null);
+    if (isListening) {
+      stopListening();
+    }
+    setFinalTranscript('');
+  };
+
+  const savePatientNote = async (noteText) => {
+    if (!selectedPatient) return;
+
+    try {
+      // Save to clinical_notes table
+      await api.entities.ClinicalNote.create({
+        patient_id: selectedPatient.id,
+        patient_name: selectedPatient.name,
+        note: noteText,
+        date: format(new Date(), 'yyyy-MM-dd'),
+        created_at: new Date().toISOString(),
+      });
+
+      // Add to activity feed
+      const activityEntry = {
+        id: Date.now(),
+        timestamp: new Date(),
+        action: `Clinical note for ${selectedPatient.name}`,
+        result: noteText,
+        success: true,
+      };
+      setActivityFeed(prev => [activityEntry, ...prev]);
+
+      toast({
+        title: 'Note saved',
+        description: `Clinical note added to ${selectedPatient.name}'s record`,
+      });
+
+      queryClient.invalidateQueries(['clinical_notes']);
+
+      return true;
+    } catch (error) {
+      console.error('Error saving note:', error);
+      toast({
+        title: 'Failed to save note',
+        description: error.message,
+        variant: 'destructive',
+      });
+      return false;
+    }
+  };
+
+  const processPatientNote = async (audioBlob) => {
+    setIsProcessing(true);
+
+    try {
+      const reader = new FileReader();
+      reader.readAsDataURL(audioBlob);
+      await new Promise((resolve, reject) => {
+        reader.onload = () => resolve();
+        reader.onerror = () => reject(reader.error);
+      });
+      const base64Audio = reader.result.split(',')[1];
+
+      const transcribeResult = await api.integrations.Core.TranscribeAudio({
+        audioBase64: base64Audio,
+        nameHint: selectedPatient.name
+      });
+
+      const noteText = transcribeResult.text || '';
+      setFinalTranscript(noteText);
+
+      if (!noteText.trim()) {
+        setCompletedAction({
+          success: false,
+          message: "I didn't catch that. Could you try again?"
+        });
+        setIsProcessing(false);
+        return;
+      }
+
+      // Save the note
+      const saved = await savePatientNote(noteText);
+
+      setCompletedAction({
+        success: saved,
+        message: saved
+          ? `Note saved to ${selectedPatient.name}'s record`
+          : 'Failed to save note'
+      });
+
+    } catch (error) {
+      console.error('Note processing error:', error);
+      setCompletedAction({
+        success: false,
+        message: error.message || 'Failed to process note'
+      });
+    } finally {
+      setIsProcessing(false);
+    }
+  };
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-[#0a0e1a] via-[#121829] to-[#1a1f35] relative overflow-hidden">
       {/* Ambient background effects */}
@@ -346,8 +471,8 @@ export default function VoiceDiary() {
         <X className="w-6 h-6" />
       </Link>
 
-      {/* Conversation status */}
-      {inConversation && (
+      {/* Conversation/Notes status */}
+      {inConversation && !notesMode && (
         <div className="absolute top-8 right-8 z-50 flex items-center gap-3 px-5 py-2.5 rounded-full bg-white/5 backdrop-blur-xl border border-white/10">
           <div className="w-2 h-2 bg-emerald-400 rounded-full animate-pulse" />
           <span className="text-white/70 text-sm font-light tracking-wider">ACTIVE SESSION</span>
@@ -357,6 +482,91 @@ export default function VoiceDiary() {
           >
             END
           </button>
+        </div>
+      )}
+
+      {/* Notes mode status */}
+      {notesMode && selectedPatient && (
+        <div className="absolute top-8 right-8 z-50 flex items-center gap-3 px-5 py-2.5 rounded-full bg-blue-500/10 backdrop-blur-xl border border-blue-400/30">
+          <div className="w-2 h-2 bg-blue-400 rounded-full animate-pulse" />
+          <span className="text-blue-300/90 text-sm font-light tracking-wider">RECORDING NOTES: {selectedPatient.name}</span>
+          <button
+            onClick={exitNotesMode}
+            className="ml-2 text-blue-300/60 hover:text-blue-200 text-sm font-light tracking-wider transition-colors"
+          >
+            EXIT
+          </button>
+        </div>
+      )}
+
+      {/* Patient Notes button - floating */}
+      {!notesMode && !inConversation && !isListening && !isProcessing && (
+        <button
+          onClick={startPatientNotes}
+          className="absolute top-8 right-8 z-50 px-6 py-3 rounded-full bg-blue-500/20 backdrop-blur-xl border border-blue-400/30 hover:bg-blue-500/30 hover:border-blue-400/50 transition-all duration-300 group"
+        >
+          <div className="flex items-center gap-3">
+            <div className="w-2 h-2 bg-blue-400 rounded-full" />
+            <span className="text-blue-300/90 text-sm font-light tracking-wider">PATIENT NOTES</span>
+          </div>
+        </button>
+      )}
+
+      {/* Patient Selector Modal */}
+      {showPatientSelector && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-8 bg-black/80 backdrop-blur-sm">
+          <div className="w-full max-w-2xl bg-gradient-to-br from-[#1a1f35] to-[#0a0e1a] rounded-3xl border border-white/10 p-8 shadow-2xl">
+            <div className="flex items-center justify-between mb-8">
+              <h3 className="text-white/90 text-xl font-light tracking-wider">Select Patient</h3>
+              <button
+                onClick={() => setShowPatientSelector(false)}
+                className="text-white/40 hover:text-white/80 transition-colors"
+              >
+                <X className="w-6 h-6" />
+              </button>
+            </div>
+
+            {/* Search */}
+            <input
+              type="text"
+              placeholder="Search patients..."
+              value={patientSearch}
+              onChange={(e) => setPatientSearch(e.target.value)}
+              className="w-full px-6 py-4 mb-6 bg-white/5 border border-white/10 rounded-2xl text-white/90 placeholder:text-white/30 focus:outline-none focus:border-blue-400/50 focus:bg-white/10 transition-all"
+              autoFocus
+            />
+
+            {/* Patient list */}
+            <div className="max-h-96 overflow-y-auto space-y-2">
+              {patients
+                .filter(p =>
+                  !patientSearch ||
+                  p.name.toLowerCase().includes(patientSearch.toLowerCase()) ||
+                  p.email?.toLowerCase().includes(patientSearch.toLowerCase())
+                )
+                .map(patient => (
+                  <button
+                    key={patient.id}
+                    onClick={() => selectPatientForNotes(patient)}
+                    className="w-full p-5 text-left bg-white/5 hover:bg-white/10 border border-white/10 hover:border-blue-400/30 rounded-2xl transition-all group"
+                  >
+                    <div className="text-white/90 text-base font-light mb-1">{patient.name}</div>
+                    {patient.email && (
+                      <div className="text-white/40 text-sm">{patient.email}</div>
+                    )}
+                  </button>
+                ))}
+
+              {patients.filter(p =>
+                !patientSearch ||
+                p.name.toLowerCase().includes(patientSearch.toLowerCase())
+              ).length === 0 && (
+                <div className="text-center py-12 text-white/30">
+                  No patients found
+                </div>
+              )}
+            </div>
+          </div>
         </div>
       )}
 
@@ -418,7 +628,7 @@ export default function VoiceDiary() {
                 {/* Main sphere */}
                 <div
                   className="absolute inset-[5%] rounded-full cursor-pointer transition-all duration-300 hover:scale-105"
-                  onClick={startConversation}
+                  onClick={notesMode ? startListening : startConversation}
                   style={{
                     background: "radial-gradient(ellipse 115% 95% at 50% 8%, #7f91aa 0%, #647b98 20%, #4d647f 56%, #3b4f67 100%)",
                     boxShadow: `
@@ -453,9 +663,20 @@ export default function VoiceDiary() {
                 {/* Center prompt */}
                 <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
                   <div className="text-center">
-                    <div className="text-white/60 text-sm tracking-[0.4em] uppercase font-light animate-pulse">
-                      Click to Begin
-                    </div>
+                    {notesMode && selectedPatient ? (
+                      <div>
+                        <div className="text-white/60 text-sm tracking-[0.4em] uppercase font-light animate-pulse mb-2">
+                          Recording Notes
+                        </div>
+                        <div className="text-white/40 text-xs tracking-wider">
+                          {selectedPatient.name}
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="text-white/60 text-sm tracking-[0.4em] uppercase font-light animate-pulse">
+                        Click to Begin
+                      </div>
+                    )}
                   </div>
                 </div>
               </div>
@@ -548,7 +769,9 @@ export default function VoiceDiary() {
                 {/* Recording indicator */}
                 <div className="absolute -top-24 left-1/2 -translate-x-1/2 flex items-center gap-3">
                   <div className="w-2.5 h-2.5 bg-red-400 rounded-full animate-pulse" />
-                  <span className="text-white/60 text-sm tracking-[0.4em] uppercase font-light">Listening</span>
+                  <span className="text-white/60 text-sm tracking-[0.4em] uppercase font-light">
+                    {notesMode ? 'Recording Notes' : 'Listening'}
+                  </span>
                 </div>
               </div>
             )}
@@ -618,7 +841,26 @@ export default function VoiceDiary() {
                   </span>
                 </div>
                 <p className="text-white/70 text-base font-light mb-6">{completedAction.message}</p>
-                {!inConversation && (
+                {notesMode ? (
+                  <div className="flex gap-4 justify-center">
+                    <button
+                      onClick={() => {
+                        setCompletedAction(null);
+                        setFinalTranscript('');
+                        startListening();
+                      }}
+                      className="px-6 py-2 bg-blue-500/20 border border-blue-400/30 rounded-full text-blue-300 hover:bg-blue-500/30 text-sm tracking-[0.3em] uppercase transition-all"
+                    >
+                      Record Another
+                    </button>
+                    <button
+                      onClick={exitNotesMode}
+                      className="text-white/40 hover:text-white/80 text-sm tracking-[0.3em] uppercase transition-colors"
+                    >
+                      Done
+                    </button>
+                  </div>
+                ) : !inConversation && (
                   <button
                     onClick={() => {
                       setCompletedAction(null);
