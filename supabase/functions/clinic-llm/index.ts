@@ -814,16 +814,32 @@ async function handleVoiceConversation(
     ? JSON.stringify(currentContext)
     : 'No current context';
 
+  // Extract app stats from context if available
+  const stats = (currentContext as any)?.stats || {};
+  const recentTreatments = (currentContext as any)?.recentTreatments || [];
+
   const systemPrompt = `You are a conversational AI assistant for a beauty and wellness clinic management system.
 
 Your role is to help doctors manage their practice through natural conversation. You should:
 - Respond like a friendly, professional human assistant
-- Understand clinic operations (treatments, invoices, appointments, patients)
+- ANSWER QUESTIONS USING THE REAL DATA PROVIDED BELOW
 - Generate relevant action options the doctor can click
 - Remember context from the conversation
 - Be concise but helpful
 
-IMPORTANT: You do NOT execute actions yourself. Instead, you generate action buttons that the doctor can click to execute actions.
+IMPORTANT: When asked about revenue, treatments, or stats, USE THE ACTUAL DATA BELOW to give specific numbers and facts.
+
+CURRENT APP DATA:
+- Total Patients: ${stats.totalPatients || 0}
+- Total Treatments: ${stats.totalTreatments || 0}
+- This Week's Treatments: ${stats.thisWeekTreatments || 0}
+- This Week's Revenue: £${(stats.thisWeekRevenue || 0).toFixed(2)}
+- Pending Payments: ${stats.pendingPayments || 0} invoices (£${(stats.pendingAmount || 0).toFixed(2)} total)
+
+Recent Treatments:
+${recentTreatments.length > 0
+  ? recentTreatments.map((t: any) => `- ${t.date}: ${t.patient} - ${t.treatment} (£${t.amount}, ${t.status})`).join('\n')
+  : 'No recent treatments'}
 
 Available patients: ${patientNames.join(', ') || 'None'}
 Available treatments: ${treatmentNames.join(', ') || 'None'}
@@ -832,7 +848,7 @@ Today's date: ${todayDate}
 Recent conversation:
 ${historyStr}
 
-Current context: ${contextStr}`;
+Full context: ${contextStr}`;
 
   const userContent = `Doctor said: "${userMessage}"
 
@@ -883,13 +899,13 @@ Response: {
 Example 2:
 Doctor: "What's my revenue this week?"
 Response: {
-  "response": "I can help you see your revenue! To get the exact numbers, I need to check your records. Would you like to see the dashboard or a detailed breakdown?",
+  "response": "This week you've made £450.00 from 3 treatments. You also have 2 pending payments totaling £280.00. Your total potential revenue is £730.00.",
   "actionOptions": [
     {"label": "View Dashboard", "action": "navigate", "data": {"page": "dashboard"}},
-    {"label": "View Records", "action": "navigate", "data": {"page": "records"}},
-    {"label": "Generate Revenue Report", "action": "generate_report", "data": {"type": "revenue", "period": "week"}}
+    {"label": "View Pending Invoices", "action": "navigate", "data": {"page": "records"}},
+    {"label": "Send Payment Reminders", "action": "send_reminders", "data": {}}
   ],
-  "context": {"pendingAction": "view_revenue"}
+  "context": {"pendingAction": "reviewed_revenue"}
 }
 
 Example 3:

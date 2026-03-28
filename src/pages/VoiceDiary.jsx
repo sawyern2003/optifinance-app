@@ -29,6 +29,7 @@ export default function VoiceDiary() {
   const audioChunksRef = useRef([]);
   const audioContextRef = useRef(null);
   const analyserRafRef = useRef(null);
+  const recordingStartTimeRef = useRef(null);
   const [pulseLevel, setPulseLevel] = useState(0);
 
   const { data: patients } = useQuery({
@@ -105,6 +106,7 @@ export default function VoiceDiary() {
       const mediaRecorder = new MediaRecorder(stream);
       mediaRecorderRef.current = mediaRecorder;
       audioChunksRef.current = [];
+      recordingStartTimeRef.current = Date.now();
       attachMicAnalyser(stream);
 
       mediaRecorder.ondataavailable = (event) => {
@@ -117,13 +119,23 @@ export default function VoiceDiary() {
         stream.getTracks().forEach(track => track.stop());
         detachMicAnalyser();
 
+        // Only process if held for at least 300ms
+        const recordingDuration = Date.now() - (recordingStartTimeRef.current || 0);
+        if (recordingDuration < 300) {
+          toast({
+            title: 'Too quick',
+            description: 'Hold the button and speak, then release',
+          });
+          return;
+        }
+
         if (audioChunksRef.current.length > 0) {
           const audioBlob = new Blob(audioChunksRef.current, { type: 'audio/webm' });
           await processAudio(audioBlob);
         }
       };
 
-      mediaRecorder.start();
+      mediaRecorder.start(250);
       setIsListening(true);
     } catch (error) {
       console.error('Microphone error:', error);
@@ -136,9 +148,17 @@ export default function VoiceDiary() {
   };
 
   const stopListening = () => {
-    if (mediaRecorderRef.current?.state !== 'inactive') {
+    if (mediaRecorderRef.current?.state === 'recording') {
       mediaRecorderRef.current.stop();
       setIsListening(false);
+    }
+  };
+
+  const toggleListening = () => {
+    if (isListening) {
+      stopListening();
+    } else {
+      startListening();
     }
   };
 
@@ -189,14 +209,48 @@ export default function VoiceDiary() {
     try {
       console.log('Processing conversation:', userMessage);
 
+      // Gather current app data for context
+      const today = new Date();
+      const startOfWeek = new Date(today);
+      startOfWeek.setDate(today.getDate() - today.getDay());
+
+      const thisWeekTreatments = treatments.filter(t => {
+        const treatmentDate = new Date(t.date);
+        return treatmentDate >= startOfWeek;
+      });
+
+      const revenue = thisWeekTreatments.reduce((sum, t) => sum + (Number(t.amount_paid) || 0), 0);
+      const pending = treatments.filter(t => t.payment_status === 'pending');
+
+      // Build rich context with actual data
+      const appContext = {
+        todayDate: format(today, 'yyyy-MM-dd'),
+        currentPage: window.location.pathname,
+        stats: {
+          totalPatients: patients.length,
+          totalTreatments: treatments.length,
+          thisWeekTreatments: thisWeekTreatments.length,
+          thisWeekRevenue: revenue,
+          pendingPayments: pending.length,
+          pendingAmount: pending.reduce((sum, t) => sum + (Number(t.price_paid) || 0), 0),
+        },
+        recentTreatments: treatments.slice(0, 5).map(t => ({
+          date: t.date,
+          patient: t.patient_name,
+          treatment: t.treatment_name,
+          amount: t.price_paid,
+          status: t.payment_status,
+        })),
+      };
+
       // Call AI to understand intent and respond
       const data = await api.integrations.Core.ProcessVoiceConversation({
         userMessage,
-        currentContext,
+        currentContext: { ...currentContext, ...appContext },
         conversationHistory: conversation.slice(-5),
         patientNames: patients.map(p => p.name),
         treatmentNames: treatmentCatalog.map(t => t.treatment_name),
-        todayDate: format(new Date(), 'yyyy-MM-dd'),
+        todayDate: format(today, 'yyyy-MM-dd'),
       });
 
       console.log('AI response data:', data);
@@ -237,6 +291,18 @@ export default function VoiceDiary() {
     setConversation(prev => [...prev, { role: 'assistant', content: message, timestamp: new Date() }]);
     setActionOptions(options);
     await speak(message);
+  };
+
+  const processSuggestion = async (suggestionText) => {
+    setIsProcessing(true);
+    try {
+      await processConversation(suggestionText);
+    } catch (error) {
+      console.error('Suggestion processing error:', error);
+      await speakAndRespond("Sorry, I couldn't process that suggestion.", []);
+    } finally {
+      setIsProcessing(false);
+    }
   };
 
   const handleActionOption = async (option) => {
@@ -640,8 +706,9 @@ export default function VoiceDiary() {
               ].map((suggestion, idx) => (
                 <button
                   key={idx}
-                  onClick={() => processConversation(suggestion.text)}
-                  className="px-5 py-4 bg-white border border-gray-200 rounded-xl hover:border-[#c7b79d] hover:shadow-md transition-all text-left group"
+                  onClick={() => processSuggestion(suggestion.text)}
+                  disabled={isProcessing || isListening || isSpeaking}
+                  className="px-5 py-4 bg-white border border-gray-200 rounded-xl hover:border-[#c7b79d] hover:shadow-md transition-all text-left group disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   <div className="flex items-center gap-3">
                     <span className="text-2xl">{suggestion.icon}</span>
