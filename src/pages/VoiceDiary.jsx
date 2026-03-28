@@ -4,7 +4,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { Loader2, Mic, MicOff, AudioLines, ClipboardList, TrendingUp, Clock, CheckCircle2, AlertCircle } from "lucide-react";
+import { Loader2, Mic, MicOff, AudioLines, ClipboardList, Volume2 } from "lucide-react";
 import { format, subDays, parseISO } from "date-fns";
 import { useToast } from "@/components/ui/use-toast";
 import { createPageUrl } from "@/utils";
@@ -60,6 +60,10 @@ function batchInvoicePriceLabel(treatment) {
   return `£${charged.toFixed(2)}`;
 }
 
+/** Model often returns only treatments[]; user said "send invoice" → still need an invoice row to run PDF/send. */
+/**
+ * Invoice row with no matching visit: create pending treatment, then invoice/PDF/email can run.
+ */
 async function createPendingTreatmentForVoiceInvoice({
   api,
   invoiceData,
@@ -136,15 +140,18 @@ function transcriptImpliesInvoiceSend(text) {
 export default function VoiceDiary() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
+  const { speak, isSpeaking, progress } = useElevenLabs();
   const [transcript, setTranscript] = useState('');
   const [conversation, setConversation] = useState([]);
   const transcriptRef = useRef("");
   useEffect(() => {
     transcriptRef.current = transcript;
   }, [transcript]);
-
+  /** Set after `processTranscript` is defined; used from Whisper `onstop` for auto-parse */
   const processTranscriptRef = useRef(async () => {});
+  /** Snapshot when opening Edit text — parse on Done only if transcript changed */
   const transcriptAtEditStartRef = useRef(null);
+  /** Live mic: only auto-parse on stop if transcript grew since recording started */
   const liveMicBaselineRef = useRef(0);
   const [isRecording, setIsRecording] = useState(false);
   const [isWhisperRecording, setIsWhisperRecording] = useState(false);
@@ -158,9 +165,6 @@ export default function VoiceDiary() {
   const analyserRafRef = useRef(null);
   const [pulseLevel, setPulseLevel] = useState(0);
   const [browserSpeechActive, setBrowserSpeechActive] = useState(false);
-
-  // ElevenLabs TTS
-  const { speak, isSpeaking, progress } = useElevenLabs();
 
   const detachMicAnalyser = useCallback(() => {
     if (analyserRafRef.current != null) {
@@ -206,11 +210,41 @@ export default function VoiceDiary() {
     },
     [detachMicAnalyser],
   );
-
   const [reviewDialogOpen, setReviewDialogOpen] = useState(false);
   const [extractedData, setExtractedData] = useState(null);
   const [confirmedData, setConfirmedData] = useState(null);
+  /** Read-only typewriter view vs plain textarea */
   const [diaryEditing, setDiaryEditing] = useState(false);
+  const [revealText, setRevealText] = useState("");
+
+  // Keep typewriter display in sync; animate only when not editing
+  useEffect(() => {
+    if (diaryEditing) {
+      setRevealText(transcript);
+      return;
+    }
+    if (!transcript) {
+      setRevealText("");
+      return;
+    }
+    setRevealText((prev) => {
+      if (transcript.length < prev.length) return transcript;
+      if (prev.length > 0 && !transcript.startsWith(prev)) return transcript;
+      return prev;
+    });
+  }, [transcript, diaryEditing]);
+
+  useEffect(() => {
+    if (diaryEditing) return;
+    if (!transcript) return;
+    if (revealText.length >= transcript.length) return;
+    const t = setTimeout(() => {
+      const behind = transcript.length - revealText.length;
+      const chunk = Math.min(Math.max(1, Math.ceil(behind / 8)), 4);
+      setRevealText((prev) => transcript.slice(0, prev.length + chunk));
+    }, 28);
+    return () => clearTimeout(t);
+  }, [revealText, transcript, diaryEditing]);
 
   const { data: treatmentCatalog } = useQuery({
     queryKey: ['treatmentCatalog'],
@@ -235,19 +269,6 @@ export default function VoiceDiary() {
     queryFn: () => api.entities.TreatmentEntry.list('-date'),
     initialData: [],
   });
-
-  // Calculate today's stats
-  const todayStats = React.useMemo(() => {
-    const today = format(new Date(), 'yyyy-MM-dd');
-    const todayTreatments = treatments.filter(t => t.date === today);
-    const pending = treatments.filter(t => t.payment_status === 'pending').length;
-
-    return {
-      treatmentsToday: todayTreatments.length,
-      revenueToday: todayTreatments.reduce((sum, t) => sum + (t.amount_paid || 0), 0),
-      pendingPayments: pending,
-    };
-  }, [treatments]);
 
   useEffect(() => {
     // Initialize speech recognition
@@ -280,6 +301,13 @@ export default function VoiceDiary() {
       recognitionInstance.onerror = (event) => {
         console.error('Speech recognition error:', event.error);
         setIsRecording(false);
+        if (event.error === 'no-speech') {
+          toast({
+            title: "No speech detected",
+            description: "Please try speaking again",
+            variant: "destructive"
+          });
+        }
       };
 
       recognitionInstance.onend = () => {
@@ -395,7 +423,7 @@ export default function VoiceDiary() {
         if (blob.size < 200) {
           toast({
             title: "Too short",
-            description: "Hold and speak, then release.",
+            description: "Hold Record and speak, then tap Stop.",
             variant: "destructive",
           });
           return;
@@ -425,9 +453,6 @@ export default function VoiceDiary() {
             mergedAfterDictate = (prev.trimEnd() ? `${prev.trimEnd()} ` : "") + trimmed;
             transcriptRef.current = mergedAfterDictate;
             setTranscript(mergedAfterDictate);
-
-            // Add to conversation
-            setConversation(prev => [...prev, { role: 'user', content: trimmed, timestamp: new Date() }]);
           }
         } catch (err) {
           console.error(err);
@@ -502,22 +527,25 @@ export default function VoiceDiary() {
     return `INV-${year}${month}-${random}`;
   };
 
+  // Match voice input to existing treatments for payment updates
   const matchTreatmentToExisting = (patientName, treatmentName, dateHint, amount) => {
     if (!patientName) return null;
 
-    const patient = patients.find(p =>
+    const patient = patients.find(p => 
       p.name.toLowerCase().includes(patientName.toLowerCase()) ||
       patientName.toLowerCase().includes(p.name.toLowerCase())
     );
 
     if (!patient) return null;
 
-    const patientTreatments = treatments.filter(t =>
+    // Find treatments for this patient
+    const patientTreatments = treatments.filter(t => 
       t.patient_id === patient.id && t.payment_status === 'pending'
     );
 
     if (patientTreatments.length === 0) return null;
 
+    // Try to match by treatment name and amount
     let matched = patientTreatments.find(t => {
       const nameMatch = treatmentName && (
         t.treatment_name.toLowerCase().includes(treatmentName.toLowerCase()) ||
@@ -531,13 +559,14 @@ export default function VoiceDiary() {
       matched = patientTreatments[0];
     }
 
+    // If date hint provided, try to match by date
     if (!matched && dateHint) {
       const hintDate = parseDateHint(dateHint);
       if (hintDate) {
         matched = patientTreatments.find(t => {
           const treatmentDate = parseISO(t.date);
           const diffDays = Math.abs((treatmentDate - hintDate) / (1000 * 60 * 60 * 24));
-          return diffDays <= 7;
+          return diffDays <= 7; // Within 7 days
         });
       }
     }
@@ -649,6 +678,7 @@ export default function VoiceDiary() {
           }));
       }
 
+      // Process payment updates to match with existing treatments
       const processedPaymentUpdates = (response.payment_updates || [])
         .filter(
           (u) => String(u.patient_name || "").trim() && u.amount_paid != null,
@@ -678,7 +708,7 @@ export default function VoiceDiary() {
         toast({
           title: "Nothing extracted",
           description:
-            "Try naming patients and treatments, amounts, and paid or pending.",
+            "Try naming patients and treatments, amounts, and paid or pending. Check your catalogue has those treatments.",
           variant: "destructive",
         });
         setProcessing(false);
@@ -705,6 +735,7 @@ export default function VoiceDiary() {
             String(i.send_after_create).toLowerCase() === "false";
           return {
             ...i,
+            // Default ON: LLM often omits send_after_create; user can turn off in review.
             send_after_create: explicitNoSend ? false : true,
             send_via:
               i.send_via === "sms"
@@ -716,7 +747,8 @@ export default function VoiceDiary() {
             include: true,
           };
         }),
-        patients: processedData.patients.map(p => ({ ...p, include: true })),
+        patients: processedData.patients.map(p => ({ ...p, include: true }))
+        ,
         catalog_treatments: processedData.catalog_treatments.map((t) => ({
           ...t,
           category: t.category || "Other",
@@ -749,7 +781,10 @@ export default function VoiceDiary() {
         })),
       });
 
-      // AI speaks response
+      // Add transcript to conversation
+      setConversation(prev => [...prev, { role: 'user', content: textToParse, timestamp: new Date() }]);
+
+      // AI speaks the summary
       const summary = `I found ${rawTreatments.length} treatment${rawTreatments.length !== 1 ? 's' : ''}, ${invoiceRows.length} invoice${invoiceRows.length !== 1 ? 's' : ''}, and ${rawClinicalNotes.length} clinical note${rawClinicalNotes.length !== 1 ? 's' : ''}. Review and apply when ready.`;
       setConversation(prev => [...prev, { role: 'assistant', content: summary, timestamp: new Date() }]);
       await speak(summary);
@@ -772,12 +807,14 @@ export default function VoiceDiary() {
 
   const applyChanges = async () => {
     if (!confirmedData) return;
+
     setProcessing(true);
 
     try {
       const leadPractitioner = practitioners.find(p => p.is_lead);
       const catalogLookup = [...treatmentCatalog];
 
+      // Create new patients first
       const patientMap = new Map();
       for (const patientData of confirmedData.patients.filter(p => p.include)) {
         try {
@@ -792,6 +829,7 @@ export default function VoiceDiary() {
         }
       }
 
+      // Add new treatments to Catalogue (optional, from voice diary)
       for (const catData of confirmedData.catalog_treatments.filter((t) => t.include)) {
         try {
           const exists = catalogLookup.find(
@@ -817,12 +855,14 @@ export default function VoiceDiary() {
         }
       }
 
+      // Create new treatments
       const treatmentMap = new Map();
       for (const treatmentData of confirmedData.treatments.filter(t => t.include)) {
         try {
+          // Find or create patient
           let patientId = null;
           let patientName = treatmentData.patient_name;
-          const existingPatient = patients.find(p =>
+          const existingPatient = patients.find(p => 
             p.name.toLowerCase() === treatmentData.patient_name.toLowerCase()
           ) || patientMap.get(treatmentData.patient_name.toLowerCase());
 
@@ -835,12 +875,14 @@ export default function VoiceDiary() {
             patientName = newPatient.name;
           }
 
-          const treatment = catalogLookup.find(t =>
+          // Find treatment from catalog
+          const treatment = catalogLookup.find(t => 
             t.treatment_name.toLowerCase() === treatmentData.treatment_name.toLowerCase()
           );
 
+          // Find practitioner
           const practitioner = treatmentData.practitioner_name
-            ? practitioners.find(p =>
+            ? practitioners.find(p => 
                 p.name.toLowerCase() === treatmentData.practitioner_name.toLowerCase()
               ) || leadPractitioner
             : leadPractitioner;
@@ -882,6 +924,7 @@ export default function VoiceDiary() {
         }
       }
 
+      // Clinical notes → patient file (structured); link to visit when we can match same day + treatment
       for (const cn of (confirmedData.clinical_notes || []).filter((c) => c.include)) {
         try {
           const nameKey = String(cn.patient_name || "").toLowerCase().trim();
@@ -938,6 +981,7 @@ export default function VoiceDiary() {
         }
       }
 
+      // Update payment status for existing treatments
       for (const update of confirmedData.payment_updates.filter(u => u.include && u.matched_treatment)) {
         try {
           const treatment = update.matched_treatment;
@@ -951,6 +995,7 @@ export default function VoiceDiary() {
             profit: settledAmount - (treatment.product_cost || 0)
           });
 
+          // Keep invoice state in sync when payments are confirmed by voice diary.
           const linkedInvoices = await api.entities.Invoice.filter({
             treatment_entry_id: treatment.id,
           });
@@ -968,6 +1013,7 @@ export default function VoiceDiary() {
         }
       }
 
+      // Create expenses from voice diary
       for (const expenseData of confirmedData.expenses.filter((e) => e.include)) {
         try {
           await api.entities.Expense.create({
@@ -986,13 +1032,15 @@ export default function VoiceDiary() {
         if (!patientsForFf.some((x) => x.id === p.id)) patientsForFf.push(p);
       }
 
+      /** After voice diary apply: PDF + send-invoice when send_after_create */
       const invoiceSendOutcomes = [];
       const invoiceSkipped = [];
       const batchedPatients = new Set();
 
+      // Create invoices for pending treatments
       for (const invoiceData of confirmedData.invoices.filter(i => i.include)) {
         try {
-          const patient = patients.find(p =>
+          const patient = patients.find(p => 
             p.name.toLowerCase() === invoiceData.patient_name.toLowerCase()
           ) || patientMap.get(invoiceData.patient_name.toLowerCase());
 
@@ -1009,6 +1057,7 @@ export default function VoiceDiary() {
             invoiceData.date,
           );
 
+          // Find the treatment (DB or just created this run; case-insensitive names + normalized dates)
           let treatment =
             treatments.find((t) => {
               if (t.patient_id !== patient.id) return false;
@@ -1031,7 +1080,7 @@ export default function VoiceDiary() {
                 api,
                 invoiceData,
                 patient,
-                treatmentCatalog: catalogLookup,
+                catalogLookup,
                 leadPractitioner,
                 treatmentMap,
                 invKey,
@@ -1162,6 +1211,7 @@ export default function VoiceDiary() {
         }
       }
 
+      // Invalidate queries to refresh data
       queryClient.invalidateQueries({ queryKey: ['treatments'] });
       queryClient.invalidateQueries({ queryKey: ['patients'] });
       queryClient.invalidateQueries({ queryKey: ['invoices'] });
@@ -1173,7 +1223,7 @@ export default function VoiceDiary() {
       const sendOk = invoiceSendOutcomes.filter((o) => o.ok);
       const sendBad = invoiceSendOutcomes.filter((o) => !o.ok);
       let description =
-        "Your diary entry is saved.";
+        "Your diary entry is saved. Open the dashboard or records anytime.";
       if (sendOk.length) {
         description += ` ${sendOk.map((o) => `${o.patient}: ${o.text}`).join(" ")}`;
       }
@@ -1183,11 +1233,6 @@ export default function VoiceDiary() {
       if (invoiceSkipped.length) {
         description += ` Invoice not created: ${invoiceSkipped.join(" ")}`;
       }
-
-      // AI speaks confirmation
-      const confirmMsg = "All changes applied successfully. Your clinic records are updated.";
-      setConversation(prev => [...prev, { role: 'assistant', content: confirmMsg, timestamp: new Date() }]);
-      await speak(confirmMsg);
 
       toast({
         title: "Changes applied",
@@ -1209,6 +1254,11 @@ export default function VoiceDiary() {
             ? "destructive"
             : undefined,
       });
+
+      // AI speaks confirmation
+      const confirmMsg = "All changes applied successfully. Your clinic records are updated.";
+      setConversation(prev => [...prev, { role: 'assistant', content: confirmMsg, timestamp: new Date() }]);
+      await speak(confirmMsg);
 
       setReviewDialogOpen(false);
       setTranscript('');
@@ -1247,408 +1297,800 @@ export default function VoiceDiary() {
           ? 0.1
           : 0;
 
-  const orbScale = 1 + micReactive * 0.15;
+  const orbScale = 1 + micReactive * 0.2;
+  const idleOrb =
+    !isWhisperRecording &&
+    !isRecording &&
+    !isWhisperTranscribing &&
+    !processing;
+
+  const orbSize =
+    "h-[min(92vw,22rem)] w-[min(92vw,22rem)] sm:h-96 sm:w-96 md:h-[28rem] md:w-[28rem]";
+  const goldGlowOpacity = 0.2 + micReactive * 0.95;
+  const goldGlowScale = 1 + micReactive * 0.28;
 
   return (
     <>
-      {/* Professional Cockpit Layout */}
-      <div className="min-h-screen bg-gradient-to-br from-slate-50 via-white to-slate-50">
-        <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 py-6">
-          {/* Header */}
-          <div className="flex items-center justify-between mb-8">
-            <div>
-              <h1 className="text-2xl font-light text-slate-900 tracking-tight">Clinic Copilot</h1>
-              <p className="text-sm text-slate-500 mt-1">Your AI-powered clinical assistant</p>
-            </div>
+      <div className="mx-auto flex w-full max-w-4xl flex-col px-4 sm:px-6">
+        {/* Fill viewport minus mobile tab bar; centre the orb in the remaining space */}
+        <div className="flex min-h-[calc(100dvh-5.75rem)] flex-col md:min-h-[calc(100dvh-2rem)]">
+          {/* Centered Header */}
+          <header className="flex shrink-0 flex-col items-center text-center pt-8 pb-6 md:pt-12 md:pb-8">
+            <h1 className="text-3xl md:text-4xl font-semibold tracking-tight text-gray-900 mb-3">
+              Voice Diary
+            </h1>
+            <p className="text-lg text-gray-500 font-light">
+              How can I help you today?
+            </p>
+            {/* Back button - top right corner */}
             <Link
               to={createPageUrl("Dashboard")}
-              className="px-4 py-2 text-sm font-medium text-slate-700 hover:text-slate-900 transition-colors"
+              className="absolute top-6 right-6 rounded-full border border-gray-200 bg-white px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors"
             >
-              ← Dashboard
+              ← Back
             </Link>
+          </header>
+
+          <div className="relative flex flex-1 flex-col items-center justify-center py-4 md:py-6">
+            <div
+              className={`relative flex ${orbSize} shrink-0 items-center justify-center`}
+              style={{
+                transform: `scale(${orbScale})`,
+                transition: "transform 0.07s ease-out",
+              }}
+            >
+              {/* Soft depth glow */}
+              <div
+                className="pointer-events-none absolute inset-[-14%] rounded-full bg-[#5f7492] blur-[40px] md:blur-[52px]"
+                style={{
+                  opacity: 0.14 + micReactive * 0.22,
+                  transform: `scale(${1 + micReactive * 0.08})`,
+                  transition: "opacity 0.1s ease-out, transform 0.1s ease-out",
+                }}
+                aria-hidden
+              />
+              {/* Warm gold aura behind orb — clearly reacts while speaking */}
+              <div
+                className={`pointer-events-none absolute rounded-full bg-[#d6b164] blur-[52px] md:blur-[72px] ${
+                  idleOrb && !isWhisperTranscribing ? "vd-orb-glow-idle" : ""
+                }`}
+                style={{
+                  inset: "-26%",
+                  ...(idleOrb && !isWhisperTranscribing
+                    ? {}
+                    : {
+                        opacity: goldGlowOpacity,
+                        transform: `scale(${goldGlowScale})`,
+                        transition:
+                          "opacity 0.09s ease-out, transform 0.09s ease-out",
+                      }),
+                }}
+                aria-hidden
+              />
+
+              {/* Main sphere — muted slate */}
+              <div
+                className="pointer-events-none absolute inset-[5%] rounded-full"
+                style={{
+                  background:
+                    "radial-gradient(ellipse 115% 95% at 50% 8%, #7f91aa 0%, #647b98 20%, #4d647f 56%, #3b4f67 100%)",
+                  boxShadow: `
+                    inset 0 1px 0 rgba(255, 255, 255, 0.2),
+                    inset 0 -24px 50px rgba(37, 52, 72, 0.35),
+                    inset 0 -8px 20px rgba(37, 52, 72, 0.22),
+                    0 0 0 1px rgba(214, 177, 100, ${0.22 + micReactive * 0.22}),
+                    0 ${8 + micReactive * 14}px ${34 + micReactive * 40}px -${8}px rgba(90, 108, 132, ${0.16 + micReactive * 0.16})
+                  `,
+                  transition: "box-shadow 0.09s ease-out",
+                }}
+                aria-hidden
+              />
+              {/* Soft cool highlight */}
+              <div
+                className="pointer-events-none absolute inset-[5%] rounded-full bg-[radial-gradient(circle_at_35%_22%,rgba(245,249,255,0.22),transparent_48%)]"
+                aria-hidden
+              />
+              {/* Inner muted ring */}
+              <div
+                className="pointer-events-none absolute inset-[10%] rounded-full border border-[#c7b79d]/45"
+                style={{
+                  opacity: 0.42 + micReactive * 0.5,
+                  boxShadow: `inset 0 0 ${20 + micReactive * 24}px rgba(199, 183, 157, ${0.08 + micReactive * 0.12})`,
+                  transition: "opacity 0.08s ease-out, box-shadow 0.08s ease-out",
+                }}
+                aria-hidden
+              />
+
+              <button
+                type="button"
+                onClick={toggleWhisperRecording}
+                disabled={
+                  isWhisperTranscribing || (processing && !isWhisperRecording)
+                }
+                className="relative z-10 rounded-full bg-gradient-to-b from-[#e8dfd1] via-[#d8cbb7] to-[#c7b79d] px-8 py-3.5 text-[15px] font-medium tracking-tight text-[#2f415a] shadow-[0_4px_18px_rgba(35,50,72,0.2),inset_0_1px_0_rgba(255,255,255,0.45)] transition hover:from-[#ece3d6] hover:via-[#ddd0bd] hover:to-[#cdbda4] active:scale-[0.98] disabled:pointer-events-none disabled:opacity-45 md:px-10 md:py-4 md:text-base"
+              >
+                {isWhisperTranscribing ? (
+                  <span className="flex items-center gap-2.5">
+                    <Loader2 className="h-[1.1rem] w-[1.1rem] animate-spin" />
+                    Transcribing
+                  </span>
+                ) : isWhisperRecording ? (
+                  <span className="flex items-center gap-2.5">
+                    <span className="h-2.5 w-2.5 rounded-full bg-[#3f5778]/85 shadow-sm" />
+                    Stop
+                  </span>
+                ) : (
+                  <span className="flex items-center gap-2.5">
+                    <AudioLines className="h-[1.1rem] w-[1.1rem]" />
+                    Dictate
+                  </span>
+                )}
+              </button>
+            </div>
+
+            {/* Animated Waveform Visualization */}
+            {(isWhisperRecording || isWhisperTranscribing) && (
+              <div className="mt-8 flex items-center justify-center gap-1.5 h-16">
+                {Array.from({ length: 25 }).map((_, i) => {
+                  // Create varied heights based on audio level and index
+                  const baseHeight = 12 + (pulseLevel * 32);
+                  const offset = Math.sin((i / 25) * Math.PI * 2 + Date.now() / 200) * 8;
+                  const height = Math.max(4, baseHeight + offset);
+
+                  return (
+                    <div
+                      key={i}
+                      className="w-1.5 rounded-full bg-gradient-to-t from-[#d6b164] to-[#b89a52] shadow-sm"
+                      style={{
+                        height: `${height}px`,
+                        opacity: 0.6 + (pulseLevel * 0.4),
+                        transition: 'height 0.1s ease-out, opacity 0.1s ease-out',
+                        animation: `waveform-pulse 1.2s ease-in-out infinite`,
+                        animationDelay: `${i * 0.05}s`,
+                      }}
+                    />
+                  );
+                })}
+              </div>
+            )}
+
+            {/* Conversation Display */}
+            {conversation.length > 0 && (
+              <div className="mt-8 max-w-2xl mx-auto">
+                <div className="flex items-center justify-between mb-4">
+                  <h3 className="text-sm font-medium text-gray-900">Conversation</h3>
+                  <button
+                    onClick={() => setConversation([])}
+                    className="text-xs text-gray-500 hover:text-gray-700 font-medium"
+                  >
+                    Clear
+                  </button>
+                </div>
+                <div className="space-y-4 max-h-96 overflow-y-auto">
+                  {conversation.map((msg, idx) => (
+                    <div
+                      key={idx}
+                      className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'} animate-in fade-in slide-in-from-bottom-2 duration-300`}
+                      style={{ animationDelay: `${idx * 50}ms` }}
+                    >
+                      <div
+                        className={`max-w-[85%] px-5 py-3 rounded-2xl text-sm ${
+                          msg.role === 'user'
+                            ? 'bg-gray-100 text-gray-900'
+                            : 'bg-[#1a2845] text-white'
+                        }`}
+                      >
+                        <p className="leading-relaxed">{msg.content}</p>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+                {/* AI Speaking indicator */}
+                {isSpeaking && (
+                  <div className="mt-4 flex items-center justify-center gap-2 text-sm text-gray-600">
+                    <Volume2 className="w-4 h-4 animate-pulse text-[#d4a740]" />
+                    <span>AI speaking...</span>
+                    <div className="w-32 h-1 bg-gray-200 rounded-full overflow-hidden ml-2">
+                      <div
+                        className="h-full bg-[#d4a740] transition-all duration-100"
+                        style={{ width: `${progress * 100}%` }}
+                      />
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
           </div>
 
-          <div className="grid lg:grid-cols-3 gap-6">
-            {/* Main Voice Interface - Center Column */}
-            <div className="lg:col-span-2 space-y-6">
-              {/* Voice Orb Card */}
-              <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
-                <div className="p-8 md:p-12">
-                  {/* Stats Bar */}
-                  <div className="grid grid-cols-3 gap-4 mb-8">
-                    <div className="text-center">
-                      <div className="text-2xl font-semibold text-slate-900">{todayStats.treatmentsToday}</div>
-                      <div className="text-xs text-slate-500 uppercase tracking-wide mt-1">Treatments Today</div>
-                    </div>
-                    <div className="text-center">
-                      <div className="text-2xl font-semibold text-[#d4a740]">£{todayStats.revenueToday.toFixed(0)}</div>
-                      <div className="text-xs text-slate-500 uppercase tracking-wide mt-1">Revenue Today</div>
-                    </div>
-                    <div className="text-center">
-                      <div className="text-2xl font-semibold text-amber-600">{todayStats.pendingPayments}</div>
-                      <div className="text-xs text-slate-500 uppercase tracking-wide mt-1">Pending</div>
-                    </div>
-                  </div>
+          <section className="shrink-0 border-t border-slate-200/70 pt-5 mt-8">
+            <div className="mb-1 flex items-center justify-between gap-3">
+              <h2 className="text-sm font-semibold tracking-tight text-[#1a2845]">
+                Today&apos;s diary
+              </h2>
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                onClick={() => {
+                  if (processing) return;
+                  if (diaryEditing) {
+                    const start = transcriptAtEditStartRef.current;
+                    transcriptAtEditStartRef.current = null;
+                    setDiaryEditing(false);
+                    const changed = start !== transcript;
+                    if (transcript.trim() && changed) {
+                      void processTranscript();
+                    }
+                  } else {
+                    transcriptAtEditStartRef.current = transcript;
+                    setDiaryEditing(true);
+                  }
+                }}
+                disabled={processing}
+                className="h-8 shrink-0 px-2 text-xs font-medium text-slate-600 hover:bg-slate-100 hover:text-[#1a2845]"
+              >
+                {diaryEditing ? "Done" : "Edit"}
+              </Button>
+            </div>
 
-                  {/* Voice Orb */}
-                  <div className="flex justify-center mb-8">
-                    <div className="relative">
-                      {/* Outer glow rings */}
-                      {(isWhisperRecording || isWhisperTranscribing || isSpeaking) && (
-                        <>
-                          <div className="absolute inset-[-30px] rounded-full bg-gradient-to-br from-[#d4a740]/20 to-[#1a2845]/20 animate-ping" style={{ animationDuration: '2s' }} />
-                          <div className="absolute inset-[-20px] rounded-full bg-gradient-to-br from-[#d4a740]/10 to-[#1a2845]/10 blur-2xl" />
-                        </>
-                      )}
-
-                      {/* Main orb */}
-                      <button
-                        onMouseDown={startWhisperRecording}
-                        onMouseUp={stopWhisperAndTranscribe}
-                        onMouseLeave={stopWhisperAndTranscribe}
-                        onTouchStart={startWhisperRecording}
-                        onTouchEnd={stopWhisperAndTranscribe}
-                        disabled={isWhisperTranscribing || processing}
-                        className="relative w-48 h-48 rounded-full transition-all duration-300 disabled:opacity-70 group"
-                        style={{
-                          transform: `scale(${orbScale})`,
-                          background: 'radial-gradient(ellipse 120% 95% at 50% 10%, #4d5f7e 0%, #3a4d68 30%, #2a3b53 60%, #1a2845 100%)',
-                          boxShadow: `
-                            inset 0 2px 0 rgba(255, 255, 255, 0.15),
-                            inset 0 -20px 40px rgba(26, 40, 69, 0.4),
-                            0 0 0 1px rgba(212, 167, 64, ${0.2 + micReactive * 0.3}),
-                            0 ${10 + micReactive * 20}px ${40 + micReactive * 60}px -10px rgba(212, 167, 64, ${0.15 + micReactive * 0.25})
-                          `,
-                        }}
-                      >
-                        {/* Inner highlight */}
-                        <div className="absolute inset-[8%] rounded-full bg-[radial-gradient(circle_at_40%_25%,rgba(255,255,255,0.2),transparent_55%)]" />
-
-                        {/* Gold ring */}
-                        <div
-                          className="absolute inset-[12%] rounded-full border border-[#d4a740]/40"
-                          style={{
-                            opacity: 0.5 + micReactive * 0.5,
-                            boxShadow: `inset 0 0 ${15 + micReactive * 20}px rgba(212, 167, 64, ${0.1 + micReactive * 0.2})`,
-                          }}
-                        />
-
-                        {/* Status indicator */}
-                        {isWhisperTranscribing ? (
-                          <div className="absolute inset-0 flex items-center justify-center">
-                            <Loader2 className="w-12 h-12 text-[#d4a740] animate-spin drop-shadow-lg" />
-                          </div>
-                        ) : isSpeaking ? (
-                          <div className="absolute inset-0 flex items-center justify-center">
-                            <div className="text-[#d4a740] drop-shadow-lg">
-                              <svg className="w-12 h-12 animate-pulse" fill="currentColor" viewBox="0 0 24 24">
-                                <path d="M12 15c1.66 0 2.99-1.34 2.99-3L15 6c0-1.66-1.34-3-3-3S9 4.34 9 6v6c0 1.66 1.34 3 3 3zm5.3-3c0 3-2.54 5.1-5.3 5.1S6.7 15 6.7 12H5c0 3.42 2.72 6.23 6 6.72V22h2v-3.28c3.28-.48 6-3.3 6-6.72h-1.7z"/>
-                              </svg>
-                            </div>
-                          </div>
-                        ) : isWhisperRecording ? (
-                          <div className="absolute inset-0 flex items-center justify-center">
-                            <div className="w-3 h-3 rounded-full bg-[#d4a740] animate-pulse shadow-lg shadow-[#d4a740]/50" />
-                          </div>
-                        ) : null}
-                      </button>
-
-                      {/* Audio progress */}
-                      {isSpeaking && (
-                        <div className="absolute -bottom-8 left-1/2 transform -translate-x-1/2 w-32">
-                          <div className="h-0.5 bg-slate-200 rounded-full overflow-hidden">
-                            <div
-                              className="h-full bg-[#d4a740] transition-all duration-100"
-                              style={{ width: `${progress * 100}%` }}
-                            />
-                          </div>
-                        </div>
-                      )}
-                    </div>
-                  </div>
-
-                  {/* Status Text */}
-                  <div className="text-center">
-                    <p className="text-sm text-slate-600">
-                      {isWhisperTranscribing ? (
-                        "Processing your voice..."
-                      ) : isSpeaking ? (
-                        "AI speaking..."
-                      ) : isWhisperRecording ? (
-                        "Listening - release to process"
-                      ) : processing ? (
-                        "Analyzing clinic data..."
-                      ) : (
-                        "Press and hold to speak"
-                      )}
-                    </p>
-                  </div>
-                </div>
+            {diaryEditing ? (
+              <Textarea
+                id="voice-diary-input"
+                value={transcript}
+                onChange={(e) => setTranscript(e.target.value)}
+                placeholder="Treatments, payments, invoices — and clinical notes: e.g. “Sarah — Botox 3 areas, 50 units, no complications, happy with result, review in 2 weeks…”"
+                className="min-h-[140px] w-full resize-y border-0 border-b border-slate-200 bg-transparent px-0 py-2 text-[15px] leading-7 text-[#1a2845] shadow-none placeholder:text-slate-400 focus-visible:border-[#1a2845]/40 focus-visible:ring-0 focus-visible:ring-offset-0 rounded-none"
+                disabled={processing}
+                autoFocus
+              />
+            ) : (
+              <div
+                className="min-h-[120px] py-2"
+                aria-live="polite"
+                aria-label="Diary transcript"
+              >
+                {transcript.trim() || revealText ? (
+                  <p className="text-[15px] font-normal leading-7 tracking-normal text-slate-800 antialiased whitespace-pre-wrap">
+                    {revealText}
+                    <span
+                      className={`ml-px inline-block h-[1.05em] w-0.5 translate-y-px bg-[#1a2845]/35 align-middle ${
+                        revealText.length >= transcript.length
+                          ? "animate-pulse"
+                          : ""
+                      }`}
+                      aria-hidden
+                    />
+                  </p>
+                ) : (
+                  <p className="text-[15px] leading-7 text-slate-400">
+                    Your transcript appears here as you use Dictate or the mic.
+                  </p>
+                )}
               </div>
+            )}
 
-              {/* Conversation Display */}
-              {conversation.length > 0 && (
-                <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
-                  <div className="p-6">
-                    <div className="flex items-center justify-between mb-4">
-                      <h3 className="text-sm font-medium text-slate-900">Conversation</h3>
-                      <button
-                        onClick={() => setConversation([])}
-                        className="text-xs text-slate-500 hover:text-slate-700"
-                      >
-                        Clear
-                      </button>
+            <p className="mt-2 text-xs leading-relaxed text-slate-400">
+              {processing ? (
+                <span className="inline-flex items-center gap-1.5 text-slate-500">
+                  <Loader2 className="h-3.5 w-3.5 animate-spin shrink-0" />
+                  Updating records from this diary…
+                </span>
+              ) : (
+                "Updates run automatically when you stop speaking or finish editing."
+              )}
+            </p>
+          </section>
+
+          <div className="mt-4 flex shrink-0 justify-center gap-6 pb-2 text-xs text-slate-400">
+            <Link
+              to={createPageUrl("Dashboard")}
+              className="hover:text-[#1a2845]"
+            >
+              Dashboard
+            </Link>
+            <Link
+              to={createPageUrl("Records")}
+              className="hover:text-[#1a2845]"
+            >
+              Records
+            </Link>
+          </div>
+        </div>
+      </div>
+
+      {/* Review Dialog */}
+        <Dialog open={reviewDialogOpen} onOpenChange={setReviewDialogOpen}>
+          <DialogContent className="sm:max-w-4xl max-h-[85vh] overflow-y-auto rounded-2xl border-slate-200">
+            <DialogHeader>
+              <DialogTitle className="text-lg font-semibold text-[#1a2845] tracking-tight">
+                Review before saving
+              </DialogTitle>
+              <DialogDescription className="text-sm text-slate-500 pt-1">
+                Toggle items off if something looks wrong, then apply. If you ask to
+                send an invoice and there is no matching visit yet, we create a{" "}
+                <strong>pending</strong> treatment for that patient, then the invoice,
+                PDF, and email (patient needs email or phone on file, or say it in the
+                diary). You can also add new catalogue treatments, expenses, and{" "}
+                <strong>clinical notes</strong> (procedures, outcomes, follow-up) to each
+                patient file from this review.
+              </DialogDescription>
+            </DialogHeader>
+
+            {confirmedData && (
+              <div className="space-y-6 mt-4">
+                {/* New Treatments */}
+                {confirmedData.treatments.length > 0 && (
+                  <div className="space-y-4">
+                    <div className="flex items-center justify-between">
+                      <h3 className="text-sm font-medium text-gray-900 uppercase tracking-wide">
+                        New Treatments
+                      </h3>
+                      <span className="text-xs text-gray-500 font-light">
+                        {confirmedData.treatments.filter(t => t.include).length} selected
+                      </span>
                     </div>
-                    <div className="space-y-4 max-h-96 overflow-y-auto">
-                      {conversation.map((msg, idx) => (
+                    <div className="space-y-2">
+                      {confirmedData.treatments.map((treatment, index) => (
                         <div
-                          key={idx}
-                          className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}
+                          key={index}
+                          className={`bg-white rounded-lg p-4 border transition-all ${
+                            treatment.include ? 'border-[#1a2845] bg-gray-50/50' : 'border-gray-200 opacity-50'
+                          }`}
                         >
-                          <div
-                            className={`max-w-[80%] px-4 py-2.5 rounded-2xl text-sm ${
-                              msg.role === 'user'
-                                ? 'bg-slate-100 text-slate-900'
-                                : 'bg-[#1a2845] text-white'
-                            }`}
-                          >
-                            {msg.content}
+                          <div className="flex items-start gap-3">
+                            <input
+                              type="checkbox"
+                              checked={treatment.include}
+                              onChange={() => toggleInclude('treatments', index)}
+                              className="w-4 h-4 text-[#1a2845] border-gray-300 rounded focus:ring-[#1a2845] mt-0.5"
+                            />
+                            <div className="flex-1 grid grid-cols-2 gap-x-4 gap-y-2 text-sm">
+                              <div>
+                                <span className="text-xs text-gray-500 uppercase tracking-wide">Patient</span>
+                                <p className="text-gray-900 font-light">{treatment.patient_name}</p>
+                              </div>
+                              <div>
+                                <span className="text-xs text-gray-500 uppercase tracking-wide">Treatment</span>
+                                <p className="text-gray-900 font-light">{treatment.treatment_name}</p>
+                              </div>
+                              <div>
+                                <span className="text-xs text-gray-500 uppercase tracking-wide">Date</span>
+                                <p className="text-gray-900 font-light">{treatment.date}</p>
+                              </div>
+                              <div>
+                                <span className="text-xs text-gray-500 uppercase tracking-wide">Amount</span>
+                                <p className="text-gray-900 font-light">£{treatment.price_paid?.toFixed(2)}</p>
+                              </div>
+                              <div>
+                                <span className="text-xs text-gray-500 uppercase tracking-wide">Status</span>
+                                <p className="text-gray-900 font-light capitalize">{treatment.payment_status}</p>
+                              </div>
+                              {treatment.practitioner_name && (
+                                <div>
+                                  <span className="text-xs text-gray-500 uppercase tracking-wide">Practitioner</span>
+                                  <p className="text-gray-900 font-light">{treatment.practitioner_name}</p>
+                                </div>
+                              )}
+                            </div>
                           </div>
                         </div>
                       ))}
                     </div>
                   </div>
-                </div>
-              )}
-            </div>
+                )}
 
-            {/* Context Sidebar - Right Column */}
-            <div className="space-y-6">
-              {/* Quick Actions */}
-              <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-6">
-                <h3 className="text-sm font-medium text-slate-900 mb-4">Quick Actions</h3>
-                <div className="space-y-2">
-                  <Link to={createPageUrl("Patients")} className="block p-3 rounded-lg bg-slate-50 hover:bg-slate-100 transition-colors">
-                    <div className="text-sm font-medium text-slate-900">View Patients</div>
-                    <div className="text-xs text-slate-500 mt-0.5">{patients.length} total patients</div>
-                  </Link>
-                  <Link to={createPageUrl("Records")} className="block p-3 rounded-lg bg-slate-50 hover:bg-slate-100 transition-colors">
-                    <div className="text-sm font-medium text-slate-900">View Records</div>
-                    <div className="text-xs text-slate-500 mt-0.5">{treatments.length} total treatments</div>
-                  </Link>
-                  <Link to={createPageUrl("Calendar")} className="block p-3 rounded-lg bg-slate-50 hover:bg-slate-100 transition-colors">
-                    <div className="text-sm font-medium text-slate-900">View Calendar</div>
-                    <div className="text-xs text-slate-500 mt-0.5">Manage appointments</div>
-                  </Link>
-                </div>
-              </div>
-
-              {/* Recent Activity */}
-              <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-6">
-                <h3 className="text-sm font-medium text-slate-900 mb-4">Recent Treatments</h3>
-                <div className="space-y-3">
-                  {treatments.slice(0, 5).map((t, idx) => (
-                    <div key={idx} className="flex items-start gap-3">
-                      <div className={`w-2 h-2 rounded-full mt-1.5 ${
-                        t.payment_status === 'paid' ? 'bg-green-500' :
-                        t.payment_status === 'partially_paid' ? 'bg-amber-500' :
-                        'bg-slate-300'
-                      }`} />
-                      <div className="flex-1 min-w-0">
-                        <div className="text-sm font-medium text-slate-900 truncate">{t.patient_name}</div>
-                        <div className="text-xs text-slate-500">{t.treatment_name} • {format(new Date(t.date), 'MMM d')}</div>
-                      </div>
-                      <div className="text-sm font-medium text-slate-900">£{(t.amount_paid || 0).toFixed(0)}</div>
+                {/* Payment Updates */}
+                {confirmedData.payment_updates.length > 0 && (
+                  <div className="space-y-4">
+                    <div className="flex items-center justify-between">
+                      <h3 className="text-sm font-medium text-gray-900 uppercase tracking-wide">
+                        Payment Updates
+                      </h3>
+                      <span className="text-xs text-gray-500 font-light">
+                        {confirmedData.payment_updates.filter(u => u.include).length} selected
+                      </span>
                     </div>
-                  ))}
-                </div>
-              </div>
-
-              {/* Tips */}
-              <div className="bg-gradient-to-br from-[#1a2845] to-[#2a3b53] rounded-2xl p-6 text-white">
-                <h3 className="text-sm font-medium mb-3">Try saying:</h3>
-                <ul className="space-y-2 text-sm opacity-90">
-                  <li>"I saw Sarah for Botox today, £250, paid"</li>
-                  <li>"Create invoice for John's filler treatment"</li>
-                  <li>"Mark Emma's payment as received"</li>
-                </ul>
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      {/* Review Dialog - Keep existing functionality */}
-      <Dialog open={reviewDialogOpen} onOpenChange={setReviewDialogOpen}>
-        <DialogContent className="sm:max-w-4xl max-h-[85vh] overflow-y-auto rounded-2xl border-slate-200">
-          <DialogHeader>
-            <DialogTitle className="text-lg font-semibold text-[#1a2845] tracking-tight">
-              Review before saving
-            </DialogTitle>
-            <DialogDescription className="text-sm text-slate-500 pt-1">
-              Toggle items off if something looks wrong, then apply changes to your clinic records.
-            </DialogDescription>
-          </DialogHeader>
-
-          {confirmedData && (
-            <div className="space-y-6 mt-4">
-              {/* Treatments */}
-              {confirmedData.treatments.length > 0 && (
-                <div className="space-y-3">
-                  <div className="flex items-center justify-between">
-                    <h3 className="text-sm font-medium text-gray-900 uppercase tracking-wide">
-                      New Treatments
-                    </h3>
-                    <span className="text-xs text-gray-500 font-light">
-                      {confirmedData.treatments.filter(t => t.include).length} selected
-                    </span>
-                  </div>
-                  <div className="space-y-2">
-                    {confirmedData.treatments.map((treatment, index) => (
-                      <div
-                        key={index}
-                        className={`bg-white rounded-xl p-4 border transition-all ${
-                          treatment.include ? 'border-[#1a2845]' : 'border-gray-200 opacity-50'
-                        }`}
-                      >
-                        <div className="flex items-start gap-3">
-                          <input
-                            type="checkbox"
-                            checked={treatment.include}
-                            onChange={() => toggleInclude('treatments', index)}
-                            className="w-4 h-4 text-[#1a2845] border-gray-300 rounded mt-0.5"
-                          />
-                          <div className="flex-1 grid grid-cols-2 gap-x-4 gap-y-2 text-sm">
-                            <div>
-                              <span className="text-xs text-gray-500 uppercase tracking-wide">Patient</span>
-                              <p className="text-gray-900">{treatment.patient_name}</p>
-                            </div>
-                            <div>
-                              <span className="text-xs text-gray-500 uppercase tracking-wide">Treatment</span>
-                              <p className="text-gray-900">{treatment.treatment_name}</p>
-                            </div>
-                            <div>
-                              <span className="text-xs text-gray-500 uppercase tracking-wide">Date</span>
-                              <p className="text-gray-900">{treatment.date}</p>
-                            </div>
-                            <div>
-                              <span className="text-xs text-gray-500 uppercase tracking-wide">Amount</span>
-                              <p className="text-gray-900">£{treatment.price_paid?.toFixed(2)}</p>
+                    <div className="space-y-2">
+                      {confirmedData.payment_updates.map((update, index) => (
+                        <div
+                          key={index}
+                          className={`bg-white rounded-lg p-4 border transition-all ${
+                            update.include ? 'border-[#1a2845] bg-gray-50/50' : 'border-gray-200 opacity-50'
+                          }`}
+                        >
+                          <div className="flex items-start gap-3">
+                            <input
+                              type="checkbox"
+                              checked={update.include}
+                              onChange={() => toggleInclude('payment_updates', index)}
+                              className="w-4 h-4 text-[#1a2845] border-gray-300 rounded focus:ring-[#1a2845] mt-0.5"
+                            />
+                            <div className="flex-1">
+                              {update.matched_treatment ? (
+                                <div className="grid grid-cols-2 gap-x-4 gap-y-2 text-sm">
+                                  <div>
+                                    <span className="text-xs text-gray-500 uppercase tracking-wide">Patient</span>
+                                    <p className="text-gray-900 font-light">{update.patient_name}</p>
+                                  </div>
+                                  <div>
+                                    <span className="text-xs text-gray-500 uppercase tracking-wide">Amount</span>
+                                    <p className="text-gray-900 font-light">£{update.amount_paid?.toFixed(2)}</p>
+                                  </div>
+                                  <div>
+                                    <span className="text-xs text-gray-500 uppercase tracking-wide">Treatment</span>
+                                    <p className="text-gray-900 font-light">{update.matched_treatment.treatment_name}</p>
+                                  </div>
+                                  <div>
+                                    <span className="text-xs text-gray-500 uppercase tracking-wide">Date</span>
+                                    <p className="text-gray-900 font-light">{update.matched_treatment.date}</p>
+                                  </div>
+                                </div>
+                              ) : (
+                                <div className="text-sm">
+                                  <div className="grid grid-cols-2 gap-x-4 gap-y-2 mb-2">
+                                    <div>
+                                      <span className="text-xs text-gray-500 uppercase tracking-wide">Patient</span>
+                                      <p className="text-gray-900 font-light">{update.patient_name}</p>
+                                    </div>
+                                    <div>
+                                      <span className="text-xs text-gray-500 uppercase tracking-wide">Amount</span>
+                                      <p className="text-gray-900 font-light">£{update.amount_paid?.toFixed(2)}</p>
+                                    </div>
+                                  </div>
+                                  <p className="text-xs text-amber-600 font-light">No matching treatment found</p>
+                                </div>
+                              )}
                             </div>
                           </div>
                         </div>
-                      </div>
-                    ))}
+                      ))}
+                    </div>
                   </div>
-                </div>
-              )}
+                )}
 
-              {/* Invoices */}
-              {confirmedData.invoices.length > 0 && (
-                <div className="space-y-3">
-                  <div className="flex items-center justify-between">
-                    <h3 className="text-sm font-medium text-gray-900 uppercase tracking-wide">
-                      Invoices
-                    </h3>
-                    <span className="text-xs text-gray-500">
-                      {confirmedData.invoices.filter(i => i.include).length} selected
-                    </span>
-                  </div>
-                  <div className="space-y-2">
-                    {confirmedData.invoices.map((invoice, index) => (
-                      <div
-                        key={index}
-                        className={`bg-white rounded-xl p-4 border transition-all ${
-                          invoice.include ? 'border-[#1a2845]' : 'border-gray-200 opacity-50'
-                        }`}
-                      >
-                        <div className="flex items-start gap-3">
-                          <input
-                            type="checkbox"
-                            checked={invoice.include}
-                            onChange={() => toggleInclude('invoices', index)}
-                            className="w-4 h-4 text-[#1a2845] border-gray-300 rounded mt-0.5"
-                          />
-                          <div className="flex-1 text-sm">
-                            <div className="font-medium text-gray-900">{invoice.patient_name}</div>
-                            <div className="text-gray-600 mt-1">{invoice.treatment_name} • £{invoice.amount?.toFixed(2)}</div>
-                            {invoice.send_after_create && (
-                              <div className="text-xs text-green-700 mt-2">
-                                Will send via {invoice.send_via}
+                {/* Invoices */}
+                {confirmedData.invoices.length > 0 && (
+                  <div className="space-y-4">
+                    <div className="flex items-center justify-between">
+                      <h3 className="text-sm font-medium text-gray-900 uppercase tracking-wide">
+                        Invoices to Create
+                      </h3>
+                      <span className="text-xs text-gray-500 font-light">
+                        {confirmedData.invoices.filter(i => i.include).length} selected
+                      </span>
+                    </div>
+                    <div className="space-y-2">
+                      {confirmedData.invoices.map((invoice, index) => (
+                        <div
+                          key={index}
+                          className={`bg-white rounded-lg p-4 border transition-all ${
+                            invoice.include ? 'border-[#1a2845] bg-gray-50/50' : 'border-gray-200 opacity-50'
+                          }`}
+                        >
+                          <div className="flex items-start gap-3">
+                            <input
+                              type="checkbox"
+                              checked={invoice.include}
+                              onChange={() => toggleInclude('invoices', index)}
+                              className="w-4 h-4 text-[#1a2845] border-gray-300 rounded focus:ring-[#1a2845] mt-0.5"
+                            />
+                            <div className="flex-1 grid grid-cols-2 gap-x-4 gap-y-2 text-sm">
+                              <div>
+                                <span className="text-xs text-gray-500 uppercase tracking-wide">Patient</span>
+                                <p className="text-gray-900 font-light">{invoice.patient_name}</p>
                               </div>
-                            )}
+                              <div>
+                                <span className="text-xs text-gray-500 uppercase tracking-wide">Treatment</span>
+                                <p className="text-gray-900 font-light">{invoice.treatment_name}</p>
+                              </div>
+                              <div>
+                                <span className="text-xs text-gray-500 uppercase tracking-wide">Amount</span>
+                                <p className="text-gray-900 font-light">£{invoice.amount?.toFixed(2)}</p>
+                              </div>
+                              <div>
+                                <span className="text-xs text-gray-500 uppercase tracking-wide">Date</span>
+                                <p className="text-gray-900 font-light">{invoice.date}</p>
+                              </div>
+                              {invoice.send_after_create ? (
+                                <div className="col-span-2">
+                                  <span className="text-xs text-gray-500 uppercase tracking-wide">
+                                    After save
+                                  </span>
+                                  <p className="text-emerald-800 font-medium text-sm">
+                                    Auto-send via{" "}
+                                    {invoice.send_via === "email"
+                                      ? "email"
+                                      : invoice.send_via === "sms"
+                                        ? "SMS"
+                                        : "email + SMS"}{" "}
+                                    (PDF generated first)
+                                  </p>
+                                  {invoice.patient_contact ? (
+                                    <p className="text-xs text-gray-600 mt-0.5">
+                                      Contact: {invoice.patient_contact}
+                                    </p>
+                                  ) : null}
+                                </div>
+                              ) : (
+                                <div className="col-span-2">
+                                  <span className="text-xs text-gray-500 uppercase tracking-wide">
+                                    After save
+                                  </span>
+                                  <p className="text-gray-600 text-sm font-light">
+                                    Invoice only — send from Communications or
+                                    Invoices when ready
+                                  </p>
+                                </div>
+                              )}
+                            </div>
                           </div>
                         </div>
-                      </div>
-                    ))}
+                      ))}
+                    </div>
                   </div>
-                </div>
-              )}
+                )}
 
-              {/* Clinical Notes */}
-              {(confirmedData.clinical_notes || []).length > 0 && (
-                <div className="space-y-3">
-                  <div className="flex items-center justify-between">
-                    <h3 className="text-sm font-medium text-gray-900 uppercase tracking-wide">
-                      Clinical Notes
-                    </h3>
-                    <span className="text-xs text-gray-500">
-                      {(confirmedData.clinical_notes || []).filter((c) => c.include).length} selected
-                    </span>
-                  </div>
-                  <div className="space-y-2">
-                    {(confirmedData.clinical_notes || []).map((cn, index) => (
-                      <div
-                        key={index}
-                        className={`bg-white rounded-xl p-4 border transition-all ${
-                          cn.include ? "border-[#1a2845]" : "border-gray-200 opacity-50"
-                        }`}
-                      >
-                        <div className="flex items-start gap-3">
-                          <input
-                            type="checkbox"
-                            checked={cn.include}
-                            onChange={() => toggleInclude("clinical_notes", index)}
-                            className="w-4 h-4 text-[#1a2845] border-gray-300 rounded mt-0.5"
-                          />
-                          <div className="flex-1 text-sm">
-                            <div className="font-medium text-gray-900">{cn.patient_name}</div>
-                            <div className="text-gray-600 mt-1">{cn.clinical_summary || cn.raw_narrative}</div>
+                {/* Catalogue Treatments */}
+                {confirmedData.catalog_treatments.length > 0 && (
+                  <div className="space-y-4">
+                    <div className="flex items-center justify-between">
+                      <h3 className="text-sm font-medium text-gray-900 uppercase tracking-wide">
+                        Add to Catalogue
+                      </h3>
+                      <span className="text-xs text-gray-500 font-light">
+                        {confirmedData.catalog_treatments.filter(t => t.include).length} selected
+                      </span>
+                    </div>
+                    <div className="space-y-2">
+                      {confirmedData.catalog_treatments.map((t, index) => (
+                        <div
+                          key={index}
+                          className={`bg-white rounded-lg p-4 border transition-all ${
+                            t.include ? 'border-[#1a2845] bg-gray-50/50' : 'border-gray-200 opacity-50'
+                          }`}
+                        >
+                          <div className="flex items-start gap-3">
+                            <input
+                              type="checkbox"
+                              checked={t.include}
+                              onChange={() => toggleInclude('catalog_treatments', index)}
+                              className="w-4 h-4 text-[#1a2845] border-gray-300 rounded focus:ring-[#1a2845] mt-0.5"
+                            />
+                            <div className="flex-1 grid grid-cols-2 gap-x-4 gap-y-2 text-sm">
+                              <div>
+                                <span className="text-xs text-gray-500 uppercase tracking-wide">Treatment</span>
+                                <p className="text-gray-900 font-light">{t.treatment_name}</p>
+                              </div>
+                              <div>
+                                <span className="text-xs text-gray-500 uppercase tracking-wide">Category</span>
+                                <p className="text-gray-900 font-light">{t.category || "Other"}</p>
+                              </div>
+                              <div>
+                                <span className="text-xs text-gray-500 uppercase tracking-wide">Default price</span>
+                                <p className="text-gray-900 font-light">
+                                  {t.default_price != null ? `£${Number(t.default_price).toFixed(2)}` : "Not set"}
+                                </p>
+                              </div>
+                              <div>
+                                <span className="text-xs text-gray-500 uppercase tracking-wide">Duration</span>
+                                <p className="text-gray-900 font-light">
+                                  {t.default_duration_minutes ? `${t.default_duration_minutes} min` : "Not set"}
+                                </p>
+                              </div>
+                            </div>
                           </div>
                         </div>
-                      </div>
-                    ))}
+                      ))}
+                    </div>
                   </div>
-                </div>
-              )}
+                )}
 
-              <div className="flex gap-3 pt-4 border-t">
-                <Button
-                  onClick={() => setReviewDialogOpen(false)}
-                  variant="outline"
-                  className="flex-1"
-                >
-                  Cancel
-                </Button>
-                <Button
-                  onClick={applyChanges}
-                  disabled={processing}
-                  className="flex-1 bg-[#1a2845] hover:bg-[#0f1829] text-white"
-                >
-                  {processing ? (
-                    <>
-                      <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                      Applying
-                    </>
-                  ) : (
-                    'Apply Changes'
-                  )}
-                </Button>
+                {/* Expenses */}
+                {confirmedData.expenses.length > 0 && (
+                  <div className="space-y-4">
+                    <div className="flex items-center justify-between">
+                      <h3 className="text-sm font-medium text-gray-900 uppercase tracking-wide">
+                        Expenses
+                      </h3>
+                      <span className="text-xs text-gray-500 font-light">
+                        {confirmedData.expenses.filter(e => e.include).length} selected
+                      </span>
+                    </div>
+                    <div className="space-y-2">
+                      {confirmedData.expenses.map((expense, index) => (
+                        <div
+                          key={index}
+                          className={`bg-white rounded-lg p-4 border transition-all ${
+                            expense.include ? 'border-[#1a2845] bg-gray-50/50' : 'border-gray-200 opacity-50'
+                          }`}
+                        >
+                          <div className="flex items-start gap-3">
+                            <input
+                              type="checkbox"
+                              checked={expense.include}
+                              onChange={() => toggleInclude('expenses', index)}
+                              className="w-4 h-4 text-[#1a2845] border-gray-300 rounded focus:ring-[#1a2845] mt-0.5"
+                            />
+                            <div className="flex-1 grid grid-cols-2 gap-x-4 gap-y-2 text-sm">
+                              <div>
+                                <span className="text-xs text-gray-500 uppercase tracking-wide">Category</span>
+                                <p className="text-gray-900 font-light">{expense.category}</p>
+                              </div>
+                              <div>
+                                <span className="text-xs text-gray-500 uppercase tracking-wide">Amount</span>
+                                <p className="text-gray-900 font-light">£{Number(expense.amount || 0).toFixed(2)}</p>
+                              </div>
+                              <div>
+                                <span className="text-xs text-gray-500 uppercase tracking-wide">Date</span>
+                                <p className="text-gray-900 font-light">{expense.date}</p>
+                              </div>
+                              {expense.notes && (
+                                <div>
+                                  <span className="text-xs text-gray-500 uppercase tracking-wide">Notes</span>
+                                  <p className="text-gray-900 font-light">{expense.notes}</p>
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* Clinical notes (patient file) */}
+                {(confirmedData.clinical_notes || []).length > 0 && (
+                  <div className="space-y-4">
+                    <div className="flex items-center justify-between">
+                      <h3 className="text-sm font-medium text-gray-900 uppercase tracking-wide flex items-center gap-2">
+                        <ClipboardList className="w-4 h-4" />
+                        Clinical notes
+                      </h3>
+                      <span className="text-xs text-gray-500 font-light">
+                        {(confirmedData.clinical_notes || []).filter((c) => c.include).length}{" "}
+                        selected
+                      </span>
+                    </div>
+                    <div className="space-y-2">
+                      {(confirmedData.clinical_notes || []).map((cn, index) => (
+                        <div
+                          key={index}
+                          className={`bg-white rounded-lg p-4 border transition-all ${
+                            cn.include
+                              ? "border-[#1a2845] bg-gray-50/50"
+                              : "border-gray-200 opacity-50"
+                          }`}
+                        >
+                          <div className="flex items-start gap-3">
+                            <input
+                              type="checkbox"
+                              checked={cn.include}
+                              onChange={() => toggleInclude("clinical_notes", index)}
+                              className="w-4 h-4 text-[#1a2845] border-gray-300 rounded focus:ring-[#1a2845] mt-0.5"
+                            />
+                            <div className="flex-1 grid grid-cols-2 gap-x-4 gap-y-2 text-sm">
+                              <div>
+                                <span className="text-xs text-gray-500 uppercase tracking-wide">
+                                  Patient
+                                </span>
+                                <p className="text-gray-900 font-light">{cn.patient_name}</p>
+                              </div>
+                              <div>
+                                <span className="text-xs text-gray-500 uppercase tracking-wide">
+                                  Visit date
+                                </span>
+                                <p className="text-gray-900 font-light">{cn.visit_date}</p>
+                              </div>
+                              {cn.treatment_name && (
+                                <div>
+                                  <span className="text-xs text-gray-500 uppercase tracking-wide">
+                                    Treatment
+                                  </span>
+                                  <p className="text-gray-900 font-light">{cn.treatment_name}</p>
+                                </div>
+                              )}
+                              <div className="col-span-2">
+                                <span className="text-xs text-gray-500 uppercase tracking-wide">
+                                  Summary
+                                </span>
+                                <p className="text-gray-900 font-light">
+                                  {cn.clinical_summary || cn.raw_narrative}
+                                </p>
+                              </div>
+                              {cn.next_steps && (
+                                <div className="col-span-2">
+                                  <span className="text-xs text-gray-500 uppercase tracking-wide">
+                                    Next steps
+                                  </span>
+                                  <p className="text-gray-900 font-light">{cn.next_steps}</p>
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* New Patients */}
+                {confirmedData.patients.length > 0 && (
+                  <div className="space-y-4">
+                    <div className="flex items-center justify-between">
+                      <h3 className="text-sm font-medium text-gray-900 uppercase tracking-wide">
+                        New Patients
+                      </h3>
+                      <span className="text-xs text-gray-500 font-light">
+                        {confirmedData.patients.filter(p => p.include).length} selected
+                      </span>
+                    </div>
+                    <div className="space-y-2">
+                      {confirmedData.patients.map((patient, index) => (
+                        <div
+                          key={index}
+                          className={`bg-white rounded-lg p-4 border transition-all ${
+                            patient.include ? 'border-[#1a2845] bg-gray-50/50' : 'border-gray-200 opacity-50'
+                          }`}
+                        >
+                          <div className="flex items-start gap-3">
+                            <input
+                              type="checkbox"
+                              checked={patient.include}
+                              onChange={() => toggleInclude('patients', index)}
+                              className="w-4 h-4 text-[#1a2845] border-gray-300 rounded focus:ring-[#1a2845] mt-0.5"
+                            />
+                            <div className="flex-1 grid grid-cols-2 gap-x-4 gap-y-2 text-sm">
+                              <div>
+                                <span className="text-xs text-gray-500 uppercase tracking-wide">Name</span>
+                                <p className="text-gray-900 font-light">{patient.name}</p>
+                              </div>
+                              {patient.contact && (
+                                <div>
+                                  <span className="text-xs text-gray-500 uppercase tracking-wide">Contact</span>
+                                  <p className="text-gray-900 font-light">{patient.contact}</p>
+                                </div>
+                              )}
+                              {patient.phone && (
+                                <div>
+                                  <span className="text-xs text-gray-500 uppercase tracking-wide">Phone</span>
+                                  <p className="text-gray-900 font-light">{patient.phone}</p>
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                <div className="flex gap-3 pt-4 border-t border-gray-200">
+                  <Button
+                    onClick={() => setReviewDialogOpen(false)}
+                    variant="outline"
+                    className="flex-1"
+                  >
+                    Cancel
+                  </Button>
+                  <Button
+                    onClick={applyChanges}
+                    disabled={processing}
+                    className="flex-1 bg-[#1a2845] hover:bg-[#0f1829] text-white font-light tracking-wide uppercase text-sm h-10"
+                  >
+                    {processing ? (
+                      <>
+                        <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                        Applying
+                      </>
+                    ) : (
+                      'Apply All Changes'
+                    )}
+                  </Button>
+                </div>
               </div>
-            </div>
-          )}
-        </DialogContent>
-      </Dialog>
+            )}
+          </DialogContent>
+        </Dialog>
     </>
   );
 }
