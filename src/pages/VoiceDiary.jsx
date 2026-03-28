@@ -32,6 +32,20 @@ export default function VoiceDiary() {
   const [showPatientSelector, setShowPatientSelector] = useState(false);
   const [patientSearch, setPatientSearch] = useState('');
 
+  // Voice selection
+  const [selectedVoiceId, setSelectedVoiceId] = useState('21m00Tcm4TlvDq8ikWAM'); // Default: Rachel
+  const [showVoiceSelector, setShowVoiceSelector] = useState(false);
+
+  // Available ElevenLabs voices
+  const voices = [
+    { id: '21m00Tcm4TlvDq8ikWAM', name: 'Rachel', description: 'Professional female, warm and clear' },
+    { id: 'pNInz6obpgDQGcFmaJgB', name: 'Adam', description: 'Professional male, deep and calm' },
+    { id: 'EXAVITQu4vr4xnSDxMaL', name: 'Bella', description: 'Friendly female, soft and gentle' },
+    { id: 'ErXwobaYiN019PkySvjV', name: 'Antoni', description: 'Energetic male, clear and articulate' },
+    { id: 'VR6AewLTigWG4xSOukaG', name: 'Arnold', description: 'Mature male, authoritative' },
+    { id: 'MF3mGyEYCl7XYWbV9V6O', name: 'Elli', description: 'Young female, bright and cheerful' },
+  ];
+
   const mediaRecorderRef = useRef(null);
   const audioChunksRef = useRef([]);
   const audioContextRef = useRef(null);
@@ -292,7 +306,7 @@ export default function VoiceDiary() {
         details: []
       });
 
-      await speak(aiResponse);
+      await speak(aiResponse, selectedVoiceId);
 
       if (inConversation) {
         setFinalTranscript('');
@@ -499,17 +513,98 @@ export default function VoiceDiary() {
         </div>
       )}
 
-      {/* Patient Notes button - floating */}
+      {/* Voice & Patient Notes buttons - floating */}
       {!notesMode && !inConversation && !isListening && !isProcessing && (
-        <button
-          onClick={startPatientNotes}
-          className="absolute top-8 right-8 z-50 px-6 py-3 rounded-full bg-blue-500/20 backdrop-blur-xl border border-blue-400/30 hover:bg-blue-500/30 hover:border-blue-400/50 transition-all duration-300 group"
-        >
-          <div className="flex items-center gap-3">
-            <div className="w-2 h-2 bg-blue-400 rounded-full" />
-            <span className="text-blue-300/90 text-sm font-light tracking-wider">PATIENT NOTES</span>
+        <div className="absolute top-8 right-8 z-50 flex items-center gap-4">
+          {/* Voice Selector */}
+          <button
+            onClick={() => setShowVoiceSelector(true)}
+            className="px-6 py-3 rounded-full bg-purple-500/20 backdrop-blur-xl border border-purple-400/30 hover:bg-purple-500/30 hover:border-purple-400/50 transition-all duration-300 group"
+          >
+            <div className="flex items-center gap-3">
+              <Volume2 className="w-4 h-4 text-purple-300" />
+              <span className="text-purple-300/90 text-sm font-light tracking-wider">
+                {voices.find(v => v.id === selectedVoiceId)?.name || 'VOICE'}
+              </span>
+            </div>
+          </button>
+
+          {/* Patient Notes */}
+          <button
+            onClick={startPatientNotes}
+            className="px-6 py-3 rounded-full bg-blue-500/20 backdrop-blur-xl border border-blue-400/30 hover:bg-blue-500/30 hover:border-blue-400/50 transition-all duration-300 group"
+          >
+            <div className="flex items-center gap-3">
+              <div className="w-2 h-2 bg-blue-400 rounded-full" />
+              <span className="text-blue-300/90 text-sm font-light tracking-wider">PATIENT NOTES</span>
+            </div>
+          </button>
+        </div>
+      )}
+
+      {/* Voice Selector Modal */}
+      {showVoiceSelector && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-8 bg-black/80 backdrop-blur-sm">
+          <div className="w-full max-w-2xl bg-gradient-to-br from-[#1a1f35] to-[#0a0e1a] rounded-3xl border border-white/10 p-8 shadow-2xl">
+            <div className="flex items-center justify-between mb-8">
+              <div>
+                <h3 className="text-white/90 text-xl font-light tracking-wider mb-2">Select AI Voice</h3>
+                <p className="text-white/40 text-sm">Choose the voice for AI responses</p>
+              </div>
+              <button
+                onClick={() => setShowVoiceSelector(false)}
+                className="text-white/40 hover:text-white/80 transition-colors"
+              >
+                <X className="w-6 h-6" />
+              </button>
+            </div>
+
+            {/* Voice list */}
+            <div className="space-y-3">
+              {voices.map(voice => (
+                <button
+                  key={voice.id}
+                  onClick={() => {
+                    setSelectedVoiceId(voice.id);
+                    setShowVoiceSelector(false);
+                    toast({
+                      title: `Voice changed to ${voice.name}`,
+                      description: voice.description,
+                    });
+                  }}
+                  className={`w-full p-5 text-left rounded-2xl transition-all group ${
+                    selectedVoiceId === voice.id
+                      ? 'bg-purple-500/20 border-2 border-purple-400/50'
+                      : 'bg-white/5 hover:bg-white/10 border-2 border-white/10 hover:border-purple-400/30'
+                  }`}
+                >
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <div className={`text-base font-light mb-1 ${
+                        selectedVoiceId === voice.id ? 'text-purple-200' : 'text-white/90'
+                      }`}>
+                        {voice.name}
+                        {selectedVoiceId === voice.id && (
+                          <span className="ml-3 text-xs text-purple-300/70 tracking-wider">CURRENT</span>
+                        )}
+                      </div>
+                      <div className="text-white/40 text-sm">{voice.description}</div>
+                    </div>
+                    <Volume2 className={`w-5 h-5 ${
+                      selectedVoiceId === voice.id ? 'text-purple-400' : 'text-white/30'
+                    }`} />
+                  </div>
+                </button>
+              ))}
+            </div>
+
+            <div className="mt-6 p-4 bg-white/5 rounded-2xl border border-white/10">
+              <p className="text-white/60 text-sm leading-relaxed">
+                Voice changes will apply to all future AI responses. The selected voice will be remembered for your session.
+              </p>
+            </div>
           </div>
-        </button>
+        </div>
       )}
 
       {/* Patient Selector Modal */}
