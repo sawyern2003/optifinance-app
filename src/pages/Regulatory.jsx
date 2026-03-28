@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { useQuery, useQueryClient } from '@tantml:react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { api } from '@/api/api';
 import { Plus, Thermometer, Wrench, ClipboardCheck, AlertCircle, CheckCircle, Calendar } from 'lucide-react';
 import { format, startOfWeek, endOfWeek, eachDayOfInterval } from 'date-fns';
