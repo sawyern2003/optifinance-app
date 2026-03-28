@@ -119,16 +119,6 @@ export default function VoiceDiary() {
         stream.getTracks().forEach(track => track.stop());
         detachMicAnalyser();
 
-        // Only process if held for at least 300ms
-        const recordingDuration = Date.now() - (recordingStartTimeRef.current || 0);
-        if (recordingDuration < 300) {
-          toast({
-            title: 'Too quick',
-            description: 'Hold the button and speak, then release',
-          });
-          return;
-        }
-
         if (audioChunksRef.current.length > 0) {
           const audioBlob = new Blob(audioChunksRef.current, { type: 'audio/webm' });
           await processAudio(audioBlob);
@@ -649,11 +639,7 @@ export default function VoiceDiary() {
           {/* Center button */}
           <button
             type="button"
-            onMouseDown={startListening}
-            onMouseUp={stopListening}
-            onMouseLeave={stopListening}
-            onTouchStart={startListening}
-            onTouchEnd={stopListening}
+            onClick={toggleListening}
             disabled={isProcessing || isSpeaking}
             className="relative z-10 rounded-full bg-gradient-to-b from-[#e8dfd1] via-[#d8cbb7] to-[#c7b79d] px-8 py-3.5 text-[15px] font-medium tracking-tight text-[#2f415a] shadow-[0_4px_18px_rgba(35,50,72,0.2),inset_0_1px_0_rgba(255,255,255,0.45)] transition hover:from-[#ece3d6] hover:via-[#ddd0bd] hover:to-[#cdbda4] active:scale-[0.98] disabled:pointer-events-none disabled:opacity-45 md:px-10 md:py-4 md:text-base"
           >
@@ -665,17 +651,17 @@ export default function VoiceDiary() {
             ) : isSpeaking ? (
               <span className="flex items-center gap-2.5">
                 <Volume2 className="h-[1.1rem] w-[1.1rem] animate-pulse" />
-                Speaking
+                AI Speaking
               </span>
             ) : isListening ? (
               <span className="flex items-center gap-2.5">
-                <span className="h-2.5 w-2.5 rounded-full bg-[#3f5778]/85 shadow-sm" />
-                Stop
+                <span className="h-2.5 w-2.5 rounded-full bg-red-500 animate-pulse shadow-sm" />
+                Stop Recording
               </span>
             ) : (
               <span className="flex items-center gap-2.5">
                 <AudioLines className="h-[1.1rem] w-[1.1rem]" />
-                Hold to speak
+                Start Recording
               </span>
             )}
           </button>
