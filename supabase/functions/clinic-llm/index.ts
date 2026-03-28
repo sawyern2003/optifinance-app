@@ -787,6 +787,138 @@ async function handleVoiceCommand(
   });
 }
 
+// --- Voice conversation (conversational AI) ---
+
+async function handleVoiceConversation(
+  apiKey: string,
+  body: Record<string, unknown>,
+): Promise<Response> {
+  const userMessage = typeof body.userMessage === "string" ? body.userMessage.trim() : "";
+  if (!userMessage) throw new Error("userMessage is required");
+
+  const currentContext = body.currentContext as Record<string, unknown> | null;
+  const conversationHistory = Array.isArray(body.conversationHistory)
+    ? body.conversationHistory as Array<{ role: string; content: string }>
+    : [];
+  const patientNames = Array.isArray(body.patientNames) ? body.patientNames as string[] : [];
+  const treatmentNames = Array.isArray(body.treatmentNames) ? body.treatmentNames as string[] : [];
+  const todayDate = (body.todayDate as string) || new Date().toISOString().slice(0, 10);
+
+  // Build conversation history string
+  const historyStr = conversationHistory.length > 0
+    ? conversationHistory.map(m => `${m.role === 'user' ? 'Doctor' : 'AI'}: ${m.content}`).join('\n')
+    : 'No previous conversation';
+
+  // Build context string
+  const contextStr = currentContext
+    ? JSON.stringify(currentContext)
+    : 'No current context';
+
+  const systemPrompt = `You are a conversational AI assistant for a beauty and wellness clinic management system.
+
+Your role is to help doctors manage their practice through natural conversation. You should:
+- Respond like a friendly, professional human assistant
+- Understand clinic operations (treatments, invoices, appointments, patients)
+- Generate relevant action options the doctor can click
+- Remember context from the conversation
+- Be concise but helpful
+
+IMPORTANT: You do NOT execute actions yourself. Instead, you generate action buttons that the doctor can click to execute actions.
+
+Available patients: ${patientNames.join(', ') || 'None'}
+Available treatments: ${treatmentNames.join(', ') || 'None'}
+Today's date: ${todayDate}
+
+Recent conversation:
+${historyStr}
+
+Current context: ${contextStr}`;
+
+  const userContent = `Doctor said: "${userMessage}"
+
+Analyze what the doctor wants and respond naturally. Then generate 2-4 relevant action options they can take.
+
+Return JSON in this format:
+{
+  "response": "Your friendly conversational response to the doctor",
+  "actionOptions": [
+    {
+      "label": "Short action label (e.g. 'Create Invoice')",
+      "action": "action_type (e.g. 'create_invoice')",
+      "data": {
+        "any_relevant_data": "extracted from conversation"
+      }
+    }
+  ],
+  "context": {
+    "lastMentionedPatient": "patient name if mentioned",
+    "lastMentionedTreatment": "treatment if mentioned",
+    "pendingAction": "what action is pending if any"
+  }
+}
+
+Action types you can use:
+- create_treatment: Create a new treatment entry
+- create_invoice: Generate an invoice
+- mark_paid: Mark an invoice as paid
+- book_appointment: Schedule an appointment
+- add_clinical_note: Add clinical documentation
+- show_patient: View patient details
+- show_schedule: View calendar
+- send_invoice: Send an invoice to a patient
+- send_reminder: Send payment reminder
+
+Example 1:
+Doctor: "Sarah had Botox today for £300, she paid cash"
+Response: {
+  "response": "Perfect! I've got that Sarah had Botox today for £300, paid in cash. Would you like me to create a treatment entry and/or generate an invoice?",
+  "actionOptions": [
+    {"label": "Create Treatment Entry", "action": "create_treatment", "data": {"patient": "Sarah", "treatment": "Botox", "price": 300, "status": "paid"}},
+    {"label": "Create Invoice", "action": "create_invoice", "data": {"patient": "Sarah", "treatment": "Botox", "amount": 300}},
+    {"label": "Add Clinical Note", "action": "add_clinical_note", "data": {"patient": "Sarah", "treatment": "Botox"}}
+  ],
+  "context": {"lastMentionedPatient": "Sarah", "lastMentionedTreatment": "Botox", "pendingAction": "create_treatment"}
+}
+
+Example 2:
+Doctor: "What's my revenue this week?"
+Response: {
+  "response": "I can help you see your revenue! To get the exact numbers, I need to check your records. Would you like to see the dashboard or a detailed breakdown?",
+  "actionOptions": [
+    {"label": "View Dashboard", "action": "navigate", "data": {"page": "dashboard"}},
+    {"label": "View Records", "action": "navigate", "data": {"page": "records"}},
+    {"label": "Generate Revenue Report", "action": "generate_report", "data": {"type": "revenue", "period": "week"}}
+  ],
+  "context": {"pendingAction": "view_revenue"}
+}
+
+Example 3:
+Doctor: "Send invoice to John"
+Response: {
+  "response": "I can send John's invoice. Let me check for his most recent unpaid treatment. Would you like me to find it and send the invoice?",
+  "actionOptions": [
+    {"label": "Find & Send Invoice", "action": "send_invoice", "data": {"patient": "John"}},
+    {"label": "Create New Invoice", "action": "create_invoice", "data": {"patient": "John"}},
+    {"label": "View John's History", "action": "show_patient", "data": {"patient": "John"}}
+  ],
+  "context": {"lastMentionedPatient": "John", "pendingAction": "send_invoice"}
+}
+
+Now respond to: "${userMessage}"`;
+
+  const parsed = await openaiChatJson({
+    apiKey,
+    system: systemPrompt,
+    userContent,
+    maxTokens: 800,
+    temperature: 0.7,
+  });
+
+  return new Response(JSON.stringify(parsed), {
+    headers: { ...corsHeaders, "Content-Type": "application/json" },
+  });
+}
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response("ok", { headers: corsHeaders });
@@ -812,9 +944,11 @@ Deno.serve(async (req) => {
         return await handlePricingInsights(apiKey, body);
       case "voice_command":
         return await handleVoiceCommand(apiKey, body);
+      case "voice_conversation":
+        return await handleVoiceConversation(apiKey, body);
       default:
         throw new Error(
-          `Unknown task "${task}". Use: voice_diary | quickadd_treatments | bank_expenses | pricing_insights | voice_command`,
+          `Unknown task "${task}". Use: voice_diary | quickadd_treatments | bank_expenses | pricing_insights | voice_command | voice_conversation`,
         );
     }
   } catch (error) {
