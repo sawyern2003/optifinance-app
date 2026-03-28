@@ -216,6 +216,7 @@ class Integrations {
       ParseQuickAddTreatments: this.ParseQuickAddTreatments.bind(this),
       ParseBankStatementExpenses: this.ParseBankStatementExpenses.bind(this),
       AnalyzePricingInsights: this.AnalyzePricingInsights.bind(this),
+      ProcessVoiceConversation: this.ProcessVoiceConversation.bind(this),
       TranscribeAudio: this.TranscribeAudio.bind(this),
       SendEmail: this.SendEmail.bind(this),
       UploadFile: this.UploadFile.bind(this),
@@ -274,6 +275,16 @@ class Integrations {
   async AnalyzePricingInsights(payload) {
     const data = await this._invokeClinicLlm('pricing_insights', payload);
     return { insights: data?.insights ?? '' };
+  }
+
+  /** Voice conversation: user message → AI response + action options */
+  async ProcessVoiceConversation(payload) {
+    const data = await this._invokeClinicLlm('voice_conversation', payload);
+    return {
+      response: data?.response ?? "I'm here to help!",
+      actionOptions: data?.actionOptions ?? [],
+      context: data?.context ?? null,
+    };
   }
 
   /** Voice: base64 audio → Whisper text (optional nameHint for patient names). */
