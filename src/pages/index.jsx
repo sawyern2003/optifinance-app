@@ -7,8 +7,6 @@ import Catalogue from "./Catalogue";
 
 import PatientCards from "./PatientCards";
 
-import Consultant from "./Consultant";
-
 import Communications from "./Communications";
 
 import Dashboard from "./Dashboard";
@@ -27,7 +25,7 @@ import Reports from "./Reports";
 
 import Settings from "./Settings";
 
-import VoiceDiary from "./VoiceDiary";
+import VoiceAssistant from "./VoiceAssistant";
 
 import Calendar from "./CalendarWeek";
 
@@ -45,21 +43,19 @@ import { supabase } from '@/config/supabase';
 import { createPageUrl } from "@/utils";
 
 const PAGES = {
-    
+
     Catalog: Catalog,
-    
+
     Catalogue: Catalogue,
-    
+
     PatientCards: PatientCards,
-    
-    Consultant: Consultant,
-    
+
     Communications: Communications,
-    
+
     Dashboard: Dashboard,
-    
+
     Home: Home,
-    
+
     // `/Invoices` now redirects to `Records?tab=invoices`; keep this mapping to avoid runtime errors.
     Invoices: RecordsLuxury,
 
@@ -68,21 +64,21 @@ const PAGES = {
     QuickAdd: QuickAdd,
 
     Records: RecordsLuxury,
-    
+
     Reports: Reports,
-    
+
     Settings: Settings,
-    
-    VoiceDiary: VoiceDiary,
+
+    VoiceAssistant: VoiceAssistant,
 
     Calendar: Calendar,
 
     Checkout: Checkout,
-    
+
     Billing: Billing,
-    
+
     SubscriptionPricing: SubscriptionPricing,
-    
+
 }
 
 function _getCurrentPage(url) {
@@ -179,11 +175,10 @@ function PagesContent() {
                 <ProtectedRoute>
                     <Layout currentPageName={currentPage}>
                         <Routes>
-                            <Route path="/" element={<VoiceDiary />} />
+                            <Route path="/" element={<VoiceAssistant />} />
                             <Route path="/Catalog" element={<Catalog />} />
                             <Route path="/Catalogue" element={<Catalogue />} />
                             <Route path="/PatientCards" element={<PatientCards />} />
-                            <Route path="/Consultant" element={<Consultant />} />
                             <Route path="/Dashboard" element={<Dashboard />} />
                             <Route path="/Home" element={<Home />} />
                             <Route
@@ -193,7 +188,7 @@ function PagesContent() {
                             <Route path="/Communications" element={<Communications />} />
                             <Route path="/Pricing" element={<Pricing />} />
                             <Route path="/QuickAdd" element={<QuickAdd />} />
-                            <Route path="/VoiceDiary" element={<VoiceDiary />} />
+                            <Route path="/VoiceAssistant" element={<VoiceAssistant />} />
                             <Route path="/Calendar" element={<Calendar />} />
                             <Route path="/Records" element={<RecordsLuxury />} />
                             <Route path="/Checkout" element={<Checkout />} />

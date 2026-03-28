@@ -8,19 +8,14 @@ import { FloatingVoiceAssistant } from "@/components/FloatingVoiceAssistant";
 
 const navigationItems = [
   {
-    title: "Voice Diary",
-    url: createPageUrl("VoiceDiary"),
+    title: "Voice Assistant",
+    url: createPageUrl("VoiceAssistant"),
     icon: CircleDot,
   },
   {
     title: "Dashboard",
     url: createPageUrl("Dashboard"),
     icon: LayoutDashboard,
-  },
-  {
-    title: "Consultant",
-    url: createPageUrl("Consultant"),
-    icon: MessageSquare,
   },
   {
     title: "Quick Add",
