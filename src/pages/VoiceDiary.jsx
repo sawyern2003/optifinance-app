@@ -4,7 +4,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { Loader2, Mic, MicOff, AudioLines, ClipboardList } from "lucide-react";
+import { Loader2, Mic, MicOff, AudioLines, ClipboardList, Sparkles } from "lucide-react";
 import { format, subDays, parseISO } from "date-fns";
 import { useToast } from "@/components/ui/use-toast";
 import { createPageUrl } from "@/utils";
