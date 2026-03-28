@@ -1,9 +1,10 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Mic, MicOff, Loader2, Check, X } from 'lucide-react';
+import { Mic, MicOff, Loader2, Check, X, Volume2 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useToast } from '@/components/ui/use-toast';
 import { parseAndExecuteVoiceCommand } from '@/lib/voiceCommands';
 import { api } from '@/api/api';
+import { useElevenLabs } from '@/hooks/useElevenLabs';
 
 /**
  * Floating Voice Assistant - Global voice control orb
@@ -16,11 +17,15 @@ export function FloatingVoiceAssistant() {
   const [isProcessing, setIsProcessing] = useState(false);
   const [transcript, setTranscript] = useState('');
   const [result, setResult] = useState(null);
+  const [aiResponse, setAiResponse] = useState('');
 
   const mediaRecorderRef = useRef(null);
   const audioChunksRef = useRef([]);
   const { toast } = useToast();
   const navigate = useNavigate();
+
+  // ElevenLabs TTS hook
+  const { speak, stop: stopSpeaking, isSpeaking, progress } = useElevenLabs();
 
   // Cleanup on unmount
   useEffect(() => {
@@ -33,14 +38,15 @@ export function FloatingVoiceAssistant() {
 
   // Handle voice command result
   useEffect(() => {
-    if (result) {
+    if (result && !isSpeaking) {
       const timer = setTimeout(() => {
         setResult(null);
         setTranscript('');
+        setAiResponse('');
       }, 3000);
       return () => clearTimeout(timer);
     }
-  }, [result]);
+  }, [result, isSpeaking]);
 
   const startListening = async () => {
     try {
@@ -122,6 +128,17 @@ export function FloatingVoiceAssistant() {
       const commandResult = await parseAndExecuteVoiceCommand(transcribedText);
       setResult(commandResult);
 
+      // AI speaks back with the result
+      if (commandResult.message) {
+        setAiResponse(commandResult.message);
+        try {
+          await speak(commandResult.message);
+        } catch (ttsError) {
+          console.error('TTS error:', ttsError);
+          // Continue even if TTS fails
+        }
+      }
+
       // Handle navigation if needed
       if (commandResult.success && commandResult.action === 'navigate' && commandResult.navigateTo) {
         setTimeout(() => {
@@ -164,7 +181,7 @@ export function FloatingVoiceAssistant() {
   return (
     <div className="fixed bottom-6 right-6 z-50 flex flex-col items-end gap-3">
       {/* Transcript/Result Display */}
-      {(transcript || result) && (
+      {(transcript || result || isSpeaking) && (
         <div className="bg-white rounded-2xl shadow-lg border border-gray-200 p-4 max-w-xs animate-slide-in">
           {transcript && (
             <div className="mb-2">
@@ -185,33 +202,56 @@ export function FloatingVoiceAssistant() {
               </p>
             </div>
           )}
+
+          {/* AI Speaking Indicator */}
+          {isSpeaking && aiResponse && (
+            <div className={`${transcript || result ? 'mt-3 pt-3 border-t border-gray-100' : ''}`}>
+              <div className="flex items-center gap-2 mb-2">
+                <Volume2 className="w-4 h-4 text-[#d4a740] animate-pulse" />
+                <p className="text-xs font-medium text-[#d4a740]">AI Assistant:</p>
+              </div>
+              <p className="text-sm text-gray-700 mb-2">{aiResponse}</p>
+
+              {/* Progress bar */}
+              <div className="w-full h-1 bg-gray-100 rounded-full overflow-hidden">
+                <div
+                  className="h-full bg-[#d4a740] transition-all duration-100"
+                  style={{ width: `${progress * 100}%` }}
+                />
+              </div>
+            </div>
+          )}
         </div>
       )}
 
       {/* Voice Orb Button */}
       <button
         onClick={toggleListening}
-        disabled={isProcessing}
+        disabled={isProcessing || isSpeaking}
         className={`
           relative w-16 h-16 rounded-full shadow-2xl transition-all duration-300
           flex items-center justify-center group
-          ${isListening
+          ${isSpeaking
+            ? 'bg-[#d4a740] scale-110 shadow-[#d4a740]/50'
+            : isListening
             ? 'bg-[#d4a740] scale-110 shadow-[#d4a740]/50'
             : isProcessing
             ? 'bg-[#2C3E50]'
             : 'bg-[#1a2845] hover:bg-[#2C3E50] hover:scale-105'
           }
         `}
-        title={isListening ? 'Stop listening' : 'Start voice command'}
+        title={isSpeaking ? 'AI speaking...' : isListening ? 'Stop listening' : 'Start voice command'}
       >
-        {/* Pulsing ring when listening */}
-        {isListening && (
+        {/* Pulsing ring when listening or speaking */}
+        {(isListening || isSpeaking) && (
           <div className="absolute inset-0 rounded-full bg-[#d4a740] animate-ping opacity-75" />
         )}
 
         {/* Icon */}
         <div className="relative z-10">
-          {isProcessing ? (
+          {isSpeaking ? (
+            <Volume2 className="w-8 h-8 text-white animate-pulse" />
+          ) : isProcessing ? (
             <Loader2 className="w-8 h-8 text-white animate-spin" />
           ) : isListening ? (
             <MicOff className="w-8 h-8 text-white" />
@@ -221,7 +261,7 @@ export function FloatingVoiceAssistant() {
         </div>
 
         {/* Glow effect */}
-        {isListening && (
+        {(isListening || isSpeaking) && (
           <div className="absolute inset-0 rounded-full bg-[#d4a740] blur-xl opacity-50 animate-pulse" />
         )}
       </button>
