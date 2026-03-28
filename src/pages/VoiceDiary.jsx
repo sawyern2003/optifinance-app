@@ -25,6 +25,7 @@ export default function VoiceDiary() {
   const [parsedIntent, setParsedIntent] = useState('');
   const [activityFeed, setActivityFeed] = useState([]);
   const [completedAction, setCompletedAction] = useState(null);
+  const [inConversation, setInConversation] = useState(false);
 
   const mediaRecorderRef = useRef(null);
   const audioChunksRef = useRef([]);
@@ -166,6 +167,22 @@ export default function VoiceDiary() {
     }
   };
 
+  const startConversation = async () => {
+    setInConversation(true);
+    await startListening();
+  };
+
+  const endConversation = () => {
+    setInConversation(false);
+    if (isListening) {
+      stopListening();
+    }
+    setLiveTranscript('');
+    setFinalTranscript('');
+    setParsedIntent('');
+    setCompletedAction(null);
+  };
+
   const processAudio = async (audioBlob) => {
     setIsProcessing(true);
 
@@ -281,12 +298,26 @@ export default function VoiceDiary() {
       // Speak response
       await speak(aiResponse);
 
-      // Clear after 5 seconds
-      setTimeout(() => {
+      // Auto-restart listening if in conversation mode
+      if (inConversation) {
         setFinalTranscript('');
         setParsedIntent('');
         setCompletedAction(null);
-      }, 5000);
+
+        // Wait a moment, then start listening again
+        setTimeout(async () => {
+          if (inConversation) {
+            await startListening();
+          }
+        }, 500);
+      } else {
+        // Clear after 5 seconds if not in conversation
+        setTimeout(() => {
+          setFinalTranscript('');
+          setParsedIntent('');
+          setCompletedAction(null);
+        }, 5000);
+      }
 
     } catch (error) {
       console.error('Conversation processing error:', error);
@@ -349,7 +380,21 @@ export default function VoiceDiary() {
         <div className="grid grid-cols-1 lg:grid-cols-5 gap-6">
           {/* LEFT COLUMN: Voice Command Panel */}
           <div className="lg:col-span-2">
-            <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-8">
+            <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-8 relative">
+              {/* Conversation Mode Indicator */}
+              {inConversation && (
+                <div className="absolute top-4 right-4 flex items-center gap-2 bg-green-50 border border-green-200 px-3 py-1.5 rounded-lg">
+                  <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse" />
+                  <span className="text-xs font-medium text-green-700">In Conversation</span>
+                  <button
+                    onClick={endConversation}
+                    className="ml-2 text-xs text-green-600 hover:text-green-800 font-medium underline"
+                  >
+                    End
+                  </button>
+                </div>
+              )}
+
               {/* IDLE STATE */}
               {!isListening && !isProcessing && !completedAction && (
                 <div className="text-center">
@@ -402,7 +447,7 @@ export default function VoiceDiary() {
                     {/* Center button */}
                     <button
                       type="button"
-                      onClick={toggleListening}
+                      onClick={startConversation}
                       disabled={isSpeaking}
                       className="relative z-10 rounded-full bg-gradient-to-b from-[#e8dfd1] via-[#d8cbb7] to-[#c7b79d] p-5 shadow-[0_4px_18px_rgba(35,50,72,0.2),inset_0_1px_0_rgba(255,255,255,0.45)] transition hover:from-[#ece3d6] hover:via-[#ddd0bd] hover:to-[#cdbda4] active:scale-[0.98] disabled:pointer-events-none disabled:opacity-45"
                     >
