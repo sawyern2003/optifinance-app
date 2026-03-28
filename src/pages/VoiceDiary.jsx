@@ -36,14 +36,16 @@ export default function VoiceDiary() {
   const [selectedVoiceId, setSelectedVoiceId] = useState('21m00Tcm4TlvDq8ikWAM'); // Default: Rachel
   const [showVoiceSelector, setShowVoiceSelector] = useState(false);
 
-  // Available ElevenLabs voices
+  // Available ElevenLabs voices - Female only
   const voices = [
-    { id: '21m00Tcm4TlvDq8ikWAM', name: 'Rachel', description: 'Professional female, warm and clear' },
-    { id: 'pNInz6obpgDQGcFmaJgB', name: 'Adam', description: 'Professional male, deep and calm' },
-    { id: 'EXAVITQu4vr4xnSDxMaL', name: 'Bella', description: 'Friendly female, soft and gentle' },
-    { id: 'ErXwobaYiN019PkySvjV', name: 'Antoni', description: 'Energetic male, clear and articulate' },
-    { id: 'VR6AewLTigWG4xSOukaG', name: 'Arnold', description: 'Mature male, authoritative' },
-    { id: 'MF3mGyEYCl7XYWbV9V6O', name: 'Elli', description: 'Young female, bright and cheerful' },
+    { id: '21m00Tcm4TlvDq8ikWAM', name: 'Rachel', description: 'American - Professional, warm and clear' },
+    { id: 'EXAVITQu4vr4xnSDxMaL', name: 'Bella', description: 'American - Soft, gentle and friendly' },
+    { id: 'MF3mGyEYCl7XYWbV9V6O', name: 'Elli', description: 'American - Bright, cheerful and energetic' },
+    { id: 'XB0fDUnXU5powFXDhCwa', name: 'Charlotte', description: 'British - Elegant, refined and professional' },
+    { id: 'Xb7hH8MSUJpSbSDYk0k2', name: 'Alice', description: 'British - Clear, articulate and confident' },
+    { id: 'ThT5KcBeYPX3keUQqHPh', name: 'Dorothy', description: 'British - Mature, warm and authoritative' },
+    { id: 'pFZP5JQG7iQjIQuC4Bku', name: 'Lily', description: 'British - Young, pleasant and natural' },
+    { id: 'FGY2WhTYpPnrIDTdsKH5', name: 'Laura', description: 'American - Upbeat, friendly and clear' },
   ];
 
   const mediaRecorderRef = useRef(null);
