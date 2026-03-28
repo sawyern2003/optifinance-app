@@ -1,14 +1,18 @@
 import { api } from '@/api/api';
 import { invoicesAPI } from '@/api/invoices';
+import { supabase } from '@/config/supabase';
 
 /**
  * Parse and execute voice commands using GPT-4
  */
 export async function parseAndExecuteVoiceCommand(transcript, context = {}) {
   try {
-    // Use the clinic-llm edge function to parse voice commands
-    const { data, error } = await api.integrations.Core.InvokeLLM({
-      prompt: `You are a voice command parser for clinic management software.
+    // Call clinic-llm edge function directly with voice command parsing task
+    const { data, error } = await supabase.functions.invoke('clinic-llm', {
+      body: {
+        task: 'voice_command',
+        transcript,
+        prompt: `You are a voice command parser for clinic management software.
 
 Parse this voice command and return a JSON object with the action to perform:
 "${transcript}"
@@ -47,27 +51,16 @@ Return ONLY valid JSON in this exact format:
 }
 
 If you can't confidently parse the command, return {"action": "unknown", "confidence": 0, "message": "I didn't understand that command"}`,
+      },
     });
 
-    if (error) throw error;
-
-    // Try to parse the response
-    let parsed;
-    try {
-      // Extract JSON from response if it's wrapped in markdown or text
-      const jsonMatch = data.match(/\{[\s\S]*\}/);
-      if (jsonMatch) {
-        parsed = JSON.parse(jsonMatch[0]);
-      } else {
-        throw new Error('No JSON found in response');
-      }
-    } catch (e) {
-      console.error('Failed to parse LLM response:', data);
-      return {
-        success: false,
-        message: "I couldn't understand that command. Please try again."
-      };
+    if (error) {
+      console.error('clinic-llm error:', error);
+      throw error;
     }
+
+    // The response should be the parsed command object
+    const parsed = data;
 
     // If low confidence or unknown action, return error
     if (parsed.action === 'unknown' || (parsed.confidence && parsed.confidence < 0.6)) {

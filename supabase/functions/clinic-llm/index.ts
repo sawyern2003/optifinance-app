@@ -760,6 +760,33 @@ async function handlePricingInsights(
   });
 }
 
+// --- Voice command parsing ---
+
+async function handleVoiceCommand(
+  apiKey: string,
+  body: Record<string, unknown>,
+): Promise<Response> {
+  const prompt = typeof body.prompt === "string" ? body.prompt.trim() : "";
+  const transcript = typeof body.transcript === "string" ? body.transcript.trim() : "";
+
+  if (!prompt || !transcript) {
+    throw new Error("prompt and transcript are required");
+  }
+
+  // Parse the voice command using GPT
+  const parsed = await openaiChatJson({
+    apiKey,
+    system: "You are a voice command parser for clinic management software. Always return valid JSON only.",
+    userContent: `${prompt}\n\nTranscript: "${transcript}"`,
+    maxTokens: 500,
+    temperature: 0.2,
+  });
+
+  return new Response(JSON.stringify(parsed), {
+    headers: { ...corsHeaders, "Content-Type": "application/json" },
+  });
+}
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response("ok", { headers: corsHeaders });
@@ -783,9 +810,11 @@ Deno.serve(async (req) => {
         return await handleBankExpenses(apiKey, body);
       case "pricing_insights":
         return await handlePricingInsights(apiKey, body);
+      case "voice_command":
+        return await handleVoiceCommand(apiKey, body);
       default:
         throw new Error(
-          `Unknown task "${task}". Use: voice_diary | quickadd_treatments | bank_expenses | pricing_insights`,
+          `Unknown task "${task}". Use: voice_diary | quickadd_treatments | bank_expenses | pricing_insights | voice_command`,
         );
     }
   } catch (error) {
