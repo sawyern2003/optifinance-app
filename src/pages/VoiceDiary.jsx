@@ -845,7 +845,7 @@ export default function VoiceDiary() {
                 />
 
                 {/* Waveform visualization */}
-                <div className="absolute -bottom-56 left-1/2 -translate-x-1/2 flex items-end justify-center gap-2 h-24 w-[600px]">
+                <div className="absolute -bottom-[140px] left-1/2 -translate-x-1/2 flex items-end justify-center gap-2 h-24 w-[600px]">
                   {Array.from({ length: 40 }).map((_, i) => (
                     <div
                       key={i}
@@ -860,13 +860,13 @@ export default function VoiceDiary() {
 
                 {/* Live transcript */}
                 {liveTranscript && (
-                  <div className="absolute -bottom-72 left-1/2 -translate-x-1/2 text-center w-[600px] px-8">
+                  <div className="absolute -bottom-[180px] left-1/2 -translate-x-1/2 text-center w-[600px] px-8">
                     <p className="text-white/80 text-lg font-light tracking-wide whitespace-normal break-words">"{liveTranscript}"</p>
                   </div>
                 )}
 
-                {/* Recording indicator */}
-                <div className="absolute -top-24 left-1/2 -translate-x-1/2 flex items-center gap-3">
+                {/* Recording indicator - below orb */}
+                <div className="absolute -bottom-96 left-1/2 -translate-x-1/2 flex items-center gap-3">
                   <div className="w-2.5 h-2.5 bg-red-400 rounded-full animate-pulse" />
                   <span className="text-white/60 text-sm tracking-[0.4em] uppercase font-light">
                     {notesMode ? 'Recording Notes' : 'Listening'}
@@ -902,7 +902,7 @@ export default function VoiceDiary() {
                 </div>
 
                 {finalTranscript && (
-                  <div className="absolute -bottom-56 left-1/2 -translate-x-1/2 text-center w-[600px] px-8">
+                  <div className="absolute -bottom-[96px] left-1/2 -translate-x-1/2 text-center w-[600px] px-8">
                     <div className="text-white/40 text-xs tracking-[0.3em] uppercase mb-2">You said</div>
                     <p className="text-white/70 text-base font-light whitespace-normal break-words">"{finalTranscript}"</p>
                   </div>
@@ -912,7 +912,7 @@ export default function VoiceDiary() {
 
             {/* AI SPEAKING */}
             {isSpeaking && !isListening && !isProcessing && (
-              <div className="absolute -bottom-72 left-1/2 -translate-x-1/2 w-[600px] px-8">
+              <div className="absolute -bottom-[96px] left-1/2 -translate-x-1/2 w-[600px] px-8">
                 <div className="flex items-center gap-3 mb-3 justify-center">
                   <Volume2 className="w-5 h-5 text-[#d6b164] animate-pulse" />
                   <span className="text-white/60 text-sm tracking-[0.4em] uppercase font-light">AI Speaking</span>
@@ -928,7 +928,7 @@ export default function VoiceDiary() {
 
             {/* COMPLETED ACTION */}
             {completedAction && !isProcessing && (
-              <div className="absolute -bottom-72 left-1/2 -translate-x-1/2 w-[600px] text-center px-8">
+              <div className="absolute -bottom-[96px] left-1/2 -translate-x-1/2 w-[600px] text-center px-8">
                 <div className="flex items-center gap-2 justify-center mb-4">
                   {completedAction.success ? (
                     <Check className="w-5 h-5 text-emerald-400" />
