@@ -404,12 +404,9 @@ export default function VoiceDiary() {
                       type="button"
                       onClick={toggleListening}
                       disabled={isSpeaking}
-                      className="relative z-10 rounded-full bg-gradient-to-b from-[#e8dfd1] via-[#d8cbb7] to-[#c7b79d] px-8 py-3.5 text-[15px] font-medium tracking-tight text-[#2f415a] shadow-[0_4px_18px_rgba(35,50,72,0.2),inset_0_1px_0_rgba(255,255,255,0.45)] transition hover:from-[#ece3d6] hover:via-[#ddd0bd] hover:to-[#cdbda4] active:scale-[0.98] disabled:pointer-events-none disabled:opacity-45 md:px-10 md:py-4 md:text-base"
+                      className="relative z-10 rounded-full bg-gradient-to-b from-[#e8dfd1] via-[#d8cbb7] to-[#c7b79d] p-5 shadow-[0_4px_18px_rgba(35,50,72,0.2),inset_0_1px_0_rgba(255,255,255,0.45)] transition hover:from-[#ece3d6] hover:via-[#ddd0bd] hover:to-[#cdbda4] active:scale-[0.98] disabled:pointer-events-none disabled:opacity-45"
                     >
-                      <span className="flex items-center gap-2.5">
-                        <Mic className="h-[1.1rem] w-[1.1rem]" />
-                        Start Command
-                      </span>
+                      <Mic className="w-8 h-8 text-[#2f415a]" />
                     </button>
                   </div>
 
@@ -475,12 +472,9 @@ export default function VoiceDiary() {
                     <button
                       type="button"
                       onClick={stopListening}
-                      className="relative z-10 rounded-full bg-gradient-to-b from-[#e8dfd1] via-[#d8cbb7] to-[#c7b79d] px-8 py-3.5 text-[15px] font-medium tracking-tight text-[#2f415a] shadow-[0_4px_18px_rgba(35,50,72,0.2),inset_0_1px_0_rgba(255,255,255,0.45)] transition hover:from-[#ece3d6] hover:via-[#ddd0bd] hover:to-[#cdbda4] active:scale-[0.98] md:px-10 md:py-4 md:text-base"
+                      className="relative z-10 rounded-full bg-gradient-to-b from-[#e8dfd1] via-[#d8cbb7] to-[#c7b79d] p-5 shadow-[0_4px_18px_rgba(35,50,72,0.2),inset_0_1px_0_rgba(255,255,255,0.45)] transition hover:from-[#ece3d6] hover:via-[#ddd0bd] hover:to-[#cdbda4] active:scale-[0.98]"
                     >
-                      <span className="flex items-center gap-2.5">
-                        <span className="h-2.5 w-2.5 rounded-full bg-red-500 animate-pulse shadow-sm" />
-                        Stop Recording
-                      </span>
+                      <div className="w-8 h-8 rounded-sm bg-red-500" />
                     </button>
                   </div>
 
