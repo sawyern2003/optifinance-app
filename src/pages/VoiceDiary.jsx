@@ -32,6 +32,10 @@ export default function VoiceDiary() {
   const analyserRafRef = useRef(null);
   const [pulseLevel, setPulseLevel] = useState(0);
 
+  // Orb scale based on audio
+  const orbScale = 1 + pulseLevel * 0.08;
+  const goldGlowOpacity = 0.3 + pulseLevel * 0.4;
+
   const { data: patients } = useQuery({
     queryKey: ['patients'],
     queryFn: () => api.entities.Patient.list('name'),
@@ -349,22 +353,67 @@ export default function VoiceDiary() {
               {/* IDLE STATE */}
               {!isListening && !isProcessing && !completedAction && (
                 <div className="text-center">
-                  <div className="mb-6">
-                    <Mic className="w-12 h-12 text-[#2f415a] mx-auto mb-4" />
-                    <p className="text-lg text-[#2f415a] font-medium mb-2">
-                      What would you like to do?
-                    </p>
+                  <p className="text-lg text-[#2f415a] font-medium mb-8">
+                    What would you like to do?
+                  </p>
+
+                  {/* ORBED */}
+                  <div className="relative w-64 h-64 md:w-72 md:h-72 flex items-center justify-center mx-auto mb-8">
+                    {/* Warm gold aura */}
+                    <div
+                      className="pointer-events-none absolute rounded-full bg-[#d6b164] blur-[52px] md:blur-[72px]"
+                      style={{ inset: "-26%" }}
+                      aria-hidden
+                    />
+
+                    {/* Main blue sphere */}
+                    <div
+                      className="pointer-events-none absolute inset-[5%] rounded-full"
+                      style={{
+                        background:
+                          "radial-gradient(ellipse 115% 95% at 50% 8%, #7f91aa 0%, #647b98 20%, #4d647f 56%, #3b4f67 100%)",
+                        boxShadow: `
+                          inset 0 1px 0 rgba(255, 255, 255, 0.2),
+                          inset 0 -24px 50px rgba(37, 52, 72, 0.35),
+                          inset 0 -8px 20px rgba(37, 52, 72, 0.22),
+                          0 0 0 1px rgba(214, 177, 100, 0.22),
+                          0 8px 34px -8px rgba(90, 108, 132, 0.16)
+                        `,
+                      }}
+                      aria-hidden
+                    />
+
+                    {/* Soft highlight */}
+                    <div
+                      className="pointer-events-none absolute inset-[5%] rounded-full bg-[radial-gradient(circle_at_35%_22%,rgba(245,249,255,0.22),transparent_48%)]"
+                      aria-hidden
+                    />
+
+                    {/* Inner ring */}
+                    <div
+                      className="pointer-events-none absolute inset-[10%] rounded-full border border-[#c7b79d]/45"
+                      style={{
+                        opacity: 0.42,
+                        boxShadow: `inset 0 0 20px rgba(199, 183, 157, 0.08)`,
+                      }}
+                      aria-hidden
+                    />
+
+                    {/* Center button */}
+                    <button
+                      type="button"
+                      onClick={toggleListening}
+                      disabled={isSpeaking}
+                      className="relative z-10 rounded-full bg-gradient-to-b from-[#e8dfd1] via-[#d8cbb7] to-[#c7b79d] px-8 py-3.5 text-[15px] font-medium tracking-tight text-[#2f415a] shadow-[0_4px_18px_rgba(35,50,72,0.2),inset_0_1px_0_rgba(255,255,255,0.45)] transition hover:from-[#ece3d6] hover:via-[#ddd0bd] hover:to-[#cdbda4] active:scale-[0.98] disabled:pointer-events-none disabled:opacity-45 md:px-10 md:py-4 md:text-base"
+                    >
+                      <span className="flex items-center gap-2.5">
+                        <Mic className="h-[1.1rem] w-[1.1rem]" />
+                        Start Command
+                      </span>
+                    </button>
                   </div>
 
-                  <button
-                    onClick={toggleListening}
-                    disabled={isSpeaking}
-                    className="rounded-full bg-gradient-to-b from-[#e8dfd1] via-[#d8cbb7] to-[#c7b79d] px-10 py-4 text-base font-medium text-[#2f415a] shadow-[0_4px_18px_rgba(35,50,72,0.2),inset_0_1px_0_rgba(255,255,255,0.45)] transition hover:from-[#ece3d6] hover:via-[#ddd0bd] hover:to-[#cdbda4] active:scale-[0.98] disabled:opacity-45 disabled:cursor-not-allowed"
-                  >
-                    Start Command
-                  </button>
-
-                  <p className="text-sm text-gray-500 mt-6">
+                  <p className="text-sm text-gray-500">
                     Try: "Send all pending invoices"
                   </p>
                 </div>
@@ -378,11 +427,69 @@ export default function VoiceDiary() {
                     <span className="font-medium">Recording</span>
                   </div>
 
-                  <div className="mb-6 min-h-[60px] flex items-center justify-center">
+                  {/* ORB WITH RECORDING STATE */}
+                  <div className="relative w-64 h-64 md:w-72 md:h-72 flex items-center justify-center mx-auto mb-6" style={{ transform: `scale(${orbScale})`, transition: 'transform 0.1s ease-out' }}>
+                    {/* Pulsing gold aura */}
+                    <div
+                      className="pointer-events-none absolute rounded-full bg-[#d6b164] blur-[52px] md:blur-[72px]"
+                      style={{ inset: "-26%", opacity: goldGlowOpacity, transition: 'opacity 0.09s ease-out' }}
+                      aria-hidden
+                    />
+
+                    {/* Main blue sphere */}
+                    <div
+                      className="pointer-events-none absolute inset-[5%] rounded-full"
+                      style={{
+                        background:
+                          "radial-gradient(ellipse 115% 95% at 50% 8%, #7f91aa 0%, #647b98 20%, #4d647f 56%, #3b4f67 100%)",
+                        boxShadow: `
+                          inset 0 1px 0 rgba(255, 255, 255, 0.2),
+                          inset 0 -24px 50px rgba(37, 52, 72, 0.35),
+                          inset 0 -8px 20px rgba(37, 52, 72, 0.22),
+                          0 0 0 1px rgba(214, 177, 100, ${0.22 + pulseLevel * 0.22}),
+                          0 ${8 + pulseLevel * 14}px ${34 + pulseLevel * 40}px -8px rgba(90, 108, 132, ${0.16 + pulseLevel * 0.16})
+                        `,
+                        transition: 'box-shadow 0.09s ease-out',
+                      }}
+                      aria-hidden
+                    />
+
+                    {/* Soft highlight */}
+                    <div
+                      className="pointer-events-none absolute inset-[5%] rounded-full bg-[radial-gradient(circle_at_35%_22%,rgba(245,249,255,0.22),transparent_48%)]"
+                      aria-hidden
+                    />
+
+                    {/* Inner ring - reacts to audio */}
+                    <div
+                      className="pointer-events-none absolute inset-[10%] rounded-full border border-[#c7b79d]/45"
+                      style={{
+                        opacity: 0.42 + pulseLevel * 0.5,
+                        boxShadow: `inset 0 0 ${20 + pulseLevel * 24}px rgba(199, 183, 157, ${0.08 + pulseLevel * 0.12})`,
+                        transition: 'opacity 0.08s ease-out, box-shadow 0.08s ease-out',
+                      }}
+                      aria-hidden
+                    />
+
+                    {/* Center button */}
+                    <button
+                      type="button"
+                      onClick={stopListening}
+                      className="relative z-10 rounded-full bg-gradient-to-b from-[#e8dfd1] via-[#d8cbb7] to-[#c7b79d] px-8 py-3.5 text-[15px] font-medium tracking-tight text-[#2f415a] shadow-[0_4px_18px_rgba(35,50,72,0.2),inset_0_1px_0_rgba(255,255,255,0.45)] transition hover:from-[#ece3d6] hover:via-[#ddd0bd] hover:to-[#cdbda4] active:scale-[0.98] md:px-10 md:py-4 md:text-base"
+                    >
+                      <span className="flex items-center gap-2.5">
+                        <span className="h-2.5 w-2.5 rounded-full bg-red-500 animate-pulse shadow-sm" />
+                        Stop Recording
+                      </span>
+                    </button>
+                  </div>
+
+                  {/* Waveform below orb */}
+                  <div className="mb-4">
                     {liveTranscript ? (
                       <p className="text-base text-[#2f415a]">"{liveTranscript}"</p>
                     ) : (
-                      <div className="flex items-center gap-1 h-12">
+                      <div className="flex items-center justify-center gap-1 h-12">
                         {Array.from({ length: 20 }).map((_, i) => (
                           <div
                             key={i}
@@ -396,13 +503,6 @@ export default function VoiceDiary() {
                       </div>
                     )}
                   </div>
-
-                  <button
-                    onClick={stopListening}
-                    className="rounded-full bg-gradient-to-b from-[#e8dfd1] via-[#d8cbb7] to-[#c7b79d] px-10 py-4 text-base font-medium text-[#2f415a] shadow-[0_4px_18px_rgba(35,50,72,0.2),inset_0_1px_0_rgba(255,255,255,0.45)] transition hover:from-[#ece3d6] hover:via-[#ddd0bd] hover:to-[#cdbda4] active:scale-[0.98]"
-                  >
-                    Stop Recording
-                  </button>
                 </div>
               )}
 
@@ -412,6 +512,54 @@ export default function VoiceDiary() {
                   <div className="flex items-center justify-center gap-2 mb-4 text-[#2f415a]">
                     <Loader2 className="w-5 h-5 animate-spin" />
                     <span className="font-medium">Processing</span>
+                  </div>
+
+                  {/* ORB WITH PROCESSING STATE */}
+                  <div className="relative w-64 h-64 md:w-72 md:h-72 flex items-center justify-center mx-auto mb-6">
+                    {/* Gentle gold aura */}
+                    <div
+                      className="pointer-events-none absolute rounded-full bg-[#d6b164] blur-[52px] md:blur-[72px]"
+                      style={{ inset: "-26%", opacity: 0.3 }}
+                      aria-hidden
+                    />
+
+                    {/* Main blue sphere */}
+                    <div
+                      className="pointer-events-none absolute inset-[5%] rounded-full"
+                      style={{
+                        background:
+                          "radial-gradient(ellipse 115% 95% at 50% 8%, #7f91aa 0%, #647b98 20%, #4d647f 56%, #3b4f67 100%)",
+                        boxShadow: `
+                          inset 0 1px 0 rgba(255, 255, 255, 0.2),
+                          inset 0 -24px 50px rgba(37, 52, 72, 0.35),
+                          inset 0 -8px 20px rgba(37, 52, 72, 0.22),
+                          0 0 0 1px rgba(214, 177, 100, 0.22),
+                          0 8px 34px -8px rgba(90, 108, 132, 0.16)
+                        `,
+                      }}
+                      aria-hidden
+                    />
+
+                    {/* Soft highlight */}
+                    <div
+                      className="pointer-events-none absolute inset-[5%] rounded-full bg-[radial-gradient(circle_at_35%_22%,rgba(245,249,255,0.22),transparent_48%)]"
+                      aria-hidden
+                    />
+
+                    {/* Inner ring */}
+                    <div
+                      className="pointer-events-none absolute inset-[10%] rounded-full border border-[#c7b79d]/45"
+                      style={{
+                        opacity: 0.42,
+                        boxShadow: `inset 0 0 20px rgba(199, 183, 157, 0.08)`,
+                      }}
+                      aria-hidden
+                    />
+
+                    {/* Center - spinner */}
+                    <div className="relative z-10">
+                      <Loader2 className="w-12 h-12 text-[#c7b79d] animate-spin" />
+                    </div>
                   </div>
 
                   {finalTranscript && (
