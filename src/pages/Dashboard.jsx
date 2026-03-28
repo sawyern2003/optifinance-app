@@ -14,6 +14,7 @@ import StatCard from "../components/dashboard/StatCard";
 import MonthlyChart from "../components/dashboard/MonthlyChart";
 import CategoryBreakdown from "../components/dashboard/CategoryBreakdown";
 import CashFlowChart from "../components/dashboard/CashFlowChart";
+import { VoiceAssistantHero } from "../components/dashboard/VoiceAssistantHero";
 
 export default function Dashboard() {
   const [dateRangePreset, setDateRangePreset] = useState('this-month');
@@ -470,6 +471,9 @@ export default function Dashboard() {
             </Link>
           </div>
         </div>
+
+        {/* Voice Assistant Hero - Primary interaction method */}
+        <VoiceAssistantHero />
 
         {/* Outstanding Payments Alert or All Settled Up Message */}
         {allTimeOutstanding > 0 ? (
