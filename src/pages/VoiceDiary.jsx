@@ -1294,11 +1294,12 @@ export default function VoiceDiary() {
 
   return (
     <>
-      <div className="mx-auto flex w-full max-w-3xl flex-col px-3 sm:px-5 md:px-8">
+      <div className="mx-auto flex w-full max-w-3xl flex-col px-3 sm:px-5 md:px-8 bg-gradient-to-br from-slate-50 via-violet-50/30 to-blue-50/30 min-h-screen">
         {/* Fill viewport minus mobile tab bar; centre the orb in the remaining space */}
         <div className="flex min-h-[calc(100dvh-5.75rem)] flex-col md:min-h-[calc(100dvh-2rem)]">
           <header className="flex shrink-0 items-center justify-between gap-3 pt-3 pb-2 md:pt-4">
-            <h1 className="text-lg font-medium tracking-tight text-[#2f415a] md:text-xl">
+            <h1 className="text-lg font-light tracking-tight text-slate-800 md:text-xl flex items-center gap-2">
+              <Sparkles className="w-5 h-5 text-violet-600" />
               Voice diary
             </h1>
             <div className="flex items-center gap-2">
@@ -1308,8 +1309,8 @@ export default function VoiceDiary() {
                   onClick={toggleRecording}
                   disabled={inputBusy && !isRecording}
                   title="Live captions (browser)"
-                  className={`flex h-9 w-9 items-center justify-center rounded-full border border-[#dde3ea] bg-white text-[#334866] transition hover:border-[#b9c4d2] disabled:opacity-40 ${
-                    isRecording ? "border-[#9aaec5]" : ""
+                  className={`flex h-9 w-9 items-center justify-center rounded-full border bg-white text-violet-600 transition hover:bg-violet-50 disabled:opacity-40 ${
+                    isRecording ? "border-violet-400 bg-violet-50" : "border-violet-200"
                   }`}
                 >
                   {isRecording ? (
@@ -1321,7 +1322,7 @@ export default function VoiceDiary() {
               ) : null}
               <Link
                 to={createPageUrl("Dashboard")}
-                className="rounded-full border border-[#dde3ea] bg-white px-3 py-1.5 text-xs font-medium text-[#334866] hover:bg-[#f8fafc]"
+                className="rounded-full border border-violet-200 bg-white px-3 py-1.5 text-xs font-medium text-violet-700 hover:bg-violet-50"
               >
                 Back
               </Link>
@@ -1336,19 +1337,19 @@ export default function VoiceDiary() {
                 transition: "transform 0.07s ease-out",
               }}
             >
-              {/* Soft depth glow */}
+              {/* Soft depth glow - violet/blue theme */}
               <div
-                className="pointer-events-none absolute inset-[-14%] rounded-full bg-[#5f7492] blur-[40px] md:blur-[52px]"
+                className="pointer-events-none absolute inset-[-14%] rounded-full bg-gradient-to-br from-violet-400/30 to-blue-400/30 blur-[40px] md:blur-[52px]"
                 style={{
-                  opacity: 0.14 + micReactive * 0.22,
-                  transform: `scale(${1 + micReactive * 0.08})`,
+                  opacity: 0.3 + micReactive * 0.4,
+                  transform: `scale(${1 + micReactive * 0.12})`,
                   transition: "opacity 0.1s ease-out, transform 0.1s ease-out",
                 }}
                 aria-hidden
               />
-              {/* Warm gold aura behind orb — clearly reacts while speaking */}
+              {/* Vibrant violet/blue aura behind orb */}
               <div
-                className={`pointer-events-none absolute rounded-full bg-[#d6b164] blur-[52px] md:blur-[72px] ${
+                className={`pointer-events-none absolute rounded-full bg-gradient-to-br from-violet-500/40 to-blue-500/40 blur-[52px] md:blur-[72px] ${
                   idleOrb && !isWhisperTranscribing ? "vd-orb-glow-idle" : ""
                 }`}
                 style={{
@@ -1365,18 +1366,18 @@ export default function VoiceDiary() {
                 aria-hidden
               />
 
-              {/* Main sphere — muted slate */}
+              {/* Main sphere - violet to blue gradient */}
               <div
                 className="pointer-events-none absolute inset-[5%] rounded-full"
                 style={{
                   background:
-                    "radial-gradient(ellipse 115% 95% at 50% 8%, #7f91aa 0%, #647b98 20%, #4d647f 56%, #3b4f67 100%)",
+                    "radial-gradient(ellipse 115% 95% at 50% 8%, #8b7ac7 0%, #7566bc 20%, #5e51a8 56%, #4a3f8f 100%)",
                   boxShadow: `
-                    inset 0 1px 0 rgba(255, 255, 255, 0.2),
-                    inset 0 -24px 50px rgba(37, 52, 72, 0.35),
-                    inset 0 -8px 20px rgba(37, 52, 72, 0.22),
-                    0 0 0 1px rgba(214, 177, 100, ${0.22 + micReactive * 0.22}),
-                    0 ${8 + micReactive * 14}px ${34 + micReactive * 40}px -${8}px rgba(90, 108, 132, ${0.16 + micReactive * 0.16})
+                    inset 0 1px 0 rgba(255, 255, 255, 0.25),
+                    inset 0 -24px 50px rgba(74, 63, 143, 0.4),
+                    inset 0 -8px 20px rgba(94, 81, 168, 0.3),
+                    0 0 0 1px rgba(139, 122, 199, ${0.3 + micReactive * 0.3}),
+                    0 ${8 + micReactive * 14}px ${34 + micReactive * 40}px -${8}px rgba(94, 81, 168, ${0.2 + micReactive * 0.3})
                   `,
                   transition: "box-shadow 0.09s ease-out",
                 }}
@@ -1384,15 +1385,15 @@ export default function VoiceDiary() {
               />
               {/* Soft cool highlight */}
               <div
-                className="pointer-events-none absolute inset-[5%] rounded-full bg-[radial-gradient(circle_at_35%_22%,rgba(245,249,255,0.22),transparent_48%)]"
+                className="pointer-events-none absolute inset-[5%] rounded-full bg-[radial-gradient(circle_at_35%_22%,rgba(255,255,255,0.3),transparent_48%)]"
                 aria-hidden
               />
-              {/* Inner muted ring */}
+              {/* Inner glowing ring - violet */}
               <div
-                className="pointer-events-none absolute inset-[10%] rounded-full border border-[#c7b79d]/45"
+                className="pointer-events-none absolute inset-[10%] rounded-full border border-violet-300/50"
                 style={{
-                  opacity: 0.42 + micReactive * 0.5,
-                  boxShadow: `inset 0 0 ${20 + micReactive * 24}px rgba(199, 183, 157, ${0.08 + micReactive * 0.12})`,
+                  opacity: 0.5 + micReactive * 0.5,
+                  boxShadow: `inset 0 0 ${20 + micReactive * 24}px rgba(139, 92, 246, ${0.15 + micReactive * 0.25})`,
                   transition: "opacity 0.08s ease-out, box-shadow 0.08s ease-out",
                 }}
                 aria-hidden
@@ -1404,20 +1405,20 @@ export default function VoiceDiary() {
                 disabled={
                   isWhisperTranscribing || (processing && !isWhisperRecording)
                 }
-                className="relative z-10 rounded-full bg-gradient-to-b from-[#e8dfd1] via-[#d8cbb7] to-[#c7b79d] px-8 py-3.5 text-[15px] font-medium tracking-tight text-[#2f415a] shadow-[0_4px_18px_rgba(35,50,72,0.2),inset_0_1px_0_rgba(255,255,255,0.45)] transition hover:from-[#ece3d6] hover:via-[#ddd0bd] hover:to-[#cdbda4] active:scale-[0.98] disabled:pointer-events-none disabled:opacity-45 md:px-10 md:py-4 md:text-base"
+                className="relative z-10 rounded-full bg-gradient-to-br from-white via-violet-50 to-blue-50 px-8 py-3.5 text-[15px] font-medium tracking-tight text-slate-700 shadow-[0_4px_18px_rgba(139,92,246,0.3),inset_0_1px_0_rgba(255,255,255,0.6)] border border-violet-200/50 transition hover:from-violet-50 hover:via-violet-100 hover:to-blue-100 hover:shadow-[0_6px_24px_rgba(139,92,246,0.4)] active:scale-[0.98] disabled:pointer-events-none disabled:opacity-45 md:px-10 md:py-4 md:text-base"
               >
                 {isWhisperTranscribing ? (
-                  <span className="flex items-center gap-2.5">
+                  <span className="flex items-center gap-2.5 text-violet-700">
                     <Loader2 className="h-[1.1rem] w-[1.1rem] animate-spin" />
                     Transcribing
                   </span>
                 ) : isWhisperRecording ? (
-                  <span className="flex items-center gap-2.5">
-                    <span className="h-2.5 w-2.5 rounded-full bg-[#3f5778]/85 shadow-sm" />
+                  <span className="flex items-center gap-2.5 text-violet-700">
+                    <span className="h-2.5 w-2.5 rounded-full bg-violet-500 shadow-sm animate-pulse" />
                     Stop
                   </span>
                 ) : (
-                  <span className="flex items-center gap-2.5">
+                  <span className="flex items-center gap-2.5 text-violet-700">
                     <AudioLines className="h-[1.1rem] w-[1.1rem]" />
                     Dictate
                   </span>
@@ -1437,7 +1438,7 @@ export default function VoiceDiary() {
                   return (
                     <div
                       key={i}
-                      className="w-1.5 rounded-full bg-gradient-to-t from-[#d6b164] to-[#b89a52] shadow-sm"
+                      className="w-1.5 rounded-full bg-gradient-to-t from-violet-500 to-blue-500 shadow-sm"
                       style={{
                         height: `${height}px`,
                         opacity: 0.6 + (pulseLevel * 0.4),
