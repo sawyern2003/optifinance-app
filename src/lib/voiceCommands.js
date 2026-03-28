@@ -12,45 +12,47 @@ export async function parseAndExecuteVoiceCommand(transcript, context = {}) {
       body: {
         task: 'voice_command',
         transcript,
-        prompt: `You are a voice command parser for clinic management software.
+        prompt: `You are a helpful AI assistant for a clinic management system. You understand natural conversation and can answer questions or execute commands.
 
-Parse this voice command and return a JSON object with the action to perform:
-"${transcript}"
+Current date: ${new Date().toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}
 
-Available commands:
+User said: "${transcript}"
+
+COMMANDS YOU CAN EXECUTE:
+
 1. Add treatment: "Add [treatment] for [patient name] [price] [payment status]"
-   Example: "Add Botox for Sarah Thompson £300 paid in cash"
-
-2. Send invoice: "Send invoice to [patient name]" or "Send invoice for [patient name]'s last treatment"
-   Example: "Send invoice to Sarah Thompson"
-
-3. Send reminder: "Send payment reminder to [patient name]" or "Send reminder to [patient name]"
-   Example: "Send payment reminder to Sarah Thompson"
-
-4. Mark as paid: "Mark invoice [number] as paid" or "Mark [patient name]'s invoice as paid"
-   Example: "Mark invoice 1234 as paid"
-
+2. Send invoice: "Send invoice to [patient name]"
+3. Send reminder: "Send payment reminder to [patient name]"
+4. Mark as paid: "Mark invoice [number] as paid"
 5. Book appointment: "Book [patient name] for [treatment] [date/time]"
-   Example: "Book Sarah for Botox tomorrow at 2pm"
+6. Show schedule: "What's my schedule" / "Show me appointments"
+7. Show patient: "Show me [patient name]" / "Find [patient name]"
+8. Navigate: "Go to [page]" / "Open [page]" (pages: calendar, patients, records, settings)
 
-6. Show schedule: "What's my schedule today" or "Show me appointments for tomorrow"
-   Example: "What's my schedule today"
+QUESTIONS YOU CAN ANSWER:
 
-Return ONLY valid JSON in this exact format:
+- Date/time: "What's the date", "What day is it", "What time is it"
+- General: "Hello", "How are you", "What can you do"
+
+Return JSON in this format:
 {
-  "action": "add_treatment" | "send_invoice" | "send_reminder" | "mark_paid" | "book_appointment" | "show_schedule" | "unknown",
+  "action": "add_treatment" | "send_invoice" | "send_reminder" | "mark_paid" | "book_appointment" | "show_schedule" | "show_patient" | "navigate" | "answer_question" | "unknown",
   "patient_name": "string (if applicable)",
-  "treatment_name": "string (for add_treatment, book_appointment)",
+  "treatment_name": "string (for treatments/appointments)",
   "price": number (for add_treatment),
-  "payment_status": "paid" | "pending" | "partially_paid" (for add_treatment),
-  "amount_paid": number (optional, for add_treatment),
+  "payment_status": "paid" | "pending" | "partially_paid",
+  "amount_paid": number (optional),
   "invoice_number": "string (for mark_paid)",
-  "date": "YYYY-MM-DD" (for book_appointment),
-  "time": "HH:mm" (for book_appointment),
-  "confidence": number (0-1, how confident you are in the parse)
+  "date": "YYYY-MM-DD" (for appointments)",
+  "time": "HH:mm" (for appointments)",
+  "page": "string (for navigate: calendar, patients, records, settings)",
+  "answer": "string (for answer_question - your friendly response)",
+  "message": "string (confirmation message to speak back to user)",
+  "confidence": number (0-1)
 }
 
-If you can't confidently parse the command, return {"action": "unknown", "confidence": 0, "message": "I didn't understand that command"}`,
+Be conversational and helpful. If someone asks "What's the date", use action "answer_question" with answer containing today's date.
+Always include a friendly "message" field that will be spoken back to the user.`,
       },
     });
 
@@ -107,10 +109,22 @@ async function executeVoiceCommand(command, context) {
       case 'show_schedule':
         return await showScheduleCommand(command);
 
+      case 'answer_question':
+        return {
+          success: true,
+          message: command.answer || command.message || "I'm here to help!",
+        };
+
+      case 'show_patient':
+        return await showPatientCommand(command);
+
+      case 'navigate':
+        return await navigateCommand(command);
+
       default:
         return {
           success: false,
-          message: "I couldn't understand that command."
+          message: command.message || "I couldn't understand that command."
         };
     }
   } catch (error) {
@@ -354,5 +368,58 @@ async function showScheduleCommand(command) {
     message: "Opening your schedule",
     action: 'navigate',
     navigateTo: '/Calendar'
+  };
+}
+
+/**
+ * Show patient via voice command
+ */
+async function showPatientCommand(command) {
+  const { patient_name } = command;
+
+  if (!patient_name) {
+    return {
+      success: false,
+      message: "Please specify which patient you'd like to see"
+    };
+  }
+
+  return {
+    success: true,
+    message: `Looking up ${patient_name}`,
+    action: 'navigate',
+    navigateTo: '/Patients'
+  };
+}
+
+/**
+ * Navigate to a page via voice command
+ */
+async function navigateCommand(command) {
+  const { page } = command;
+
+  const pageMap = {
+    'calendar': '/Calendar',
+    'patients': '/Patients',
+    'records': '/Records',
+    'settings': '/Settings',
+    'dashboard': '/',
+    'home': '/',
+  };
+
+  const route = pageMap[page?.toLowerCase()];
+
+  if (!route) {
+    return {
+      success: false,
+      message: `I don't know how to open ${page}`
+    };
+  }
+
+  return {
+    success: true,
+    message: `Opening ${page}`,
+    action: 'navigate',
+    navigateTo: route
   };
 }
