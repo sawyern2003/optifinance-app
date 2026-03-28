@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef, useCallback } from "react";
 import { api } from "@/api/api";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
-import { Loader2, Volume2, Sparkles, Check, X } from "lucide-react";
+import { Loader2, Volume2, Check, X } from "lucide-react";
 import { format } from "date-fns";
 import { useToast } from "@/components/ui/use-toast";
 import { createPageUrl } from "@/utils";
@@ -173,6 +173,12 @@ export default function VoiceDiary() {
 
     } catch (error) {
       console.error('Processing error:', error);
+      console.error('Error details:', error.message, error.stack);
+      toast({
+        title: 'Processing error',
+        description: error.message || 'Please try again',
+        variant: 'destructive'
+      });
       await speakAndRespond("Sorry, something went wrong. Please try again.", []);
     } finally {
       setIsProcessing(false);
@@ -180,41 +186,51 @@ export default function VoiceDiary() {
   };
 
   const processConversation = async (userMessage) => {
-    // Call AI to understand intent and respond
-    const { data, error } = await api.integrations.Core._invokeClinicLlm('voice_conversation', {
-      userMessage,
-      currentContext,
-      conversationHistory: conversation.slice(-5),
-      patientNames: patients.map(p => p.name),
-      treatmentNames: treatmentCatalog.map(t => t.treatment_name),
-      todayDate: format(new Date(), 'yyyy-MM-dd'),
-    });
+    try {
+      console.log('Processing conversation:', userMessage);
 
-    if (error) {
+      // Call AI to understand intent and respond
+      const data = await api.integrations.Core._invokeClinicLlm('voice_conversation', {
+        userMessage,
+        currentContext,
+        conversationHistory: conversation.slice(-5),
+        patientNames: patients.map(p => p.name),
+        treatmentNames: treatmentCatalog.map(t => t.treatment_name),
+        todayDate: format(new Date(), 'yyyy-MM-dd'),
+      });
+
+      console.log('AI response data:', data);
+
+      // AI response + action options
+      const aiResponse = data.response || "I'm here to help!";
+      const options = data.actionOptions || [];
+      const context = data.context || null;
+
+      // Add to conversation
+      setConversation(prev => [
+        ...prev,
+        { role: 'user', content: userMessage, timestamp: new Date() },
+        { role: 'assistant', content: aiResponse, timestamp: new Date() }
+      ]);
+
+      // Update context
+      setCurrentContext(context);
+
+      // Show action options
+      setActionOptions(options);
+
+      // Speak response
+      await speak(aiResponse);
+    } catch (error) {
+      console.error('Conversation processing error:', error);
+      console.error('Error details:', error.message, error.stack);
+      toast({
+        title: 'AI error',
+        description: error.message || 'Could not process conversation',
+        variant: 'destructive'
+      });
       await speakAndRespond("I'm having trouble understanding. Could you rephrase that?", []);
-      return;
     }
-
-    // AI response + action options
-    const aiResponse = data.response || "I'm here to help!";
-    const options = data.actionOptions || [];
-    const context = data.context || null;
-
-    // Add to conversation
-    setConversation(prev => [
-      ...prev,
-      { role: 'user', content: userMessage, timestamp: new Date() },
-      { role: 'assistant', content: aiResponse, timestamp: new Date() }
-    ]);
-
-    // Update context
-    setCurrentContext(context);
-
-    // Show action options
-    setActionOptions(options);
-
-    // Speak response
-    await speak(aiResponse);
   };
 
   const speakAndRespond = async (message, options = []) => {
@@ -497,24 +513,19 @@ export default function VoiceDiary() {
   return (
     <div className="min-h-screen bg-gradient-to-b from-white to-gray-50 flex flex-col">
       {/* Header */}
-      <header className="relative flex flex-col items-center text-center pt-12 pb-8">
-        <div className="inline-flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-violet-50 to-blue-50 rounded-full border border-violet-100 mb-6">
-          <Sparkles className="w-4 h-4 text-violet-600" />
-          <span className="text-sm font-medium text-violet-900">AI Assistant</span>
-        </div>
-
-        <h1 className="text-4xl md:text-5xl font-bold tracking-tight text-gray-900 mb-4">
+      <header className="flex shrink-0 flex-col items-center text-center pt-8 pb-6 md:pt-12 md:pb-8">
+        <h1 className="text-3xl md:text-4xl font-semibold tracking-tight text-gray-900 mb-3">
           Voice Diary
         </h1>
-        <p className="text-xl text-gray-500 font-light">
+        <p className="text-lg text-gray-500 font-light">
           {conversation.length === 0 ? "How can I help you today?" : "I'm listening..."}
         </p>
-
+        {/* Back button - top right corner */}
         <Link
           to={createPageUrl("Dashboard")}
-          className="absolute top-8 right-8 px-4 py-2 text-sm font-medium text-gray-700 hover:text-gray-900 transition-colors"
+          className="absolute top-6 right-6 rounded-full border border-gray-200 bg-white px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors"
         >
-          ← Dashboard
+          ← Back
         </Link>
       </header>
 
@@ -543,11 +554,11 @@ export default function VoiceDiary() {
               transform: `scale(${orbScale})`,
               background: 'radial-gradient(ellipse 115% 95% at 50% 8%, #7f91aa 0%, #647b98 20%, #4d647f 56%, #3b4f67 100%)',
               boxShadow: `
-                inset 0 1px 0 rgba(255, 255, 255, 0.2),
-                inset 0 -24px 50px rgba(37, 52, 72, 0.35),
-                inset 0 -8px 20px rgba(37, 52, 72, 0.22),
-                0 0 0 1px rgba(214, 177, 100, ${0.22 + micReactive * 0.22}),
-                0 ${8 + micReactive * 14}px ${34 + micReactive * 40}px -8px rgba(90, 108, 132, ${0.16 + micReactive * 0.16})
+                inset 0 1px 0 rgba(255,255,255,0.2),
+                inset 0 -24px 50px rgba(37,52,72,0.35),
+                inset 0 -8px 20px rgba(37,52,72,0.22),
+                0 0 0 1px rgba(214,177,100,${0.22 + micReactive * 0.22}),
+                0 ${8 + micReactive * 14}px ${34 + micReactive * 40}px -8px rgba(90,108,132,${0.16 + micReactive * 0.16})
               `,
             }}
           >
