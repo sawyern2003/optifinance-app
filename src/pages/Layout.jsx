@@ -2,7 +2,7 @@
 import React, { useState, useEffect } from "react";
 import { Link, useLocation } from "react-router-dom";
 import { createPageUrl } from "@/utils";
-import { LayoutDashboard, Plus, FileText, BarChart3, Settings, LogOut, TrendingUp, MessageSquare, CircleDot, Send, ContactRound, Calendar } from "lucide-react";
+import { LayoutDashboard, Plus, FileText, BarChart3, Settings, LogOut, TrendingUp, MessageSquare, CircleDot, Send, ContactRound, Calendar, Package, Shield } from "lucide-react";
 import { api } from "@/api/api";
 import { FloatingVoiceAssistant } from "@/components/FloatingVoiceAssistant";
 
@@ -56,6 +56,16 @@ const navigationItems = [
     title: "Catalogue",
     url: createPageUrl("Catalogue"),
     icon: Settings,
+  },
+  {
+    title: "Inventory",
+    url: createPageUrl("Inventory"),
+    icon: Package,
+  },
+  {
+    title: "Regulatory",
+    url: createPageUrl("Regulatory"),
+    icon: Shield,
   },
 ];
 

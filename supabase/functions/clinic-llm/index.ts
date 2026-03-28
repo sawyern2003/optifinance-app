@@ -883,6 +883,13 @@ Action types you can use:
 - show_schedule: View calendar
 - send_invoice: Send an invoice to a patient
 - send_reminder: Send payment reminder
+- log_fridge_temp: Log fridge temperature reading
+- check_stock: Check inventory stock levels
+- add_product: Add product to inventory
+- log_product_usage: Record product usage/deduction
+- check_expiry: View expiring products
+- check_equipment: View equipment maintenance status
+- navigate: Navigate to a specific page
 
 Example 1:
 Doctor: "Sarah had Botox today for £300, she paid cash"
@@ -918,6 +925,66 @@ Response: {
     {"label": "View John's History", "action": "show_patient", "data": {"patient": "John"}}
   ],
   "context": {"lastMentionedPatient": "John", "pendingAction": "send_invoice"}
+}
+
+Example 4:
+Doctor: "Log fridge temperature 5 degrees"
+Response: {
+  "response": "Perfect! I'll log the fridge temperature as 5°C. Is this the morning or afternoon reading?",
+  "actionOptions": [
+    {"label": "Log as AM Reading", "action": "log_fridge_temp", "data": {"temperature": 5, "time_of_day": "am"}},
+    {"label": "Log as PM Reading", "action": "log_fridge_temp", "data": {"temperature": 5, "time_of_day": "pm"}},
+    {"label": "View Temperature Log", "action": "navigate", "data": {"page": "regulatory"}}
+  ],
+  "context": {"pendingAction": "log_temperature"}
+}
+
+Example 5:
+Doctor: "How much Juvederm do we have left?"
+Response: {
+  "response": "Let me check your Juvederm inventory levels for you.",
+  "actionOptions": [
+    {"label": "Check Juvederm Stock", "action": "check_stock", "data": {"product": "Juvederm"}},
+    {"label": "View All Inventory", "action": "navigate", "data": {"page": "inventory"}},
+    {"label": "Check Expiring Items", "action": "check_expiry", "data": {}}
+  ],
+  "context": {"pendingAction": "check_inventory"}
+}
+
+Example 6:
+Doctor: "Add 10 vials of Botox to inventory"
+Response: {
+  "response": "I'll add 10 vials of Botox to your inventory. Should I also record the cost and supplier?",
+  "actionOptions": [
+    {"label": "Add to Inventory", "action": "add_product", "data": {"name": "Botox", "quantity": 10, "unit": "vials"}},
+    {"label": "Add with Details", "action": "navigate", "data": {"page": "inventory"}},
+    {"label": "View Current Stock", "action": "check_stock", "data": {"product": "Botox"}}
+  ],
+  "context": {"pendingAction": "add_inventory"}
+}
+
+Example 7:
+Doctor: "What's expiring this month?"
+Response: {
+  "response": "I'll check which products are expiring within the next 30 days.",
+  "actionOptions": [
+    {"label": "Show Expiring Products", "action": "check_expiry", "data": {}},
+    {"label": "View Inventory", "action": "navigate", "data": {"page": "inventory"}},
+    {"label": "Check Low Stock", "action": "check_stock", "data": {}}
+  ],
+  "context": {"pendingAction": "check_expiry"}
+}
+
+Example 8:
+Doctor: "Check laser machine maintenance"
+Response: {
+  "response": "I'll check the maintenance status of your laser equipment.",
+  "actionOptions": [
+    {"label": "View Equipment Status", "action": "check_equipment", "data": {"type": "laser"}},
+    {"label": "View All Equipment", "action": "navigate", "data": {"page": "regulatory"}},
+    {"label": "Log Service Record", "action": "navigate", "data": {"page": "regulatory", "tab": "equipment"}}
+  ],
+  "context": {"pendingAction": "check_equipment"}
 }
 
 Now respond to: "${userMessage}"`;

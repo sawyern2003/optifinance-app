@@ -25,6 +25,7 @@ export default function VoiceDiary() {
   const [activityFeed, setActivityFeed] = useState([]);
   const [completedAction, setCompletedAction] = useState(null);
   const [inConversation, setInConversation] = useState(false);
+  const [actionOptions, setActionOptions] = useState([]);
 
   // Patient notes mode
   const [notesMode, setNotesMode] = useState(false);
@@ -133,6 +134,95 @@ export default function VoiceDiary() {
     audioContextRef.current = null;
     setPulseLevel(0);
   }, []);
+
+  const handleAction = async (action) => {
+    try {
+      const actionType = action.action;
+      const data = action.data || {};
+
+      switch (actionType) {
+        case 'log_fridge_temp':
+          await api.entities.FridgeTemperature.create({
+            temperature: data.temperature,
+            time_of_day: data.time_of_day || 'am',
+            notes: data.notes || '',
+            logged_at: new Date().toISOString(),
+          });
+          toast({
+            title: "Temperature logged",
+            description: `Fridge temperature recorded: ${data.temperature}°C`,
+          });
+          queryClient.invalidateQueries(['fridge-temps']);
+          break;
+
+        case 'check_stock':
+          navigate('/Inventory');
+          break;
+
+        case 'add_product':
+          // Navigate to inventory and auto-open add modal
+          navigate('/Inventory');
+          toast({
+            title: "Opening inventory",
+            description: "Add your product details",
+          });
+          break;
+
+        case 'check_expiry':
+          navigate('/Inventory');
+          break;
+
+        case 'check_equipment':
+          navigate('/Regulatory');
+          break;
+
+        case 'navigate':
+          if (data.page) {
+            const pageMap = {
+              'dashboard': '/Dashboard',
+              'inventory': '/Inventory',
+              'regulatory': '/Regulatory',
+              'records': '/Records',
+              'calendar': '/Calendar',
+              'patients': '/PatientCards',
+            };
+            navigate(pageMap[data.page] || '/Dashboard');
+          }
+          break;
+
+        case 'create_treatment':
+          // Could implement auto-fill treatment form here
+          toast({
+            title: "Creating treatment",
+            description: "Opening quick add...",
+          });
+          navigate('/QuickAdd');
+          break;
+
+        case 'create_invoice':
+          toast({
+            title: "Feature coming soon",
+            description: "Invoice creation will be implemented",
+          });
+          break;
+
+        default:
+          toast({
+            title: "Action triggered",
+            description: action.label || 'Processing...',
+          });
+      }
+
+      setActionOptions([]); // Clear actions after handling
+    } catch (error) {
+      console.error('Action error:', error);
+      toast({
+        title: "Action failed",
+        description: error.message,
+        variant: "destructive",
+      });
+    }
+  };
 
   const startListening = async () => {
     try {
@@ -290,8 +380,10 @@ export default function VoiceDiary() {
       });
 
       const aiResponse = data.response || "I'm here to help!";
+      const actions = data.actionOptions || [];
 
       setParsedIntent(aiResponse);
+      setActionOptions(actions);
 
       const activityEntry = {
         id: Date.now(),
@@ -914,9 +1006,9 @@ export default function VoiceDiary() {
             {isSpeaking && !isListening && !isProcessing && (
               <div className="absolute -bottom-[140px] left-1/2 -translate-x-1/2 w-[600px] px-8">
                 {/* Show the AI response text */}
-                {completedAction && (
+                {parsedIntent && (
                   <p className="text-white/70 text-base font-light mb-6 text-center whitespace-normal break-words">
-                    {completedAction.message}
+                    {parsedIntent}
                   </p>
                 )}
 
@@ -947,6 +1039,24 @@ export default function VoiceDiary() {
                   </span>
                 </div>
                 <p className="text-white/70 text-base font-light mb-6 whitespace-normal break-words">{completedAction.message}</p>
+
+                {/* Action Options */}
+                {actionOptions.length > 0 && (
+                  <div className="flex flex-wrap gap-3 justify-center mb-6">
+                    {actionOptions.map((option, idx) => (
+                      <button
+                        key={idx}
+                        onClick={() => handleAction(option)}
+                        className="px-6 py-3 rounded-full bg-[#d6b164]/20 backdrop-blur-xl border border-[#d6b164]/30 hover:bg-[#d6b164]/30 hover:border-[#d6b164]/50 transition-all duration-300"
+                      >
+                        <span className="text-[#d6b164] text-sm font-light tracking-wider">
+                          {option.label}
+                        </span>
+                      </button>
+                    ))}
+                  </div>
+                )}
+
                 {notesMode ? (
                   <div className="flex gap-4 justify-center">
                     <button
