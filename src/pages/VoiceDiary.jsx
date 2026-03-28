@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef, useCallback } from "react";
 import { api } from "@/api/api";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { Loader2, Volume2, Check, X, Mic, AlertCircle, Undo2 } from "lucide-react";
+import { Loader2, Volume2, Check, X, AlertCircle, Undo2, ArrowLeft } from "lucide-react";
 import { format } from "date-fns";
 import { useToast } from "@/components/ui/use-toast";
 import { createPageUrl } from "@/utils";
@@ -9,8 +9,7 @@ import { Link, useNavigate } from "react-router-dom";
 import { useElevenLabs } from '@/hooks/useElevenLabs';
 
 /**
- * Voice Command Center - Professional clinic command interface
- * Not a chatbot - a voice-controlled ERP for clinicians
+ * Voice Command Center - Professional clinical interface
  */
 export default function VoiceDiary() {
   const { toast } = useToast();
@@ -351,44 +350,44 @@ export default function VoiceDiary() {
   };
 
   return (
-    <div className="min-h-screen bg-gray-50">
-      {/* TOP BAR */}
-      <div className="bg-white border-b border-gray-200 px-6 py-4">
-        <div className="max-w-7xl mx-auto flex items-center justify-between">
-          <Link to={createPageUrl("Dashboard")} className="text-lg font-semibold text-[#2f415a]">
-            OptiFinance
+    <div className="min-h-screen bg-[#fafbfc]">
+      {/* Minimal Top Bar - No Branding */}
+      <div className="border-b border-gray-100 bg-white">
+        <div className="max-w-7xl mx-auto px-8 py-4 flex items-center justify-between">
+          <Link to={createPageUrl("Dashboard")} className="text-gray-400 hover:text-gray-600 transition">
+            <ArrowLeft className="w-5 h-5" />
           </Link>
-          <div className="flex items-center gap-8 text-sm text-[#2f415a]">
-            <div>
-              <span className="text-gray-500">Today:</span>{' '}
-              <span className="font-medium">{todayTreatments.length} patients</span>
+          <div className="flex items-center gap-12 text-sm">
+            <div className="flex items-baseline gap-2">
+              <span className="text-xs uppercase tracking-wide text-gray-400">Today</span>
+              <span className="text-lg font-light text-gray-900">{todayTreatments.length}</span>
             </div>
-            <div>
-              <span className="text-gray-500">Revenue:</span>{' '}
-              <span className="font-medium">£{todayRevenue.toFixed(2)}</span>
+            <div className="flex items-baseline gap-2">
+              <span className="text-xs uppercase tracking-wide text-gray-400">Revenue</span>
+              <span className="text-lg font-light text-gray-900">£{todayRevenue.toFixed(0)}</span>
             </div>
-            <div>
-              <span className="text-gray-500">Pending:</span>{' '}
-              <span className="font-medium">{pendingInvoices} invoices</span>
+            <div className="flex items-baseline gap-2">
+              <span className="text-xs uppercase tracking-wide text-gray-400">Pending</span>
+              <span className="text-lg font-light text-gray-900">{pendingInvoices}</span>
             </div>
           </div>
         </div>
       </div>
 
-      {/* MAIN CONTENT */}
-      <div className="max-w-7xl mx-auto px-6 py-8">
-        <div className="grid grid-cols-1 lg:grid-cols-5 gap-6">
-          {/* LEFT COLUMN: Voice Command Panel */}
-          <div className="lg:col-span-2">
-            <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-8 relative">
-              {/* Conversation Mode Indicator */}
+      {/* Main Content */}
+      <div className="max-w-7xl mx-auto px-8 py-16">
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-12">
+          {/* Voice Interface - Left */}
+          <div className="lg:col-span-5">
+            <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-12 relative">
+              {/* Conversation Indicator */}
               {inConversation && (
-                <div className="absolute top-4 right-4 flex items-center gap-2 bg-green-50 border border-green-200 px-3 py-1.5 rounded-lg">
-                  <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse" />
-                  <span className="text-xs font-medium text-green-700">In Conversation</span>
+                <div className="absolute top-6 right-6 flex items-center gap-2">
+                  <div className="w-1.5 h-1.5 bg-emerald-500 rounded-full animate-pulse" />
+                  <span className="text-xs tracking-wide uppercase text-gray-500">Active</span>
                   <button
                     onClick={endConversation}
-                    className="ml-2 text-xs text-green-600 hover:text-green-800 font-medium underline"
+                    className="ml-3 text-xs tracking-wide uppercase text-gray-400 hover:text-gray-600 transition"
                   >
                     End
                   </button>
@@ -398,15 +397,11 @@ export default function VoiceDiary() {
               {/* IDLE STATE */}
               {!isListening && !isProcessing && !completedAction && (
                 <div className="text-center">
-                  <p className="text-lg text-[#2f415a] font-medium mb-8">
-                    What would you like to do?
-                  </p>
-
-                  {/* ORBED */}
-                  <div className="relative w-64 h-64 md:w-72 md:h-72 flex items-center justify-center mx-auto mb-8">
-                    {/* Warm gold aura */}
+                  {/* Orb */}
+                  <div className="relative w-80 h-80 flex items-center justify-center mx-auto mb-12">
+                    {/* Gold aura */}
                     <div
-                      className="pointer-events-none absolute rounded-full bg-[#d6b164] blur-[52px] md:blur-[72px]"
+                      className="pointer-events-none absolute rounded-full bg-[#d6b164] blur-[80px]"
                       style={{ inset: "-26%" }}
                       aria-hidden
                     />
@@ -444,19 +439,18 @@ export default function VoiceDiary() {
                       aria-hidden
                     />
 
-                    {/* Center button */}
+                    {/* Clickable orb - no button visible */}
                     <button
                       type="button"
                       onClick={startConversation}
                       disabled={isSpeaking}
-                      className="relative z-10 rounded-full bg-gradient-to-b from-[#e8dfd1] via-[#d8cbb7] to-[#c7b79d] p-5 shadow-[0_4px_18px_rgba(35,50,72,0.2),inset_0_1px_0_rgba(255,255,255,0.45)] transition hover:from-[#ece3d6] hover:via-[#ddd0bd] hover:to-[#cdbda4] active:scale-[0.98] disabled:pointer-events-none disabled:opacity-45"
-                    >
-                      <Mic className="w-8 h-8 text-[#2f415a]" />
-                    </button>
+                      className="absolute inset-0 rounded-full cursor-pointer disabled:cursor-not-allowed disabled:opacity-60"
+                      aria-label="Start voice command"
+                    />
                   </div>
 
-                  <p className="text-sm text-gray-500">
-                    Try: "Send all pending invoices"
+                  <p className="text-sm text-gray-400 tracking-wide">
+                    Click to begin
                   </p>
                 </div>
               )}
@@ -464,16 +458,16 @@ export default function VoiceDiary() {
               {/* LISTENING STATE */}
               {isListening && (
                 <div className="text-center">
-                  <div className="flex items-center justify-center gap-2 mb-4 text-red-600">
-                    <div className="w-3 h-3 rounded-full bg-red-600 animate-pulse" />
-                    <span className="font-medium">Recording</span>
+                  <div className="flex items-center justify-center gap-2 mb-8">
+                    <div className="w-1.5 h-1.5 rounded-full bg-red-500 animate-pulse" />
+                    <span className="text-xs uppercase tracking-wide text-gray-500">Listening</span>
                   </div>
 
-                  {/* ORB WITH RECORDING STATE */}
-                  <div className="relative w-64 h-64 md:w-72 md:h-72 flex items-center justify-center mx-auto mb-6" style={{ transform: `scale(${orbScale})`, transition: 'transform 0.1s ease-out' }}>
+                  {/* Orb with audio reaction */}
+                  <div className="relative w-80 h-80 flex items-center justify-center mx-auto mb-12" style={{ transform: `scale(${orbScale})`, transition: 'transform 0.1s ease-out' }}>
                     {/* Pulsing gold aura */}
                     <div
-                      className="pointer-events-none absolute rounded-full bg-[#d6b164] blur-[52px] md:blur-[72px]"
+                      className="pointer-events-none absolute rounded-full bg-[#d6b164] blur-[80px]"
                       style={{ inset: "-26%", opacity: goldGlowOpacity, transition: 'opacity 0.09s ease-out' }}
                       aria-hidden
                     />
@@ -513,56 +507,52 @@ export default function VoiceDiary() {
                       aria-hidden
                     />
 
-                    {/* Center button */}
+                    {/* Stop button overlay */}
                     <button
                       type="button"
                       onClick={stopListening}
-                      className="relative z-10 rounded-full bg-gradient-to-b from-[#e8dfd1] via-[#d8cbb7] to-[#c7b79d] p-5 shadow-[0_4px_18px_rgba(35,50,72,0.2),inset_0_1px_0_rgba(255,255,255,0.45)] transition hover:from-[#ece3d6] hover:via-[#ddd0bd] hover:to-[#cdbda4] active:scale-[0.98]"
-                    >
-                      <div className="w-8 h-8 rounded-sm bg-red-500" />
-                    </button>
+                      className="absolute inset-0 rounded-full cursor-pointer"
+                      aria-label="Stop recording"
+                    />
                   </div>
 
-                  {/* Waveform below orb */}
-                  <div className="mb-4">
-                    {liveTranscript ? (
-                      <p className="text-base text-[#2f415a]">"{liveTranscript}"</p>
-                    ) : (
-                      <div className="flex items-center justify-center gap-1 h-12">
-                        {Array.from({ length: 20 }).map((_, i) => (
-                          <div
-                            key={i}
-                            className="w-1 bg-gradient-to-t from-[#d6b164] to-[#b89a52] rounded-full transition-all duration-100"
-                            style={{
-                              height: `${Math.max(4, 12 + pulseLevel * 32 + Math.sin((i / 20) * Math.PI * 2) * 8)}px`,
-                              opacity: 0.6 + pulseLevel * 0.4,
-                            }}
-                          />
-                        ))}
-                      </div>
-                    )}
-                  </div>
+                  {/* Waveform */}
+                  {!liveTranscript && (
+                    <div className="flex items-center justify-center gap-1 h-16 mb-4">
+                      {Array.from({ length: 24 }).map((_, i) => (
+                        <div
+                          key={i}
+                          className="w-0.5 bg-gradient-to-t from-[#d6b164] to-[#b89a52] rounded-full transition-all duration-100"
+                          style={{
+                            height: `${Math.max(4, 16 + pulseLevel * 32 + Math.sin((i / 24) * Math.PI * 2) * 8)}px`,
+                            opacity: 0.5 + pulseLevel * 0.5,
+                          }}
+                        />
+                      ))}
+                    </div>
+                  )}
+
+                  {liveTranscript && (
+                    <p className="text-base text-gray-600 font-light">"{liveTranscript}"</p>
+                  )}
                 </div>
               )}
 
               {/* PROCESSING STATE */}
               {isProcessing && (
                 <div className="text-center">
-                  <div className="flex items-center justify-center gap-2 mb-4 text-[#2f415a]">
-                    <Loader2 className="w-5 h-5 animate-spin" />
-                    <span className="font-medium">Processing</span>
+                  <div className="flex items-center justify-center gap-2 mb-8">
+                    <Loader2 className="w-4 h-4 animate-spin text-gray-400" />
+                    <span className="text-xs uppercase tracking-wide text-gray-500">Processing</span>
                   </div>
 
-                  {/* ORB WITH PROCESSING STATE */}
-                  <div className="relative w-64 h-64 md:w-72 md:h-72 flex items-center justify-center mx-auto mb-6">
-                    {/* Gentle gold aura */}
+                  {/* Static orb */}
+                  <div className="relative w-80 h-80 flex items-center justify-center mx-auto mb-12">
                     <div
-                      className="pointer-events-none absolute rounded-full bg-[#d6b164] blur-[52px] md:blur-[72px]"
+                      className="pointer-events-none absolute rounded-full bg-[#d6b164] blur-[80px]"
                       style={{ inset: "-26%", opacity: 0.3 }}
                       aria-hidden
                     />
-
-                    {/* Main blue sphere */}
                     <div
                       className="pointer-events-none absolute inset-[5%] rounded-full"
                       style={{
@@ -578,14 +568,10 @@ export default function VoiceDiary() {
                       }}
                       aria-hidden
                     />
-
-                    {/* Soft highlight */}
                     <div
                       className="pointer-events-none absolute inset-[5%] rounded-full bg-[radial-gradient(circle_at_35%_22%,rgba(245,249,255,0.22),transparent_48%)]"
                       aria-hidden
                     />
-
-                    {/* Inner ring */}
                     <div
                       className="pointer-events-none absolute inset-[10%] rounded-full border border-[#c7b79d]/45"
                       style={{
@@ -594,88 +580,65 @@ export default function VoiceDiary() {
                       }}
                       aria-hidden
                     />
-
-                    {/* Center - spinner */}
-                    <div className="relative z-10">
-                      <Loader2 className="w-12 h-12 text-[#c7b79d] animate-spin" />
-                    </div>
                   </div>
 
                   {finalTranscript && (
-                    <div className="mb-4 p-4 bg-gray-50 rounded-lg text-left">
-                      <p className="text-xs font-medium text-gray-500 mb-1">You said:</p>
-                      <p className="text-sm text-[#2f415a]">"{finalTranscript}"</p>
+                    <div className="mb-6">
+                      <p className="text-xs uppercase tracking-wide text-gray-400 mb-2">You said</p>
+                      <p className="text-sm text-gray-600 font-light">"{finalTranscript}"</p>
                     </div>
                   )}
 
                   {parsedIntent && (
-                    <div className="mb-4 p-4 bg-gray-50 rounded-lg text-left">
-                      <p className="text-xs font-medium text-gray-500 mb-1">Understanding:</p>
-                      <p className="text-sm text-[#2f415a]">{parsedIntent}</p>
-                    </div>
+                    <p className="text-sm text-gray-500 font-light">{parsedIntent}</p>
                   )}
-
-                  <div className="w-full h-2 bg-gray-100 rounded-full overflow-hidden">
-                    <div
-                      className="h-full bg-[#c7b79d] transition-all duration-300"
-                      style={{ width: `${isProcessing ? '70%' : '100%'}` }}
-                    />
-                  </div>
                 </div>
               )}
 
               {/* COMPLETED STATE */}
               {completedAction && !isProcessing && (
                 <div className="text-center">
-                  <div className="flex items-center justify-center gap-2 mb-4">
+                  <div className="flex items-center justify-center gap-2 mb-8">
                     {completedAction.success ? (
                       <>
-                        <Check className="w-5 h-5 text-[#4a6b5c]" />
-                        <span className="font-medium text-[#4a6b5c]">Completed</span>
+                        <Check className="w-4 h-4 text-emerald-600" />
+                        <span className="text-xs uppercase tracking-wide text-gray-500">Complete</span>
                       </>
                     ) : (
                       <>
-                        <AlertCircle className="w-5 h-5 text-[#c7925e]" />
-                        <span className="font-medium text-[#c7925e]">Error</span>
+                        <AlertCircle className="w-4 h-4 text-amber-600" />
+                        <span className="text-xs uppercase tracking-wide text-gray-500">Error</span>
                       </>
                     )}
                   </div>
 
-                  <div className="mb-6 p-4 bg-gray-50 rounded-lg text-left">
-                    <p className="text-sm text-[#2f415a]">{completedAction.message}</p>
+                  <div className="mb-8">
+                    <p className="text-sm text-gray-600 font-light">{completedAction.message}</p>
                   </div>
 
-                  <div className="flex gap-3 justify-center">
+                  {!inConversation && (
                     <button
                       onClick={() => {
                         setCompletedAction(null);
                         setFinalTranscript('');
                         setParsedIntent('');
                       }}
-                      className="px-6 py-2 bg-[#e8dfd1] text-[#2f415a] rounded-lg font-medium hover:bg-[#ddd0bd] transition"
+                      className="text-sm text-gray-400 hover:text-gray-600 transition uppercase tracking-wide"
                     >
-                      Done
+                      Close
                     </button>
-                    {completedAction.success && (
-                      <button
-                        className="px-6 py-2 border border-gray-300 text-[#2f415a] rounded-lg font-medium hover:bg-gray-50 transition flex items-center gap-2"
-                      >
-                        <Undo2 className="w-4 h-4" />
-                        Undo
-                      </button>
-                    )}
-                  </div>
+                  )}
                 </div>
               )}
 
               {/* AI Speaking Indicator */}
               {isSpeaking && (
-                <div className="mt-6 p-4 bg-[#f8f6f3] rounded-lg">
-                  <div className="flex items-center gap-2 mb-2">
-                    <Volume2 className="w-4 h-4 text-[#c7925e] animate-pulse" />
-                    <span className="text-sm font-medium text-[#c7925e]">AI Speaking</span>
+                <div className="mt-8 pt-8 border-t border-gray-100">
+                  <div className="flex items-center gap-2 mb-3">
+                    <Volume2 className="w-4 h-4 text-gray-400 animate-pulse" />
+                    <span className="text-xs uppercase tracking-wide text-gray-400">Speaking</span>
                   </div>
-                  <div className="w-full h-1 bg-gray-200 rounded-full overflow-hidden">
+                  <div className="w-full h-px bg-gray-100 rounded-full overflow-hidden">
                     <div
                       className="h-full bg-[#c7b79d] transition-all duration-100"
                       style={{ width: `${progress * 100}%` }}
@@ -686,51 +649,40 @@ export default function VoiceDiary() {
             </div>
           </div>
 
-          {/* RIGHT COLUMN: Activity Feed */}
-          <div className="lg:col-span-3">
-            <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
-              <h2 className="text-lg font-semibold text-[#2f415a] mb-6">ACTIVITY</h2>
+          {/* Activity Log - Right */}
+          <div className="lg:col-span-7">
+            <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-12">
+              <h2 className="text-xs uppercase tracking-wide text-gray-400 mb-8">Activity</h2>
 
               {activityFeed.length === 0 ? (
-                <div className="text-center py-12 text-gray-500">
-                  <p className="text-sm">No activity yet</p>
-                  <p className="text-xs mt-1">Commands will appear here</p>
+                <div className="text-center py-24 text-gray-300">
+                  <p className="text-sm font-light">No commands yet</p>
                 </div>
               ) : (
-                <div className="space-y-4">
+                <div className="space-y-6">
                   {activityFeed.map((entry) => (
                     <div
                       key={entry.id}
-                      className="pb-4 border-b border-gray-100 last:border-0"
+                      className="pb-6 border-b border-gray-50 last:border-0"
                     >
                       <div className="flex items-start justify-between gap-4">
-                        <div className="flex items-start gap-3 flex-1">
+                        <div className="flex items-start gap-4 flex-1">
                           {entry.success ? (
-                            <Check className="w-5 h-5 text-[#4a6b5c] flex-shrink-0 mt-0.5" />
+                            <Check className="w-4 h-4 text-emerald-600 flex-shrink-0 mt-1" />
                           ) : (
-                            <AlertCircle className="w-5 h-5 text-[#c7925e] flex-shrink-0 mt-0.5" />
+                            <AlertCircle className="w-4 h-4 text-amber-600 flex-shrink-0 mt-1" />
                           )}
                           <div className="flex-1 min-w-0">
-                            <div className="flex items-center gap-2 mb-1">
-                              <span className="text-xs text-gray-500">
+                            <div className="flex items-baseline gap-3 mb-2">
+                              <span className="text-xs text-gray-400">
                                 {format(entry.timestamp, 'HH:mm')}
                               </span>
-                              <span className={`text-sm font-medium ${entry.success ? 'text-[#2f415a]' : 'text-[#c7925e]'}`}>
+                              <span className="text-sm text-gray-900 font-light">
                                 {entry.action}
                               </span>
                             </div>
-                            <p className="text-sm text-gray-600">{entry.result}</p>
+                            <p className="text-sm text-gray-500 font-light">{entry.result}</p>
                           </div>
-                        </div>
-                        <div className="flex gap-2">
-                          <button className="text-xs text-gray-500 hover:text-[#2f415a] font-medium">
-                            View
-                          </button>
-                          {entry.success && (
-                            <button className="text-xs text-gray-500 hover:text-[#2f415a] font-medium">
-                              Undo
-                            </button>
-                          )}
                         </div>
                       </div>
                     </div>
@@ -738,33 +690,30 @@ export default function VoiceDiary() {
                 </div>
               )}
             </div>
-          </div>
-        </div>
 
-        {/* BOTTOM: Quick Commands */}
-        <div className="mt-8">
-          <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
-            <h3 className="text-sm font-semibold text-gray-500 uppercase tracking-wide mb-4">
-              QUICK COMMANDS
-            </h3>
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-              {[
-                { icon: '📋', label: 'Finish Clinic', desc: `${pendingInvoices} tasks` },
-                { icon: '💷', label: 'Send Invoices', desc: `${pendingInvoices} pending` },
-                { icon: '👥', label: 'Follow-ups', desc: 'Schedule' },
-                { icon: '❓', label: "Who Hasn't Paid", desc: 'Check status' },
-              ].map((cmd, idx) => (
-                <button
-                  key={idx}
-                  onClick={() => processSuggestion(cmd.label)}
-                  disabled={isProcessing || isListening || isSpeaking}
-                  className="p-4 bg-gray-50 border border-gray-200 rounded-lg hover:border-[#c7b79d] hover:shadow-md transition-all text-left disabled:opacity-50 disabled:cursor-not-allowed"
-                >
-                  <div className="text-2xl mb-2">{cmd.icon}</div>
-                  <div className="text-sm font-medium text-[#2f415a]">{cmd.label}</div>
-                  <div className="text-xs text-gray-500 mt-1">{cmd.desc}</div>
-                </button>
-              ))}
+            {/* Quick Actions */}
+            <div className="mt-8 bg-white rounded-2xl shadow-sm border border-gray-100 p-8">
+              <h3 className="text-xs uppercase tracking-wide text-gray-400 mb-6">
+                Quick Actions
+              </h3>
+              <div className="grid grid-cols-2 gap-4">
+                {[
+                  { label: 'Send All Invoices', sublabel: `${pendingInvoices} pending` },
+                  { label: 'Schedule Follow-ups', sublabel: 'Review patients' },
+                  { label: 'Outstanding Payments', sublabel: 'Check status' },
+                  { label: 'End of Day Report', sublabel: 'Generate summary' },
+                ].map((cmd, idx) => (
+                  <button
+                    key={idx}
+                    onClick={() => processSuggestion(cmd.label)}
+                    disabled={isProcessing || isListening || isSpeaking}
+                    className="p-5 text-left border border-gray-100 rounded-xl hover:border-gray-200 hover:shadow-sm transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    <div className="text-sm text-gray-900 font-light mb-1">{cmd.label}</div>
+                    <div className="text-xs text-gray-400">{cmd.sublabel}</div>
+                  </button>
+                ))}
+              </div>
             </div>
           </div>
         </div>
