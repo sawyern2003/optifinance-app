@@ -39,8 +39,8 @@ const navigationItems = [
     icon: Send,
   },
   {
-    title: "Pricing",
-    url: createPageUrl("Pricing"),
+    title: "Business Intelligence",
+    url: createPageUrl("BusinessIntelligence"),
     icon: TrendingUp,
   },
   {

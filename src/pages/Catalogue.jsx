@@ -529,81 +529,270 @@ export default function Catalogue() {
     return ((price - cost) / price * 100).toFixed(0);
   };
 
+  const { data: user } = useQuery({
+    queryKey: ['currentUser'],
+    queryFn: () => api.auth.me(),
+    initialData: null,
+  });
+
+  // Group treatments by category and sort alphabetically within each category
+  const groupedTreatmentsCatalog = treatments.reduce((acc, treatment) => {
+    const category = treatment.category || 'Other';
+    if (!acc[category]) {
+      acc[category] = [];
+    }
+    acc[category].push(treatment);
+    return acc;
+  }, {});
+
+  // Sort treatments alphabetically within each category
+  Object.keys(groupedTreatmentsCatalog).forEach(category => {
+    groupedTreatmentsCatalog[category].sort((a, b) =>
+      a.treatment_name.localeCompare(b.treatment_name)
+    );
+  });
+
+  // Sort categories alphabetically
+  const sortedCategoriesCatalog = Object.keys(groupedTreatmentsCatalog).sort();
+
+  const downloadPriceList = async () => {
+    const clinicName = user?.clinic_name || 'OptiFinance Clinic';
+
+    const htmlContent = `
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <title>Price List - ${clinicName}</title>
+        <style>
+          @media print {
+            body { margin: 0; }
+            .no-print { display: none; }
+          }
+          body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Arial, sans-serif;
+            padding: 60px;
+            color: #1e293b;
+            line-height: 1.6;
+            max-width: 800px;
+            margin: 0 auto;
+          }
+          .header {
+            text-align: center;
+            margin-bottom: 50px;
+            padding-bottom: 30px;
+            border-bottom: 3px solid #2C3E50;
+          }
+          .header h1 {
+            color: #2C3E50;
+            font-size: 32px;
+            margin: 0 0 10px 0;
+          }
+          .header p {
+            color: #64748b;
+            margin: 4px 0;
+          }
+          .category-section {
+            margin: 40px 0;
+          }
+          .category-title {
+            font-size: 24px;
+            font-weight: 700;
+            color: #2C3E50;
+            margin: 0 0 20px 0;
+            padding-bottom: 10px;
+            border-bottom: 2px solid #e2e8f0;
+          }
+          .treatment-item {
+            display: flex;
+            justify-content: space-between;
+            padding: 15px 0;
+            border-bottom: 1px solid #f1f5f9;
+          }
+          .treatment-name {
+            font-weight: 600;
+            color: #1e293b;
+          }
+          .treatment-duration {
+            color: #64748b;
+            font-size: 14px;
+            margin-top: 4px;
+          }
+          .treatment-price {
+            font-size: 20px;
+            font-weight: 700;
+            color: #2C3E50;
+          }
+          .footer {
+            margin-top: 60px;
+            padding-top: 30px;
+            border-top: 1px solid #e2e8f0;
+            text-align: center;
+            color: #64748b;
+            font-size: 12px;
+          }
+          .print-button {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            padding: 12px 24px;
+            background: #2C3E50;
+            color: white;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 14px;
+            font-weight: 600;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.15);
+            z-index: 1000;
+          }
+          .print-button:hover {
+            background: #34495E;
+          }
+        </style>
+      </head>
+      <body>
+        <button class="print-button no-print" onclick="window.print()">Print / Save as PDF</button>
+
+        <div class="header">
+          <h1>${clinicName}</h1>
+          <p>Treatment Price List</p>
+          <p>Updated: ${format(new Date(), 'dd MMMM yyyy')}</p>
+        </div>
+
+        ${sortedCategoriesCatalog.map(category => `
+          <div class="category-section">
+            <h2 class="category-title">${category}</h2>
+            ${groupedTreatmentsCatalog[category].map(treatment => `
+              <div class="treatment-item">
+                <div>
+                  <div class="treatment-name">${treatment.treatment_name}</div>
+                  ${treatment.duration_minutes || treatment.default_duration_minutes ? `<div class="treatment-duration">${treatment.duration_minutes || treatment.default_duration_minutes} minutes</div>` : ''}
+                </div>
+                <div class="treatment-price">£${treatment.default_price.toFixed(2)}</div>
+              </div>
+            `).join('')}
+          </div>
+        `).join('')}
+
+        <div class="footer">
+          <p>All prices are subject to consultation and may vary based on individual requirements.</p>
+          <p>${clinicName} • ${format(new Date(), 'yyyy')}</p>
+        </div>
+
+        <script>
+          window.onload = function() {
+            setTimeout(function() {
+              window.print();
+            }, 500);
+          };
+        </script>
+      </body>
+      </html>
+    `;
+
+    const printWindow = window.open('', '_blank');
+    printWindow.document.write(htmlContent);
+    printWindow.document.close();
+
+    toast({
+      title: "Price list opened",
+      description: "Use your browser's print dialog to save as PDF",
+      className: "bg-green-50 border-green-200"
+    });
+  };
+
   return (
-    <div className="p-6 md:p-10 bg-[#F5F6F8] min-h-screen">
-      <div className="max-w-7xl mx-auto">
+    <div className="min-h-screen relative overflow-hidden p-6" style={{ background: 'linear-gradient(135deg, #0a0e1a 0%, #1a1f35 50%, #0f1419 100%)' }}>
+      {/* Ambient glow */}
+      <div className="absolute top-0 right-1/4 w-96 h-96 bg-[#d6b164]/10 rounded-full blur-[120px] pointer-events-none" />
+
+      <div className="max-w-7xl mx-auto relative">
         <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-8 gap-4">
           <div>
-            <h1 className="text-3xl font-light tracking-tight text-[#1a2845] mb-2">Clinic Management</h1>
-            <p className="text-sm text-gray-500 font-light">Manage your treatments, practitioners, and patients</p>
+            <h1 className="text-5xl font-light tracking-wider text-white/90 mb-3">Clinic Management</h1>
+            <p className="text-lg font-light text-white/60">Manage your treatments, practitioners, and patients</p>
           </div>
         </div>
 
         {/* Tabs */}
-        <div className="bg-white rounded-2xl shadow-sm border border-gray-100 mb-6">
-          <div className="border-b border-gray-100 p-6 pb-0">
-            <div className="flex gap-2">
-              <button
-                onClick={() => setActiveTab("treatments")}
-                className={`flex items-center gap-2 px-6 py-3 rounded-t-xl font-medium transition-colors ${
-                  activeTab === "treatments"
-                    ? 'bg-[#2C3E50] text-white'
-                    : 'text-gray-600 hover:text-gray-900'
-                }`}
-              >
-                <Sparkles className="w-5 h-5" />
-                Treatments
-              </button>
-              <button
-                onClick={() => setActiveTab("practitioners")}
-                className={`flex items-center gap-2 px-6 py-3 rounded-t-xl font-medium transition-colors ${
-                  activeTab === "practitioners"
-                    ? 'bg-[#2C3E50] text-white'
-                    : 'text-gray-600 hover:text-gray-900'
-                }`}
-              >
-                <UserCog className="w-5 h-5" />
-                Practitioners
-              </button>
-              <button
-                onClick={() => setActiveTab("patients")}
-                className={`flex items-center gap-2 px-6 py-3 rounded-t-xl font-medium transition-colors ${
-                  activeTab === "patients"
-                    ? 'bg-[#2C3E50] text-white'
-                    : 'text-gray-600 hover:text-gray-900'
-                }`}
-              >
-                <Users className="w-5 h-5" />
-                Patients
-              </button>
-              <button
-                onClick={() => setActiveTab("recurring")}
-                className={`flex items-center gap-2 px-6 py-3 rounded-t-xl font-medium transition-colors ${
-                  activeTab === "recurring"
-                    ? 'bg-[#2C3E50] text-white'
-                    : 'text-gray-600 hover:text-gray-900'
-                }`}
-              >
-                <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-                </svg>
-                Recurring Expenses
-              </button>
-            </div>
-          </div>
-
-          <div className="p-6">
-            {activeTab !== "recurring" && (
-              <div className="flex justify-end mb-6">
-                <Button
-                  onClick={() => openDialog(null, activeTab === 'treatments' ? 'treatment' : activeTab === 'practitioners' ? 'practitioner' : 'patient')}
-                  className="bg-[#2C3E50] hover:bg-[#34495E] text-white rounded-xl"
+        <div className="relative group mb-6">
+          <div className="absolute inset-0 bg-gradient-to-br from-[#4d647f]/20 to-transparent rounded-2xl blur-xl opacity-0 group-hover:opacity-100 transition-opacity duration-500" />
+          <div className="relative bg-white/5 backdrop-blur-xl rounded-2xl border border-white/10">
+            <div className="border-b border-white/10 p-6 pb-0">
+              <div className="flex gap-2 overflow-x-auto">
+                <button
+                  onClick={() => setActiveTab("treatments")}
+                  className={`flex items-center gap-2 px-6 py-3 rounded-t-2xl font-light tracking-wider transition-colors whitespace-nowrap ${
+                    activeTab === "treatments"
+                      ? 'bg-[#d6b164]/20 backdrop-blur-xl border-l border-r border-t border-[#d6b164]/30 text-[#d6b164]'
+                      : 'text-white/60 hover:text-white/90'
+                  }`}
                 >
-                  <Plus className="w-5 h-5 mr-2" />
-                  Add {activeTab === 'treatments' ? 'Treatment' : activeTab === 'practitioners' ? 'Practitioner' : 'Patient'}
-                </Button>
+                  <Sparkles className="w-5 h-5" />
+                  Treatments
+                </button>
+                <button
+                  onClick={() => setActiveTab("practitioners")}
+                  className={`flex items-center gap-2 px-6 py-3 rounded-t-2xl font-light tracking-wider transition-colors whitespace-nowrap ${
+                    activeTab === "practitioners"
+                      ? 'bg-[#d6b164]/20 backdrop-blur-xl border-l border-r border-t border-[#d6b164]/30 text-[#d6b164]'
+                      : 'text-white/60 hover:text-white/90'
+                  }`}
+                >
+                  <UserCog className="w-5 h-5" />
+                  Practitioners
+                </button>
+                <button
+                  onClick={() => setActiveTab("patients")}
+                  className={`flex items-center gap-2 px-6 py-3 rounded-t-2xl font-light tracking-wider transition-colors whitespace-nowrap ${
+                    activeTab === "patients"
+                      ? 'bg-[#d6b164]/20 backdrop-blur-xl border-l border-r border-t border-[#d6b164]/30 text-[#d6b164]'
+                      : 'text-white/60 hover:text-white/90'
+                  }`}
+                >
+                  <Users className="w-5 h-5" />
+                  Patients
+                </button>
+                <button
+                  onClick={() => setActiveTab("recurring")}
+                  className={`flex items-center gap-2 px-6 py-3 rounded-t-2xl font-light tracking-wider transition-colors whitespace-nowrap ${
+                    activeTab === "recurring"
+                      ? 'bg-[#d6b164]/20 backdrop-blur-xl border-l border-r border-t border-[#d6b164]/30 text-[#d6b164]'
+                      : 'text-white/60 hover:text-white/90'
+                  }`}
+                >
+                  <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                  </svg>
+                  Recurring Expenses
+                </button>
               </div>
-            )}
+            </div>
+
+            <div className="p-6">
+              {activeTab !== "recurring" && (
+                <div className="flex justify-between items-center mb-6">
+                  <div>
+                    {activeTab === 'treatments' && (
+                      <Button
+                        onClick={downloadPriceList}
+                        variant="outline"
+                        className="bg-white/5 backdrop-blur-xl border border-white/10 hover:border-[#d6b164]/30 text-white/70 hover:text-white/90 rounded-2xl font-light"
+                      >
+                        <Download className="w-4 h-4 mr-2" />
+                        Download Price List PDF
+                      </Button>
+                    )}
+                  </div>
+                  <Button
+                    onClick={() => openDialog(null, activeTab === 'treatments' ? 'treatment' : activeTab === 'practitioners' ? 'practitioner' : 'patient')}
+                    className="bg-[#d6b164]/20 backdrop-blur-xl border border-[#d6b164]/30 hover:bg-[#d6b164]/30 text-[#d6b164] rounded-2xl font-light tracking-wider"
+                  >
+                    <Plus className="w-5 h-5 mr-2" />
+                    Add {activeTab === 'treatments' ? 'Treatment' : activeTab === 'practitioners' ? 'Practitioner' : 'Patient'}
+                  </Button>
+                </div>
+              )}
 
             {/* Treatments Grid */}
             {activeTab === 'treatments' && (
@@ -611,34 +800,34 @@ export default function Catalogue() {
                 {treatments.map((treatment) => (
                   <div
                     key={treatment.id}
-                    className="bg-gray-50 rounded-xl p-6 border border-gray-200 hover:shadow-sm transition-shadow"
+                    className="bg-white/5 backdrop-blur-xl rounded-2xl p-6 border border-white/10 hover:border-[#d6b164]/30 transition-all group"
                   >
                     <div className="flex items-start justify-between mb-4">
                       <div>
-                        <h3 className="font-semibold text-gray-900 text-lg mb-1">{treatment.treatment_name}</h3>
-                        <p className="text-sm text-gray-500">{treatment.category}</p>
+                        <h3 className="font-light text-white/90 text-lg mb-1 tracking-wider">{treatment.treatment_name}</h3>
+                        <p className="text-sm text-white/50 font-light">{treatment.category}</p>
                       </div>
                     </div>
 
                     <div className="space-y-2 mb-4">
                       <div className="flex justify-between items-center">
-                        <span className="text-sm text-gray-600">Price</span>
-                        <span className="text-sm font-semibold text-gray-900">£{treatment.default_price?.toFixed(2)}</span>
+                        <span className="text-sm text-white/50 font-light">Price</span>
+                        <span className="text-sm font-light text-white/90">£{treatment.default_price?.toFixed(2)}</span>
                       </div>
                       <div className="flex justify-between items-center">
-                        <span className="text-sm text-gray-600">Cost</span>
-                        <span className="text-sm font-semibold text-gray-900">£{(treatment.typical_product_cost || 0).toFixed(2)}</span>
+                        <span className="text-sm text-white/50 font-light">Cost</span>
+                        <span className="text-sm font-light text-white/90">£{(treatment.typical_product_cost || 0).toFixed(2)}</span>
                       </div>
                       <div className="flex justify-between items-center">
-                        <span className="text-sm text-gray-600">Margin</span>
-                        <span className="text-sm font-semibold text-green-600">
+                        <span className="text-sm text-white/50 font-light">Margin</span>
+                        <span className="text-sm font-light text-emerald-400">
                           {calculateMargin(treatment.default_price, treatment.typical_product_cost || 0)}%
                         </span>
                       </div>
                       {(treatment.duration_minutes ?? treatment.default_duration_minutes) && (
                         <div className="flex justify-between items-center">
-                          <span className="text-sm text-gray-600">Duration</span>
-                          <span className="text-sm font-semibold text-gray-900">{treatment.duration_minutes ?? treatment.default_duration_minutes} min</span>
+                          <span className="text-sm text-white/50 font-light">Duration</span>
+                          <span className="text-sm font-light text-white/90">{treatment.duration_minutes ?? treatment.default_duration_minutes} min</span>
                         </div>
                       )}
                     </div>
@@ -648,7 +837,7 @@ export default function Catalogue() {
                         variant="outline"
                         size="sm"
                         onClick={() => openDuplicateDialog(treatment)}
-                        className="flex-1 rounded-lg border-gray-300 hover:bg-white text-gray-700 hover:text-gray-900"
+                        className="flex-1 rounded-2xl bg-white/5 backdrop-blur-xl border border-white/10 hover:border-white/20 text-white/70 hover:text-white/90 font-light"
                       >
                         <Copy className="w-4 h-4 mr-2" />
                         Duplicate
@@ -657,7 +846,7 @@ export default function Catalogue() {
                         variant="outline"
                         size="sm"
                         onClick={() => openDialog(treatment, 'treatment')}
-                        className="rounded-lg border-gray-300 hover:bg-white"
+                        className="rounded-2xl bg-white/5 backdrop-blur-xl border border-white/10 hover:border-white/20 text-white/70 hover:text-white/90"
                       >
                         <Pencil className="w-4 h-4" />
                       </Button>
@@ -665,7 +854,7 @@ export default function Catalogue() {
                         variant="outline"
                         size="sm"
                         onClick={() => handleDeleteClick(treatment, 'treatment')}
-                        className="rounded-lg border-red-200 text-red-600 hover:bg-red-50"
+                        className="rounded-2xl bg-white/5 backdrop-blur-xl border border-white/10 hover:border-rose-500/30 text-white/70 hover:text-rose-400"
                       >
                         <Trash2 className="w-4 h-4" />
                       </Button>
@@ -675,8 +864,8 @@ export default function Catalogue() {
 
                 {treatments.length === 0 && (
                   <div className="col-span-full text-center py-12">
-                    <Sparkles className="w-12 h-12 text-gray-400 mx-auto mb-3" />
-                    <p className="text-gray-500">No treatments yet</p>
+                    <Sparkles className="w-12 h-12 text-white/20 mx-auto mb-3" />
+                    <p className="text-white/50 font-light">No treatments yet</p>
                   </div>
                 )}
               </div>
@@ -688,17 +877,17 @@ export default function Catalogue() {
                 {practitioners.map((practitioner) => (
                   <div
                     key={practitioner.id}
-                    className="bg-gray-50 rounded-xl p-4 border border-gray-200 flex items-center justify-between hover:bg-white transition-colors"
+                    className="bg-white/5 backdrop-blur-xl rounded-2xl p-4 border border-white/10 flex items-center justify-between hover:border-[#d6b164]/30 transition-all"
                   >
                     <div className="flex items-center gap-3">
-                      <div className="w-10 h-10 bg-[#2C3E50] rounded-full flex items-center justify-center">
-                        <UserCog className="w-5 h-5 text-white" />
+                      <div className="w-10 h-10 bg-[#4d647f]/20 backdrop-blur-xl border border-[#4d647f]/30 rounded-full flex items-center justify-center">
+                        <UserCog className="w-5 h-5 text-[#4d647f]" />
                       </div>
                       <div>
                         <div className="flex items-center gap-2">
-                          <span className="font-medium text-gray-900">{practitioner.name}</span>
+                          <span className="font-light text-white/90 tracking-wider">{practitioner.name}</span>
                           {practitioner.is_lead && (
-                            <span className="text-xs font-medium px-2 py-1 rounded-full bg-purple-100 text-[#0f1829]">
+                            <span className="text-xs font-light px-3 py-1 rounded-full bg-purple-500/10 backdrop-blur-xl border border-purple-500/30 text-purple-400 tracking-wider">
                               Lead
                             </span>
                           )}
@@ -707,11 +896,11 @@ export default function Catalogue() {
                     </div>
                     <div className="flex items-center gap-3">
                       <div className="flex items-center gap-2">
-                        <span className="text-sm text-gray-600">Lead Practitioner</span>
+                        <span className="text-sm text-white/50 font-light">Lead Practitioner</span>
                         <button
                           onClick={() => toggleLeadPractitioner(practitioner)}
                           className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
-                            practitioner.is_lead ? 'bg-[#1a2845]' : 'bg-gray-300'
+                            practitioner.is_lead ? 'bg-[#d6b164]' : 'bg-white/10'
                           }`}
                         >
                           <span
@@ -726,7 +915,7 @@ export default function Catalogue() {
                           variant="outline"
                           size="sm"
                           onClick={() => openDialog(practitioner, 'practitioner')}
-                          className="rounded-lg border-gray-300 hover:bg-white"
+                          className="rounded-2xl bg-white/5 backdrop-blur-xl border border-white/10 hover:border-white/20 text-white/70 hover:text-white/90"
                         >
                           <Pencil className="w-4 h-4" />
                         </Button>
@@ -734,7 +923,7 @@ export default function Catalogue() {
                           variant="outline"
                           size="sm"
                           onClick={() => handleDeleteClick(practitioner, 'practitioner')}
-                          className="rounded-lg border-red-200 text-red-600 hover:bg-red-50"
+                          className="rounded-2xl bg-white/5 backdrop-blur-xl border border-white/10 hover:border-rose-500/30 text-white/70 hover:text-rose-400"
                         >
                           <Trash2 className="w-4 h-4" />
                         </Button>
@@ -745,8 +934,8 @@ export default function Catalogue() {
 
                 {practitioners.length === 0 && (
                   <div className="text-center py-12">
-                    <UserCog className="w-12 h-12 text-gray-400 mx-auto mb-3" />
-                    <p className="text-gray-500">No practitioners yet</p>
+                    <UserCog className="w-12 h-12 text-white/20 mx-auto mb-3" />
+                    <p className="text-white/50 font-light">No practitioners yet</p>
                   </div>
                 )}
               </div>
@@ -755,20 +944,20 @@ export default function Catalogue() {
             {/* Patients List */}
             {activeTab === 'patients' && (
               <div className="space-y-3">
-                <div className="rounded-2xl border border-violet-200/80 bg-gradient-to-r from-violet-50 to-fuchsia-50/60 p-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+                <div className="rounded-2xl border border-violet-500/30 bg-gradient-to-r from-violet-500/10 to-fuchsia-500/10 backdrop-blur-xl p-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
                   <div>
-                    <p className="text-sm font-semibold text-[#1a2845] flex items-center gap-2">
-                      <LayoutGrid className="w-4 h-4 text-violet-600" />
+                    <p className="text-sm font-light text-white/90 flex items-center gap-2 tracking-wider">
+                      <LayoutGrid className="w-4 h-4 text-violet-400" />
                       Swipeable patient cards
                     </p>
-                    <p className="text-xs text-slate-600 mt-1 max-w-xl">
+                    <p className="text-xs text-white/60 mt-1 max-w-xl font-light">
                       Open the full-screen card deck to review treatments, clinical notes, paid amounts and balances
                       for each patient in one place.
                     </p>
                   </div>
                   <Button
                     asChild
-                    className="shrink-0 rounded-xl bg-[#1a2845] hover:bg-[#0f1829] text-white"
+                    className="shrink-0 rounded-2xl bg-violet-500/20 backdrop-blur-xl border border-violet-500/30 hover:bg-violet-500/30 text-violet-400 font-light tracking-wider"
                   >
                     <Link to={createPageUrl("PatientCards")}>Open patient cards</Link>
                   </Button>
@@ -776,23 +965,23 @@ export default function Catalogue() {
                 {patients.map((patient) => (
                   <div
                     key={patient.id}
-                    className="bg-gray-50 rounded-xl p-4 border border-gray-200 flex items-center justify-between hover:bg-white transition-colors"
+                    className="bg-white/5 backdrop-blur-xl rounded-2xl p-4 border border-white/10 flex items-center justify-between hover:border-[#d6b164]/30 transition-all"
                   >
                     <div className="flex items-center gap-3">
-                      <div className="w-10 h-10 bg-[#2C3E50] rounded-full flex items-center justify-center">
-                        <Users className="w-5 h-5 text-white" />
+                      <div className="w-10 h-10 bg-[#4d647f]/20 backdrop-blur-xl border border-[#4d647f]/30 rounded-full flex items-center justify-center">
+                        <Users className="w-5 h-5 text-[#4d647f]" />
                       </div>
                       <div>
-                        <p className="font-medium text-gray-900 flex items-center gap-2 flex-wrap">
+                        <p className="font-light text-white/90 flex items-center gap-2 flex-wrap tracking-wider">
                           {patient.name}
                           {patient.friends_family_discount_percent != null &&
                             patient.friends_family_discount_percent !== "" && (
-                              <span className="text-[10px] font-semibold uppercase tracking-wide px-2 py-0.5 rounded-full bg-indigo-100 text-indigo-800">
+                              <span className="text-[10px] font-light uppercase tracking-wider px-3 py-1 rounded-full bg-indigo-500/10 backdrop-blur-xl border border-indigo-500/30 text-indigo-400">
                                 F&amp;F {Number(patient.friends_family_discount_percent)}%
                               </span>
                             )}
                         </p>
-                        <div className="flex gap-2 text-sm text-gray-500">
+                        <div className="flex gap-2 text-sm text-white/50 font-light">
                           {patient.phone && <span>{patient.phone}</span>}
                           {patient.phone && patient.contact && <span>•</span>}
                           {patient.contact && <span>{patient.contact}</span>}
@@ -804,7 +993,7 @@ export default function Catalogue() {
                         variant="outline"
                         size="sm"
                         onClick={() => openClinicalFile(patient)}
-                        className="rounded-lg border-gray-300 hover:bg-white"
+                        className="rounded-2xl bg-white/5 backdrop-blur-xl border border-white/10 hover:border-white/20 text-white/70 hover:text-white/90"
                         title="Clinical notes & visit record"
                       >
                         <FileText className="w-4 h-4" />
@@ -813,7 +1002,7 @@ export default function Catalogue() {
                         variant="outline"
                         size="sm"
                         onClick={() => openDialog(patient, 'patient')}
-                        className="rounded-lg border-gray-300 hover:bg-white"
+                        className="rounded-2xl bg-white/5 backdrop-blur-xl border border-white/10 hover:border-white/20 text-white/70 hover:text-white/90"
                       >
                         <Pencil className="w-4 h-4" />
                       </Button>
@@ -821,7 +1010,7 @@ export default function Catalogue() {
                         variant="outline"
                         size="sm"
                         onClick={() => handleDeleteClick(patient, 'patient')}
-                        className="rounded-lg border-red-200 text-red-600 hover:bg-red-50"
+                        className="rounded-2xl bg-white/5 backdrop-blur-xl border border-white/10 hover:border-rose-500/30 text-white/70 hover:text-rose-400"
                       >
                         <Trash2 className="w-4 h-4" />
                       </Button>
@@ -831,8 +1020,8 @@ export default function Catalogue() {
 
                 {patients.length === 0 && (
                   <div className="text-center py-12">
-                    <Users className="w-12 h-12 text-gray-400 mx-auto mb-3" />
-                    <p className="text-gray-500">No patients yet</p>
+                    <Users className="w-12 h-12 text-white/20 mx-auto mb-3" />
+                    <p className="text-white/50 font-light">No patients yet</p>
                   </div>
                 )}
               </div>
@@ -841,37 +1030,37 @@ export default function Catalogue() {
             {/* Recurring Expenses List */}
             {activeTab === 'recurring' && (
               <div>
-                <p className="text-sm text-gray-600 mb-6">
+                <p className="text-sm text-white/60 mb-6 font-light">
                   Recurring expenses are automatically added to your records each period. Toggle them on/off as needed.
                 </p>
                 <div className="space-y-3">
                   {recurringExpenses.map((expense) => (
                     <div
                       key={expense.id}
-                      className="bg-gray-50 rounded-xl p-5 border border-gray-200 hover:bg-white transition-colors"
+                      className="bg-white/5 backdrop-blur-xl rounded-2xl p-5 border border-white/10 hover:border-[#d6b164]/30 transition-all"
                     >
                       <div className="flex items-start justify-between gap-4">
                         <div className="flex-1">
                           <div className="flex items-center gap-3 mb-2">
-                            <h3 className="font-semibold text-gray-900 text-lg">{expense.category}</h3>
-                            <span className={`text-xs font-medium px-3 py-1 rounded-full ${
-                              expense.is_active ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-600'
+                            <h3 className="font-light text-white/90 text-lg tracking-wider">{expense.category}</h3>
+                            <span className={`text-xs font-light px-3 py-1.5 rounded-full backdrop-blur-xl tracking-wider ${
+                              expense.is_active ? 'bg-emerald-500/10 border border-emerald-500/30 text-emerald-400' : 'bg-white/10 border border-white/20 text-white/50'
                             }`}>
                               {expense.is_active ? 'Active' : 'Paused'}
                             </span>
-                            <span className="text-xs font-medium px-3 py-1 rounded-full bg-blue-100 text-blue-800">
+                            <span className="text-xs font-light px-3 py-1.5 rounded-full bg-blue-500/10 backdrop-blur-xl border border-blue-500/30 text-blue-400 tracking-wider">
                               {expense.recurrence_frequency}
                             </span>
                           </div>
                           <div className="space-y-1">
-                            <p className="text-sm text-gray-900">
-                              <span className="font-semibold text-lg text-gray-900">£{expense.amount?.toFixed(2)}</span>
+                            <p className="text-sm text-white/90 font-light">
+                              <span className="font-light text-lg text-white/90">£{expense.amount?.toFixed(2)}</span>
                             </p>
                             {expense.notes && (
-                              <p className="text-sm text-gray-600">{expense.notes}</p>
+                              <p className="text-sm text-white/60 font-light">{expense.notes}</p>
                             )}
                             {expense.last_generated_date && (
-                              <p className="text-xs text-gray-500">
+                              <p className="text-xs text-white/40 font-light">
                                 Last generated: {format(new Date(expense.last_generated_date), 'dd MMM yyyy')}
                               </p>
                             )}
@@ -881,7 +1070,7 @@ export default function Catalogue() {
                           <button
                             onClick={() => toggleRecurringExpense(expense)}
                             className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
-                              expense.is_active ? 'bg-[#2C3E50]' : 'bg-gray-300'
+                              expense.is_active ? 'bg-[#d6b164]' : 'bg-white/10'
                             }`}
                           >
                             <span
@@ -894,7 +1083,7 @@ export default function Catalogue() {
                             variant="outline"
                             size="sm"
                             onClick={() => openDialog(expense, 'recurring')}
-                            className="rounded-lg border-gray-300 hover:bg-white"
+                            className="rounded-2xl bg-white/5 backdrop-blur-xl border border-white/10 hover:border-white/20 text-white/70 hover:text-white/90"
                           >
                             <Pencil className="w-4 h-4" />
                           </Button>
@@ -902,7 +1091,7 @@ export default function Catalogue() {
                             variant="outline"
                             size="sm"
                             onClick={() => handleDeleteClick(expense, 'recurring')}
-                            className="rounded-lg border-red-200 text-red-600 hover:bg-red-50"
+                            className="rounded-2xl bg-white/5 backdrop-blur-xl border border-white/10 hover:border-rose-500/30 text-white/70 hover:text-rose-400"
                           >
                             <Trash2 className="w-4 h-4" />
                           </Button>
@@ -913,11 +1102,11 @@ export default function Catalogue() {
 
                   {recurringExpenses.length === 0 && (
                     <div className="text-center py-12">
-                      <svg className="w-12 h-12 text-gray-400 mx-auto mb-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <svg className="w-12 h-12 text-white/20 mx-auto mb-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
                       </svg>
-                      <p className="text-gray-500 mb-2">No recurring expenses yet</p>
-                      <p className="text-sm text-gray-400">Add recurring expenses from Quick Add</p>
+                      <p className="text-white/50 mb-2 font-light">No recurring expenses yet</p>
+                      <p className="text-sm text-white/40 font-light">Add recurring expenses from Quick Add</p>
                     </div>
                   )}
                 </div>
@@ -1470,5 +1659,6 @@ export default function Catalogue() {
         </Sheet>
       </div>
     </div>
+  </div>
   );
 }
