@@ -65,8 +65,6 @@ const PAGES = {
 
     Pricing: Pricing,
 
-    QuickAdd: QuickAdd,
-
     Records: RecordsLuxury,
 
     Reports: Reports,
@@ -195,7 +193,6 @@ function PagesContent() {
                             />
                             <Route path="/Communications" element={<Communications />} />
                             <Route path="/Pricing" element={<Pricing />} />
-                            <Route path="/QuickAdd" element={<QuickAdd />} />
                             <Route path="/VoiceAssistant" element={<VoiceAssistant />} />
                             <Route path="/Calendar" element={<Calendar />} />
                             <Route path="/Records" element={<RecordsLuxury />} />

@@ -5,6 +5,7 @@ import { createPageUrl } from "@/utils";
 import { LayoutDashboard, Plus, FileText, BarChart3, Settings, LogOut, TrendingUp, MessageSquare, CircleDot, Send, ContactRound, Calendar, Package, Shield } from "lucide-react";
 import { api } from "@/api/api";
 import { FloatingVoiceAssistant } from "@/components/FloatingVoiceAssistant";
+import FloatingQuickAdd from "@/components/FloatingQuickAdd";
 
 const navigationItems = [
   {
@@ -16,11 +17,6 @@ const navigationItems = [
     title: "Dashboard",
     url: createPageUrl("Dashboard"),
     icon: LayoutDashboard,
-  },
-  {
-    title: "Quick Add",
-    url: createPageUrl("QuickAdd"),
-    icon: Plus,
   },
   {
     title: "Calendar",
@@ -288,6 +284,9 @@ export default function Layout({ children, currentPageName }) {
 
         {/* Global Voice Assistant - appears on all pages */}
         <FloatingVoiceAssistant />
+
+        {/* Global Quick Add - floating button appears on all pages */}
+        <FloatingQuickAdd />
       </div>
     </>
   );

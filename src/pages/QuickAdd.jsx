@@ -32,7 +32,7 @@ function composeNotesWithCourse(notes, courseNumber) {
   return clean ? `Course ${courseNumber}: ${clean}` : `Course ${courseNumber}`;
 }
 
-export default function QuickAdd() {
+export default function QuickAdd({ isModal = false, onClose = null }) {
   const { toast } = useToast();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
@@ -464,7 +464,11 @@ export default function QuickAdd() {
           description: "Successfully added treatment",
           className: "bg-green-50 border-green-200"
         });
-        setTimeout(() => navigate(createPageUrl("Dashboard")), 800);
+        if (isModal && onClose) {
+          setTimeout(() => onClose(), 800);
+        } else {
+          setTimeout(() => navigate(createPageUrl("Dashboard")), 800);
+        }
       }
     },
     onError: (err) => {
@@ -503,7 +507,11 @@ export default function QuickAdd() {
           description: "Successfully added expense",
           className: "bg-green-50 border-green-200"
         });
-        setTimeout(() => navigate(createPageUrl("Dashboard")), 800);
+        if (isModal && onClose) {
+          setTimeout(() => onClose(), 800);
+        } else {
+          setTimeout(() => navigate(createPageUrl("Dashboard")), 800);
+        }
       }
     },
     onError: (err) => {
@@ -611,7 +619,11 @@ export default function QuickAdd() {
         className: "bg-green-50 border-green-200"
       });
 
-      navigate(createPageUrl("Dashboard"));
+      if (isModal && onClose) {
+        onClose();
+      } else {
+        navigate(createPageUrl("Dashboard"));
+      }
 
     } catch (error) {
       console.error('Expense creation failed:', error);
@@ -840,7 +852,11 @@ export default function QuickAdd() {
         className: "bg-green-50 border-green-200"
       });
 
-      setTimeout(() => navigate(createPageUrl("Dashboard")), 1000);
+      if (isModal && onClose) {
+        setTimeout(() => onClose(), 1000);
+      } else {
+        setTimeout(() => navigate(createPageUrl("Dashboard")), 1000);
+      }
       
     } catch (error) {
       console.error('Treatment creation failed:', error);
@@ -920,7 +936,7 @@ export default function QuickAdd() {
   const leadPractitioner = practitioners.find(p => p.is_lead);
 
   return (
-    <div className="p-6 md:p-10 bg-[#F5F6F8] min-h-screen">
+    <div className={isModal ? "" : "p-6 md:p-10 bg-[#F5F6F8] min-h-screen"}>
       <div className="max-w-4xl mx-auto">
         <div className="mb-8">
           <h1 className="text-3xl font-light tracking-tight text-[#1a2845] mb-2">Quick Add</h1>
