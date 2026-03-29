@@ -383,6 +383,37 @@ export default function Dashboard() {
     }).filter(item => item.competitorPrices.length > 0);
   };
 
+  // Get all competitor data grouped by competitor name
+  const getCompetitorsByClinic = () => {
+    const groupedByClinic = {};
+
+    competitorPricing.forEach(cp => {
+      const clinicName = cp.competitor_name || 'Unknown Competitor';
+      if (!groupedByClinic[clinicName]) {
+        groupedByClinic[clinicName] = {
+          name: clinicName,
+          location: cp.location || '',
+          treatments: []
+        };
+      }
+
+      // Check if we have this treatment in our catalog
+      const ourTreatment = treatmentCatalog.find(
+        t => t.treatment_name.toLowerCase() === cp.treatment_name.toLowerCase()
+      );
+
+      groupedByClinic[clinicName].treatments.push({
+        ...cp,
+        ourPrice: ourTreatment?.default_price || null,
+        priceDifference: ourTreatment
+          ? ((ourTreatment.default_price - cp.price) / cp.price * 100)
+          : null
+      });
+    });
+
+    return Object.values(groupedByClinic);
+  };
+
   const analyzeWithAI = async () => {
     setAnalyzingCompetitors(true);
 
@@ -740,6 +771,7 @@ Be specific, actionable, and focus on maximizing revenue while staying competiti
   const allTimeOutstanding = getAllTimeOutstanding();
   const optimizerMetrics = calculateOptimizerMetrics();
   const competitorComparison = getCompetitorComparison();
+  const competitorsByClinic = getCompetitorsByClinic();
 
   const calculateTrend = (current, previous) => {
     if (previous === 0) {
@@ -1158,63 +1190,71 @@ Be specific, actionable, and focus on maximizing revenue while staying competiti
                     </div>
                   )}
 
-                  {competitorComparison.length === 0 ? (
+                  {competitorsByClinic.length === 0 ? (
                     <div className="text-center py-12 bg-white/5 backdrop-blur-xl rounded-2xl border-2 border-dashed border-white/10">
                       <AlertCircle className="w-12 h-12 text-white/20 mx-auto mb-3" />
                       <p className="text-white/50 mb-2 font-light">No competitor data yet</p>
-                      <p className="text-sm text-white/40 font-light">Add competitor pricing to see comparison analysis</p>
+                      <p className="text-sm text-white/40 font-light">Import competitor pricing from a URL to see their pricing</p>
                     </div>
                   ) : (
-                    <div className="space-y-4">
-                      {competitorComparison.map((item) => (
-                        <div key={item.treatment.id} className="bg-white/5 backdrop-blur-xl rounded-2xl p-6 border border-white/10 hover:border-[#d6b164]/30 transition-all">
-                          <div className="flex justify-between items-start mb-4">
-                            <div>
-                              <h3 className="text-xl font-light text-white/90 tracking-wider">{item.treatment.treatment_name}</h3>
-                              <p className="text-sm text-white/50 font-light">{item.treatment.category}</p>
-                            </div>
-                            <div className={`px-4 py-2 rounded-2xl font-light backdrop-blur-xl border ${
-                              item.priceDifference > 10 ? 'bg-rose-500/10 border-rose-500/30 text-rose-400' :
-                              item.priceDifference > 0 ? 'bg-yellow-500/10 border-yellow-500/30 text-yellow-400' :
-                              item.priceDifference > -10 ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-400' :
-                              'bg-blue-500/10 border-blue-500/30 text-blue-400'
-                            }`}>
-                              {item.priceDifference > 0 ? '+' : ''}{item.priceDifference.toFixed(1)}%
-                            </div>
+                    <div className="space-y-6">
+                      {competitorsByClinic.map((competitor, idx) => (
+                        <div key={idx} className="bg-white/5 backdrop-blur-xl rounded-2xl p-6 border border-white/10 hover:border-[#d6b164]/30 transition-all">
+                          {/* Competitor Header */}
+                          <div className="mb-6">
+                            <h3 className="text-2xl font-light text-white/90 tracking-wider mb-1">{competitor.name}</h3>
+                            {competitor.location && (
+                              <p className="text-sm text-white/50 font-light">{competitor.location}</p>
+                            )}
+                            <p className="text-xs text-white/40 font-light mt-2">{competitor.treatments.length} treatment{competitor.treatments.length !== 1 ? 's' : ''} imported</p>
                           </div>
 
-                          <div className="grid grid-cols-2 gap-4 mb-4">
-                            <div className="bg-white/5 backdrop-blur-xl rounded-2xl p-4 border border-white/10">
-                              <p className="text-sm text-white/40 mb-1 font-light tracking-wider uppercase">Your Price</p>
-                              <p className="text-2xl font-light text-[#d6b164]">£{item.treatment.default_price.toFixed(2)}</p>
-                            </div>
-                            <div className="bg-white/5 backdrop-blur-xl rounded-2xl p-4 border border-white/10">
-                              <p className="text-sm text-white/40 mb-1 font-light tracking-wider uppercase">Competitor Average</p>
-                              <p className="text-2xl font-light text-white/90">£{item.avgCompetitorPrice.toFixed(2)}</p>
-                            </div>
-                          </div>
-
-                          <div className="pt-4 border-t border-white/10">
-                            <p className="text-sm font-light text-white/50 mb-2 tracking-wider">Competitor Prices:</p>
-                            <div className="space-y-2">
-                              {item.competitorPrices.map((cp) => (
-                                <div key={cp.id} className="flex justify-between items-center bg-white/5 backdrop-blur-xl rounded-2xl p-3 border border-white/10">
-                                  <div>
-                                    <p className="font-light text-white/90">{cp.competitor_name}</p>
-                                    {cp.location && <p className="text-xs text-white/40 font-light">{cp.location}</p>}
+                          {/* Treatments List */}
+                          <div className="space-y-3">
+                            {competitor.treatments.map((treatment) => (
+                              <div key={treatment.id} className="bg-white/5 backdrop-blur-xl rounded-2xl p-4 border border-white/10">
+                                <div className="flex justify-between items-start">
+                                  <div className="flex-1">
+                                    <div className="flex items-center gap-3 mb-1">
+                                      <h4 className="text-lg font-light text-white/90">{treatment.treatment_name}</h4>
+                                      {treatment.ourPrice && (
+                                        <div className={`px-3 py-1 rounded-2xl text-xs font-light backdrop-blur-xl border ${
+                                          treatment.priceDifference > 10 ? 'bg-rose-500/10 border-rose-500/30 text-rose-400' :
+                                          treatment.priceDifference > 0 ? 'bg-yellow-500/10 border-yellow-500/30 text-yellow-400' :
+                                          treatment.priceDifference > -10 ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-400' :
+                                          'bg-blue-500/10 border-blue-500/30 text-blue-400'
+                                        }`}>
+                                          {treatment.priceDifference > 0 ? 'You\'re +' : 'You\'re '}{treatment.priceDifference.toFixed(0)}%
+                                        </div>
+                                      )}
+                                    </div>
+                                    {treatment.treatment_category && (
+                                      <p className="text-xs text-white/40 font-light mb-2">{treatment.treatment_category}</p>
+                                    )}
+                                    {treatment.notes && (
+                                      <p className="text-sm text-white/60 font-light">{treatment.notes}</p>
+                                    )}
                                   </div>
-                                  <div className="flex items-center gap-3">
-                                    <p className="font-light text-white/90">£{cp.price.toFixed(2)}</p>
+                                  <div className="flex items-center gap-4 ml-4">
+                                    <div className="text-right">
+                                      <p className="text-xs text-white/40 font-light mb-1">Their Price</p>
+                                      <p className="text-xl font-light text-white/90">£{treatment.price.toFixed(2)}</p>
+                                      {treatment.ourPrice && (
+                                        <p className="text-xs text-white/40 font-light mt-1">
+                                          vs your £{treatment.ourPrice.toFixed(2)}
+                                        </p>
+                                      )}
+                                    </div>
                                     <button
-                                      onClick={() => handleDeleteClick(cp)}
-                                      className="p-1 hover:bg-rose-500/10 rounded text-white/40 hover:text-rose-400 transition-colors"
+                                      onClick={() => handleDeleteClick(treatment)}
+                                      className="p-2 hover:bg-rose-500/10 rounded-2xl text-white/40 hover:text-rose-400 transition-colors"
                                     >
                                       <Trash2 className="w-4 h-4" />
                                     </button>
                                   </div>
                                 </div>
-                              ))}
-                            </div>
+                              </div>
+                            ))}
                           </div>
                         </div>
                       ))}
