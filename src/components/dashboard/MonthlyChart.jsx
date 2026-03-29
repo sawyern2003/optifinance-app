@@ -6,14 +6,14 @@ const CustomTooltip = ({ active, payload, label }) => {
     const revenue = payload.find(p => p.dataKey === 'revenue')?.value || 0;
     const costs = payload.find(p => p.dataKey === 'costs')?.value || 0;
     const profit = payload.find(p => p.dataKey === 'profit')?.value || 0;
-    
+
     // Get previous month data for percentage calculation
     const prevData = payload[0].payload.prevData;
-    
+
     let revenueChange = null;
     let costsChange = null;
     let profitChange = null;
-    
+
     if (prevData) {
       if (prevData.revenue !== 0) {
         revenueChange = ((revenue - prevData.revenue) / prevData.revenue * 100).toFixed(1);
@@ -25,22 +25,22 @@ const CustomTooltip = ({ active, payload, label }) => {
         profitChange = ((profit - prevData.profit) / Math.abs(prevData.profit) * 100).toFixed(1);
       }
     }
-    
+
     return (
-      <div className="bg-white p-4 rounded-xl shadow-lg border border-[#e5e7eb]">
-        <p className="text-sm font-medium text-slate-800 mb-3">{label}</p>
-        
+      <div className="bg-[#0a0e1a]/95 backdrop-blur-xl p-4 rounded-2xl border border-white/10">
+        <p className="text-sm font-light text-white/90 mb-3 tracking-wider">{label}</p>
+
         <div className="space-y-2">
           <div>
             <div className="flex items-center justify-between gap-4">
               <div className="flex items-center gap-2">
-                <div className="w-2.5 h-2.5 rounded-full bg-emerald-500" />
-                <span className="text-xs text-slate-500">Revenue</span>
+                <div className="w-2.5 h-2.5 rounded-full bg-emerald-400" />
+                <span className="text-xs text-white/50 font-light">Revenue</span>
               </div>
-              <span className="text-sm font-medium text-slate-900">£{revenue.toFixed(2)}</span>
+              <span className="text-sm font-light text-white/90">£{revenue.toFixed(2)}</span>
             </div>
             {revenueChange !== null && (
-              <p className={`text-xs mt-1 ml-5 ${parseFloat(revenueChange) >= 0 ? 'text-emerald-600' : 'text-rose-600'}`}>
+              <p className={`text-xs mt-1 ml-5 font-light ${parseFloat(revenueChange) >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
                 {parseFloat(revenueChange) >= 0 ? '↑' : '↓'} {Math.abs(parseFloat(revenueChange))}% vs prev month
               </p>
             )}
@@ -49,28 +49,28 @@ const CustomTooltip = ({ active, payload, label }) => {
           <div>
             <div className="flex items-center justify-between gap-4">
               <div className="flex items-center gap-2">
-                <div className="w-2.5 h-2.5 rounded-full bg-rose-500" />
-                <span className="text-xs text-slate-500">Costs</span>
+                <div className="w-2.5 h-2.5 rounded-full bg-rose-400" />
+                <span className="text-xs text-white/50 font-light">Costs</span>
               </div>
-              <span className="text-sm font-medium text-slate-900">£{costs.toFixed(2)}</span>
+              <span className="text-sm font-light text-white/90">£{costs.toFixed(2)}</span>
             </div>
             {costsChange !== null && (
-              <p className={`text-xs mt-1 ml-5 ${parseFloat(costsChange) >= 0 ? 'text-rose-600' : 'text-emerald-600'}`}>
+              <p className={`text-xs mt-1 ml-5 font-light ${parseFloat(costsChange) >= 0 ? 'text-rose-400' : 'text-emerald-400'}`}>
                 {parseFloat(costsChange) >= 0 ? '↑' : '↓'} {Math.abs(parseFloat(costsChange))}% vs prev month
               </p>
             )}
           </div>
-          
+
           <div>
             <div className="flex items-center justify-between gap-4">
               <div className="flex items-center gap-2">
-                <div className="w-2.5 h-2.5 rounded-full bg-[#50668a]" />
-                <span className="text-xs text-slate-500">Profit</span>
+                <div className="w-2.5 h-2.5 rounded-full bg-[#4d647f]" />
+                <span className="text-xs text-white/50 font-light">Profit</span>
               </div>
-              <span className="text-sm font-medium text-slate-900">£{profit.toFixed(2)}</span>
+              <span className="text-sm font-light text-white/90">£{profit.toFixed(2)}</span>
             </div>
             {profitChange !== null && (
-              <p className={`text-xs mt-1 ml-5 ${parseFloat(profitChange) >= 0 ? 'text-emerald-600' : 'text-rose-600'}`}>
+              <p className={`text-xs mt-1 ml-5 font-light ${parseFloat(profitChange) >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
                 {parseFloat(profitChange) >= 0 ? '↑' : '↓'} {Math.abs(parseFloat(profitChange))}% vs prev month
               </p>
             )}
@@ -94,104 +94,107 @@ export default function MonthlyChart({ data }) {
   const isSingleMonth = data.length <= 1;
 
   return (
-    <div className="bg-white rounded-2xl p-6 shadow-sm border border-[#e9e6df]">
-      <h3 className="text-lg font-medium text-[#1f2f46] mb-6">
-        {isSingleMonth ? 'Revenue, Costs & Profit' : 'Revenue, Costs & Profit Trend'}
-      </h3>
-      <ResponsiveContainer width="100%" height={300}>
-        {isSingleMonth ? (
-          <BarChart data={enhancedData}>
-            <CartesianGrid strokeDasharray="3 3" stroke="#eef0f3" vertical={false} />
-            <XAxis 
-              dataKey="month" 
-              stroke="#94a3b8" 
-              style={{ fontSize: '12px' }}
-              axisLine={false}
-              tickLine={false}
-            />
-            <YAxis 
-              stroke="#94a3b8" 
-              style={{ fontSize: '12px' }}
-              axisLine={false}
-              tickLine={false}
-              tickFormatter={(value) => `£${value}`}
-            />
-            <Tooltip content={<CustomTooltip />} />
-            <Legend 
-              wrapperStyle={{ fontSize: '13px', paddingTop: '20px' }}
-              iconType="circle"
-            />
-            <Bar 
-              dataKey="revenue" 
-              fill="#34b37b" 
-              radius={[6, 6, 0, 0]}
-              name="Revenue"
-            />
-            <Bar 
-              dataKey="costs" 
-              fill="#e07a7a" 
-              radius={[6, 6, 0, 0]}
-              name="Costs"
-            />
-            <Bar 
-              dataKey="profit" 
-              fill="#50668a" 
-              radius={[6, 6, 0, 0]}
-              name="Profit"
-            />
-          </BarChart>
-        ) : (
-          <LineChart data={enhancedData}>
-            <CartesianGrid strokeDasharray="3 3" stroke="#eef0f3" vertical={false} />
-            <XAxis 
-              dataKey="month" 
-              stroke="#94a3b8" 
-              style={{ fontSize: '12px' }}
-              axisLine={false}
-              tickLine={false}
-            />
-            <YAxis 
-              stroke="#94a3b8" 
-              style={{ fontSize: '12px' }}
-              axisLine={false}
-              tickLine={false}
-              tickFormatter={(value) => `£${value}`}
-            />
-            <Tooltip content={<CustomTooltip />} />
-            <Legend 
-              wrapperStyle={{ fontSize: '13px', paddingTop: '20px' }}
-              iconType="circle"
-            />
-            <Line 
-              type="monotone" 
-              dataKey="revenue" 
-              stroke="#34b37b" 
-              strokeWidth={2.25}
-              dot={{ fill: '#34b37b', strokeWidth: 1.5, r: 4 }}
-              activeDot={{ r: 6 }}
-              name="Revenue"
-            />
-            <Line 
-              type="monotone" 
-              dataKey="costs" 
-              stroke="#e07a7a" 
-              strokeWidth={2.25}
-              dot={{ fill: '#e07a7a', strokeWidth: 1.5, r: 4 }}
-              activeDot={{ r: 6 }}
-              name="Costs"
-            />
-            <Line 
-              type="monotone" 
-              dataKey="profit" 
-              stroke="#50668a" 
-              strokeWidth={2.25}
-              dot={{ fill: '#50668a', strokeWidth: 1.5, r: 4 }}
-              activeDot={{ r: 6 }}
-              name="Profit"
-            />
-          </LineChart>
-        )}
-      </ResponsiveContainer>
+    <div className="relative group">
+      <div className="absolute inset-0 bg-gradient-to-br from-[#4d647f]/20 to-transparent rounded-2xl blur-xl opacity-0 group-hover:opacity-100 transition-opacity duration-500" />
+      <div className="relative bg-white/5 backdrop-blur-xl rounded-2xl p-6 border border-white/10">
+        <h3 className="text-lg font-light text-white/90 mb-6 tracking-wider">
+          {isSingleMonth ? 'Revenue, Costs & Profit' : 'Revenue, Costs & Profit Trend'}
+        </h3>
+        <ResponsiveContainer width="100%" height={300}>
+          {isSingleMonth ? (
+            <BarChart data={enhancedData}>
+              <CartesianGrid strokeDasharray="3 3" stroke="#ffffff15" vertical={false} />
+              <XAxis
+                dataKey="month"
+                stroke="#ffffff40"
+                style={{ fontSize: '12px', fontWeight: '300' }}
+                axisLine={false}
+                tickLine={false}
+              />
+              <YAxis
+                stroke="#ffffff40"
+                style={{ fontSize: '12px', fontWeight: '300' }}
+                axisLine={false}
+                tickLine={false}
+                tickFormatter={(value) => `£${value}`}
+              />
+              <Tooltip content={<CustomTooltip />} />
+              <Legend
+                wrapperStyle={{ fontSize: '13px', paddingTop: '20px', fontWeight: '300', color: '#ffffff90' }}
+                iconType="circle"
+              />
+              <Bar
+                dataKey="revenue"
+                fill="#34d399"
+                radius={[6, 6, 0, 0]}
+                name="Revenue"
+              />
+              <Bar
+                dataKey="costs"
+                fill="#f87171"
+                radius={[6, 6, 0, 0]}
+                name="Costs"
+              />
+              <Bar
+                dataKey="profit"
+                fill="#4d647f"
+                radius={[6, 6, 0, 0]}
+                name="Profit"
+              />
+            </BarChart>
+          ) : (
+            <LineChart data={enhancedData}>
+              <CartesianGrid strokeDasharray="3 3" stroke="#ffffff15" vertical={false} />
+              <XAxis
+                dataKey="month"
+                stroke="#ffffff40"
+                style={{ fontSize: '12px', fontWeight: '300' }}
+                axisLine={false}
+                tickLine={false}
+              />
+              <YAxis
+                stroke="#ffffff40"
+                style={{ fontSize: '12px', fontWeight: '300' }}
+                axisLine={false}
+                tickLine={false}
+                tickFormatter={(value) => `£${value}`}
+              />
+              <Tooltip content={<CustomTooltip />} />
+              <Legend
+                wrapperStyle={{ fontSize: '13px', paddingTop: '20px', fontWeight: '300', color: '#ffffff90' }}
+                iconType="circle"
+              />
+              <Line
+                type="monotone"
+                dataKey="revenue"
+                stroke="#34d399"
+                strokeWidth={2.5}
+                dot={{ fill: '#34d399', strokeWidth: 0, r: 4 }}
+                activeDot={{ r: 6 }}
+                name="Revenue"
+              />
+              <Line
+                type="monotone"
+                dataKey="costs"
+                stroke="#f87171"
+                strokeWidth={2.5}
+                dot={{ fill: '#f87171', strokeWidth: 0, r: 4 }}
+                activeDot={{ r: 6 }}
+                name="Costs"
+              />
+              <Line
+                type="monotone"
+                dataKey="profit"
+                stroke="#4d647f"
+                strokeWidth={2.5}
+                dot={{ fill: '#4d647f', strokeWidth: 0, r: 4 }}
+                activeDot={{ r: 6 }}
+                name="Profit"
+              />
+            </LineChart>
+          )}
+        </ResponsiveContainer>
+      </div>
     </div>
   );
 }
