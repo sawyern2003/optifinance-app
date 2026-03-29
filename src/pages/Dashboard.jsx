@@ -9,7 +9,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Link } from "react-router-dom";
 import { createPageUrl } from "@/utils";
-import { Banknote, TrendingDown, Wallet, Plus, Download, Sparkles, Hourglass, CheckCircle, FileText, TrendingUp, Trash2, Loader2, Lightbulb, AlertCircle, LayoutGrid } from "lucide-react";
+import { Banknote, TrendingDown, Wallet, Plus, Download, Sparkles, Hourglass, CheckCircle, FileText, TrendingUp, Trash2, Loader2, Lightbulb, AlertCircle, LayoutGrid, Link2, CheckCircle2 } from "lucide-react";
 import { format, startOfMonth, endOfMonth, subMonths, startOfYear, addMonths } from "date-fns";
 import { useToast } from "@/components/ui/use-toast";
 
@@ -39,6 +39,11 @@ export default function Dashboard() {
     price: '',
     notes: ''
   });
+  const [urlImportDialogOpen, setUrlImportDialogOpen] = useState(false);
+  const [importUrl, setImportUrl] = useState('');
+  const [extracting, setExtracting] = useState(false);
+  const [extractedData, setExtractedData] = useState(null);
+  const [selectedTreatments, setSelectedTreatments] = useState([]);
 
   const queryClient = useQueryClient();
 
@@ -198,6 +203,136 @@ export default function Dashboard() {
       price: parseFloat(competitorForm.price),
       notes: competitorForm.notes
     });
+  };
+
+  const handleUrlImport = async (e) => {
+    e.preventDefault();
+
+    if (!importUrl || !importUrl.trim()) {
+      toast({
+        title: "URL required",
+        description: "Please enter a competitor website URL",
+        className: "bg-red-50 border-red-200"
+      });
+      return;
+    }
+
+    setExtracting(true);
+    setExtractedData(null);
+    setSelectedTreatments([]);
+
+    try {
+      const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
+      const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
+
+      const response = await fetch(`${supabaseUrl}/functions/v1/extract-competitor-pricing`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${supabaseAnonKey}`
+        },
+        body: JSON.stringify({ url: importUrl })
+      });
+
+      if (!response.ok) {
+        throw new Error(`Failed to extract pricing: ${response.statusText}`);
+      }
+
+      const result = await response.json();
+
+      if (!result.success || !result.treatments || result.treatments.length === 0) {
+        toast({
+          title: "No pricing found",
+          description: result.error || "Could not extract pricing from this URL. The site might not have public pricing or might be incompatible.",
+          className: "bg-yellow-50 border-yellow-200"
+        });
+        setExtracting(false);
+        return;
+      }
+
+      setExtractedData(result);
+      // Pre-select all treatments that have a price
+      const validTreatments = result.treatments
+        .map((_, index) => index)
+        .filter(index => {
+          const t = result.treatments[index];
+          return t.price || t.price_from;
+        });
+      setSelectedTreatments(validTreatments);
+
+      toast({
+        title: "Extraction successful",
+        description: `Found ${result.treatments.length} treatments from ${result.clinic_name || 'competitor'}`,
+        className: "bg-green-50 border-green-200"
+      });
+    } catch (error) {
+      console.error('URL import error:', error);
+      toast({
+        title: "Import failed",
+        description: error.message || "Failed to extract pricing from URL",
+        className: "bg-red-50 border-red-200"
+      });
+    } finally {
+      setExtracting(false);
+    }
+  };
+
+  const handleSaveExtractedPrices = async () => {
+    if (!extractedData || selectedTreatments.length === 0) {
+      toast({
+        title: "No treatments selected",
+        description: "Please select at least one treatment to import",
+        className: "bg-yellow-50 border-yellow-200"
+      });
+      return;
+    }
+
+    const treatmentsToSave = selectedTreatments.map(index => extractedData.treatments[index]);
+
+    try {
+      // Save each selected treatment
+      for (const treatment of treatmentsToSave) {
+        const price = treatment.price || treatment.price_from || 0;
+
+        await api.entities.CompetitorPricing.create({
+          competitor_name: extractedData.clinic_name || 'Unknown Competitor',
+          location: extractedData.location || '',
+          treatment_name: treatment.treatment_name,
+          treatment_category: treatment.category || '',
+          price: price,
+          notes: treatment.notes || ''
+        });
+      }
+
+      queryClient.invalidateQueries({ queryKey: ['competitorPricing'] });
+
+      toast({
+        title: "Prices imported",
+        description: `Successfully imported ${treatmentsToSave.length} competitor prices`,
+        className: "bg-green-50 border-green-200"
+      });
+
+      // Reset state
+      setUrlImportDialogOpen(false);
+      setImportUrl('');
+      setExtractedData(null);
+      setSelectedTreatments([]);
+    } catch (error) {
+      console.error('Save error:', error);
+      toast({
+        title: "Save failed",
+        description: error.message || "Failed to save competitor prices",
+        className: "bg-red-50 border-red-200"
+      });
+    }
+  };
+
+  const toggleTreatmentSelection = (index) => {
+    setSelectedTreatments(prev =>
+      prev.includes(index)
+        ? prev.filter(i => i !== index)
+        : [...prev, index]
+    );
   };
 
   const calculateOptimizerMetrics = () => {
@@ -969,14 +1104,22 @@ Be specific, actionable, and focus on maximizing revenue while staying competiti
                     <p className="text-white/60 font-light">
                       Compare your pricing with competitors and get AI-powered recommendations
                     </p>
-                    <div className="flex gap-3">
+                    <div className="flex gap-3 flex-wrap">
                       <Button
                         onClick={() => setCompetitorDialogOpen(true)}
                         variant="outline"
                         className="bg-white/5 backdrop-blur-xl border border-white/10 hover:border-white/20 text-white/70 hover:text-white/90 rounded-2xl font-light"
                       >
                         <Plus className="w-5 h-5 mr-2" />
-                        Add Competitor Price
+                        Add Manually
+                      </Button>
+                      <Button
+                        onClick={() => setUrlImportDialogOpen(true)}
+                        variant="outline"
+                        className="bg-purple-500/10 backdrop-blur-xl border border-purple-500/30 hover:border-purple-500/50 text-purple-300 hover:text-purple-200 rounded-2xl font-light"
+                      >
+                        <Link2 className="w-5 h-5 mr-2" />
+                        Import from URL
                       </Button>
                       <Button
                         onClick={analyzeWithAI}
@@ -1224,6 +1367,157 @@ Be specific, actionable, and focus on maximizing revenue while staying competiti
                 </Button>
               </div>
             </div>
+          </DialogContent>
+        </Dialog>
+
+        {/* URL Import Dialog */}
+        <Dialog open={urlImportDialogOpen} onOpenChange={setUrlImportDialogOpen}>
+          <DialogContent className="sm:max-w-3xl bg-[#0a0e1a] border-white/10 max-h-[90vh] overflow-y-auto">
+            <DialogHeader>
+              <DialogTitle className="text-2xl font-light tracking-wider text-white/90">Import Competitor Pricing from URL</DialogTitle>
+              <p className="text-sm text-white/60 font-light mt-2">
+                Paste a competitor's pricing page URL and AI will automatically extract their treatment prices
+              </p>
+            </DialogHeader>
+
+            <form onSubmit={handleUrlImport} className="space-y-6">
+              <div>
+                <Label className="text-white/70 font-light tracking-wider mb-2 block">Competitor Website URL</Label>
+                <Input
+                  type="url"
+                  value={importUrl}
+                  onChange={(e) => setImportUrl(e.target.value)}
+                  placeholder="https://competitor-clinic.com/pricing"
+                  className="rounded-2xl bg-white/5 backdrop-blur-xl border border-white/10 hover:border-white/20 text-white/90 font-light h-12"
+                  required
+                  disabled={extracting}
+                />
+                <p className="text-xs text-white/40 mt-2 font-light">
+                  Tip: Works best with pricing pages that list treatments and prices clearly
+                </p>
+              </div>
+
+              {!extractedData && (
+                <Button
+                  type="submit"
+                  disabled={extracting || !importUrl}
+                  className="w-full bg-purple-500/20 backdrop-blur-xl border border-purple-500/30 hover:bg-purple-500/30 text-purple-300 rounded-2xl font-light tracking-wider h-12"
+                >
+                  {extracting ? (
+                    <>
+                      <Loader2 className="w-5 h-5 mr-2 animate-spin" />
+                      Extracting pricing data...
+                    </>
+                  ) : (
+                    <>
+                      <Link2 className="w-5 h-5 mr-2" />
+                      Extract Prices with AI
+                    </>
+                  )}
+                </Button>
+              )}
+            </form>
+
+            {extractedData && (
+              <div className="space-y-4 mt-6">
+                <div className="bg-emerald-500/10 backdrop-blur-xl border border-emerald-500/30 rounded-2xl p-4">
+                  <div className="flex items-center gap-2 text-emerald-400 mb-2">
+                    <CheckCircle2 className="w-5 h-5" />
+                    <span className="font-light">Extraction Successful</span>
+                  </div>
+                  <p className="text-sm text-white/70 font-light">
+                    Found {extractedData.treatments.length} treatments from{' '}
+                    <span className="text-white/90 font-normal">{extractedData.clinic_name || 'competitor'}</span>
+                    {extractedData.location && ` in ${extractedData.location}`}
+                  </p>
+                </div>
+
+                <div>
+                  <Label className="text-white/70 font-light tracking-wider mb-3 block">
+                    Select treatments to import ({selectedTreatments.length} selected)
+                  </Label>
+
+                  <div className="space-y-2 max-h-96 overflow-y-auto">
+                    {extractedData.treatments.map((treatment, index) => {
+                      const isSelected = selectedTreatments.includes(index);
+                      const price = treatment.price || treatment.price_from;
+                      const priceDisplay = treatment.price
+                        ? `£${treatment.price}`
+                        : treatment.price_from && treatment.price_to
+                        ? `£${treatment.price_from}-£${treatment.price_to}`
+                        : treatment.price_from
+                        ? `From £${treatment.price_from}`
+                        : treatment.price_text || 'Price unavailable';
+
+                      return (
+                        <div
+                          key={index}
+                          onClick={() => toggleTreatmentSelection(index)}
+                          className={`p-4 rounded-2xl border cursor-pointer transition-all ${
+                            isSelected
+                              ? 'bg-purple-500/10 border-purple-500/30'
+                              : 'bg-white/5 border-white/10 hover:border-white/20'
+                          }`}
+                        >
+                          <div className="flex items-start gap-3">
+                            <div
+                              className={`w-5 h-5 rounded border-2 flex items-center justify-center flex-shrink-0 mt-0.5 ${
+                                isSelected
+                                  ? 'bg-purple-500/20 border-purple-500'
+                                  : 'border-white/20'
+                              }`}
+                            >
+                              {isSelected && <CheckCircle2 className="w-4 h-4 text-purple-400" />}
+                            </div>
+                            <div className="flex-1 min-w-0">
+                              <div className="flex items-start justify-between gap-3">
+                                <div className="flex-1">
+                                  <h4 className="text-white/90 font-light">{treatment.treatment_name}</h4>
+                                  {treatment.category && (
+                                    <span className="text-xs text-white/40 font-light">{treatment.category}</span>
+                                  )}
+                                </div>
+                                <div className="text-right">
+                                  <p className={`font-light ${price ? 'text-white/90' : 'text-white/40'}`}>
+                                    {priceDisplay}
+                                  </p>
+                                  {treatment.notes && (
+                                    <p className="text-xs text-white/40 font-light mt-1">{treatment.notes}</p>
+                                  )}
+                                </div>
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                <div className="flex gap-3 pt-4 border-t border-white/10">
+                  <Button
+                    type="button"
+                    onClick={() => {
+                      setUrlImportDialogOpen(false);
+                      setImportUrl('');
+                      setExtractedData(null);
+                      setSelectedTreatments([]);
+                    }}
+                    variant="outline"
+                    className="flex-1 bg-white/5 backdrop-blur-xl border border-white/10 hover:border-white/20 text-white/70 hover:text-white/90 rounded-2xl font-light h-12"
+                  >
+                    Cancel
+                  </Button>
+                  <Button
+                    onClick={handleSaveExtractedPrices}
+                    disabled={selectedTreatments.length === 0}
+                    className="flex-1 bg-purple-500/20 backdrop-blur-xl border border-purple-500/30 hover:bg-purple-500/30 text-purple-300 rounded-2xl font-light h-12"
+                  >
+                    Import {selectedTreatments.length} Treatment{selectedTreatments.length !== 1 ? 's' : ''}
+                  </Button>
+                </div>
+              </div>
+            )}
           </DialogContent>
         </Dialog>
       </div>
