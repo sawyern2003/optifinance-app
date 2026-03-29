@@ -392,14 +392,18 @@ export default function Communications() {
   }
 
   return (
-    <div className="h-screen flex flex-col bg-white">
+    <div className="h-screen flex flex-col relative overflow-hidden" style={{ background: 'linear-gradient(135deg, #0a0e1a 0%, #1a1f35 50%, #0f1419 100%)' }}>
+      {/* Ambient glow */}
+      <div className="absolute top-0 right-1/4 w-96 h-96 bg-[#d6b164]/10 rounded-full blur-[120px] pointer-events-none" />
+
       {/* Mobile Header */}
-      <div className="md:hidden border-b border-gray-200 p-4 flex items-center justify-between bg-white">
-        <h1 className="text-lg font-semibold text-[#1a2845]">Messages</h1>
+      <div className="md:hidden border-b border-white/10 p-4 flex items-center justify-between bg-white/5 backdrop-blur-xl relative z-10">
+        <h1 className="text-lg font-light text-white/90 tracking-wider">Messages</h1>
         <Button
           variant="ghost"
           size="sm"
           onClick={() => setSidebarOpen(true)}
+          className="text-white/70 hover:text-white/90"
         >
           <Menu className="w-5 h-5" />
         </Button>

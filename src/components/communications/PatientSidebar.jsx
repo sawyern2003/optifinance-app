@@ -26,7 +26,7 @@ export function PatientSidebar({
       {/* Mobile overlay */}
       {isOpen && (
         <div
-          className="fixed inset-0 bg-black/50 z-40 md:hidden"
+          className="fixed inset-0 bg-black/70 backdrop-blur-sm z-40 md:hidden"
           onClick={onClose}
         />
       )}
@@ -35,37 +35,37 @@ export function PatientSidebar({
       <div
         className={`
           fixed md:relative inset-y-0 left-0 z-50
-          w-80 bg-white border-r border-gray-200 flex flex-col
+          w-80 bg-white/5 backdrop-blur-xl border-r border-white/10 flex flex-col
           transform transition-transform duration-200 ease-in-out
           ${isOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0'}
         `}
       >
         {/* Header */}
-        <div className="p-4 border-b border-gray-200">
+        <div className="p-4 border-b border-white/10">
           <div className="flex items-center justify-between mb-3">
-            <h2 className="text-lg font-semibold text-[#1a2845]">Messages</h2>
+            <h2 className="text-lg font-light text-white/90 tracking-wider">Messages</h2>
             <button
               onClick={onClose}
-              className="md:hidden p-1 hover:bg-gray-100 rounded"
+              className="md:hidden p-1 hover:bg-white/10 rounded-lg transition-colors"
             >
-              <X className="w-5 h-5" />
+              <X className="w-5 h-5 text-white/70" />
             </button>
           </div>
 
           {/* Search */}
           <div className="relative">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-white/40" />
             <Input
               type="text"
               placeholder="Search patients..."
               value={searchQuery}
               onChange={(e) => onSearchChange(e.target.value)}
-              className="pl-10 pr-10 h-10 border-gray-300"
+              className="pl-10 pr-10 h-11 bg-white/5 border-white/10 hover:border-white/20 rounded-2xl text-white/90 placeholder:text-white/40 font-light"
             />
             {searchQuery && (
               <button
                 onClick={() => onSearchChange('')}
-                className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-white/40 hover:text-white/70 transition-colors"
               >
                 <X className="h-4 w-4" />
               </button>
@@ -74,13 +74,13 @@ export function PatientSidebar({
         </div>
 
         {/* Filters */}
-        <div className="p-3 border-b border-gray-200 flex gap-2">
+        <div className="p-3 border-b border-white/10 flex gap-2">
           <Badge
             variant={filter === 'outstanding' ? 'default' : 'outline'}
-            className={`cursor-pointer ${
+            className={`cursor-pointer transition-all font-light tracking-wider ${
               filter === 'outstanding'
-                ? 'bg-[#1a2845] hover:bg-[#2a3f5f]'
-                : 'hover:bg-gray-100'
+                ? 'bg-[#d6b164]/20 backdrop-blur-xl border-[#d6b164]/30 text-[#d6b164] hover:bg-[#d6b164]/30'
+                : 'bg-white/5 border-white/10 text-white/70 hover:bg-white/10'
             }`}
             onClick={() => onFilterChange('outstanding')}
           >
@@ -88,10 +88,10 @@ export function PatientSidebar({
           </Badge>
           <Badge
             variant={filter === 'all' ? 'default' : 'outline'}
-            className={`cursor-pointer ${
+            className={`cursor-pointer transition-all font-light tracking-wider ${
               filter === 'all'
-                ? 'bg-[#1a2845] hover:bg-[#2a3f5f]'
-                : 'hover:bg-gray-100'
+                ? 'bg-[#d6b164]/20 backdrop-blur-xl border-[#d6b164]/30 text-[#d6b164] hover:bg-[#d6b164]/30'
+                : 'bg-white/5 border-white/10 text-white/70 hover:bg-white/10'
             }`}
             onClick={() => onFilterChange('all')}
           >
@@ -102,7 +102,7 @@ export function PatientSidebar({
         {/* Patient List */}
         <ScrollArea className="flex-1">
           {conversations.length > 0 ? (
-            <div className="divide-y divide-gray-100">
+            <div className="divide-y divide-white/5">
               {conversations.map((conversation) => (
                 <PatientConversationCard
                   key={conversation.key}
@@ -116,8 +116,8 @@ export function PatientSidebar({
               ))}
             </div>
           ) : (
-            <div className="p-8 text-center text-gray-500">
-              <p className="text-sm">
+            <div className="p-8 text-center">
+              <p className="text-sm text-white/40 font-light">
                 {searchQuery
                   ? `No patients found matching "${searchQuery}"`
                   : 'No patients found'}

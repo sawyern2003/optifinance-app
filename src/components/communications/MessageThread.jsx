@@ -35,28 +35,28 @@ export function MessageThread({
   const initials = getInitials(patient.patient_name);
 
   return (
-    <div className="flex-1 flex flex-col min-h-0">
+    <div className="flex-1 flex flex-col min-h-0 relative">
       {/* Header */}
-      <div className="p-4 border-b border-gray-200 flex items-center justify-between bg-white">
+      <div className="p-4 border-b border-white/10 flex items-center justify-between bg-white/5 backdrop-blur-xl relative z-10">
         <div className="flex items-center gap-3">
           {/* Avatar */}
-          <div className="h-10 w-10 rounded-full bg-[#1a2845] flex items-center justify-center text-white font-semibold flex-shrink-0">
+          <div className="h-10 w-10 rounded-full bg-[#d6b164]/20 border border-[#d6b164]/30 flex items-center justify-center text-[#d6b164] font-light flex-shrink-0">
             {initials}
           </div>
 
           {/* Patient Info */}
           <div>
-            <h3 className="font-semibold text-[#1a2845]">
+            <h3 className="font-light text-white/90 tracking-wide">
               {patient.patient_name}
             </h3>
-            <p className="text-sm text-gray-500">
+            <p className="text-sm text-white/50 font-light">
               {patient.patient_contact || 'No contact'}
             </p>
           </div>
 
           {/* Outstanding Badge */}
           {patient.outstandingCount > 0 && (
-            <Badge variant="destructive" className="ml-2">
+            <Badge variant="destructive" className="ml-2 bg-rose-500/20 border-rose-500/30 text-rose-400 font-light">
               £{patient.outstandingBalance.toFixed(2)} outstanding
             </Badge>
           )}
@@ -64,7 +64,7 @@ export function MessageThread({
 
         {/* Actions */}
         <Link to="/records?tab=invoices">
-          <Button variant="ghost" size="sm">
+          <Button variant="ghost" size="sm" className="text-white/70 hover:text-white/90 hover:bg-white/10">
             <ExternalLink className="w-4 h-4 mr-2" />
             View Records
           </Button>
@@ -72,7 +72,7 @@ export function MessageThread({
       </div>
 
       {/* Message Timeline */}
-      <div className="flex-1 min-h-0 bg-slate-50 overflow-hidden">
+      <div className="flex-1 min-h-0 bg-white/[0.02] overflow-hidden">
         <MessageTimeline
           messages={messages}
           onViewPDF={onViewPDF}

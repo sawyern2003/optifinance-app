@@ -35,15 +35,17 @@ export function PatientConversationCard({
       onClick={onClick}
       className={`w-full text-left px-4 py-3 transition-all duration-200 border-l-4 ${
         isSelected
-          ? 'bg-[#fef9f0] border-[#d4a740]'
-          : 'bg-white border-transparent hover:bg-gray-50'
+          ? 'bg-[#d6b164]/10 border-[#d6b164]'
+          : 'bg-transparent border-transparent hover:bg-white/5'
       }`}
     >
       <div className="flex items-start gap-3">
         {/* Avatar */}
         <div
-          className={`h-12 w-12 rounded-full flex items-center justify-center flex-shrink-0 text-white font-semibold ${
-            isSelected ? 'bg-[#1a2845]' : 'bg-gray-400'
+          className={`h-12 w-12 rounded-full flex items-center justify-center flex-shrink-0 font-light ${
+            isSelected
+              ? 'bg-[#d6b164]/20 text-[#d6b164] border border-[#d6b164]/30'
+              : 'bg-white/10 text-white/70 border border-white/10'
           }`}
         >
           {initials}
@@ -52,13 +54,13 @@ export function PatientConversationCard({
         {/* Patient Info */}
         <div className="flex-1 min-w-0">
           <div className="flex items-start justify-between mb-1">
-            <h3 className="font-semibold text-gray-900 truncate">
+            <h3 className="font-light text-white/90 truncate tracking-wide">
               {patient_name}
             </h3>
             {hasOutstanding && (
               <Badge
                 variant="destructive"
-                className="ml-2 flex-shrink-0 h-5 min-w-[20px] px-1.5 text-xs"
+                className="ml-2 flex-shrink-0 h-5 min-w-[20px] px-1.5 text-xs bg-rose-500/20 border-rose-500/30 text-rose-400 font-light"
               >
                 {outstandingCount}
               </Badge>
@@ -66,17 +68,17 @@ export function PatientConversationCard({
           </div>
 
           {/* Contact */}
-          <p className="text-xs text-gray-500 truncate mb-1">
+          <p className="text-xs text-white/50 truncate mb-1 font-light">
             {patient_contact || 'No contact'}
           </p>
 
           {/* Last activity & outstanding amount */}
           <div className="flex items-center justify-between text-xs">
-            <span className="text-gray-400">
+            <span className="text-white/30 font-light">
               {lastActivityText}
             </span>
             {hasOutstanding && (
-              <span className="text-rose-600 font-medium">
+              <span className="text-rose-400 font-light">
                 £{outstandingBalance.toFixed(2)}
               </span>
             )}
