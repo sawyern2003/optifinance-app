@@ -125,65 +125,22 @@ function aggregateByPatient(patients, treatmentEntries, clinicalNotes) {
 
 // Patient Header Component
 function PatientHeader({ patient, lastSeen, hasOutstanding }) {
-  // Generate happy cartoon smiley with different colors
-  const generateAvatar = (name) => {
-    const colors = [
-      { bg: '#60a5fa', face: '#fff' }, // blue
-      { bg: '#a78bfa', face: '#fff' }, // purple
-      { bg: '#f472b6', face: '#fff' }, // pink
-      { bg: '#34d399', face: '#fff' }, // emerald
-      { bg: '#fbbf24', face: '#fff' }, // amber
-      { bg: '#22d3ee', face: '#fff' }, // cyan
-      { bg: '#818cf8', face: '#fff' }, // indigo
-      { bg: '#fb7185', face: '#fff' }, // rose
-      { bg: '#2dd4bf', face: '#fff' }, // teal
-      { bg: '#a855f7', face: '#fff' }, // violet
-    ];
-
-    const hash = (name || 'anonymous').split('').reduce((acc, char) => {
-      return char.charCodeAt(0) + ((acc << 5) - acc);
-    }, 0);
-
-    const colorScheme = colors[Math.abs(hash) % colors.length];
-
-    // Create inline SVG for happy smiley face
-    const svgData = `
-      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100">
-        <circle cx="50" cy="50" r="50" fill="${colorScheme.bg}"/>
-        <circle cx="35" cy="40" r="5" fill="${colorScheme.face}"/>
-        <circle cx="65" cy="40" r="5" fill="${colorScheme.face}"/>
-        <path d="M 30 60 Q 50 75 70 60" stroke="${colorScheme.face}" stroke-width="4" fill="none" stroke-linecap="round"/>
-      </svg>
-    `;
-
-    return `data:image/svg+xml;base64,${btoa(svgData)}`;
-  };
-
-  const avatarUrl = generateAvatar(patient.name);
-
   return (
     <div className="mb-6">
       <div className="flex items-start gap-4 mb-3">
-        <div className="h-14 w-14 rounded-lg overflow-hidden flex items-center justify-center flex-shrink-0">
-          <img
-            src={avatarUrl}
-            alt={`${patient.name} avatar`}
-            className="h-full w-full"
-          />
-        </div>
         <div className="flex-1 min-w-0">
-          <h2 className="text-2xl font-semibold text-gray-900 mb-2">
+          <h2 className="text-3xl font-light text-white/90 mb-3 tracking-wide">
             {patient.name || "Patient"}
           </h2>
           <div className="flex flex-wrap items-center gap-2">
             {lastSeen && (
-              <Badge variant="outline" className="text-xs font-normal border-gray-300 text-gray-600">
+              <Badge variant="outline" className="text-xs font-light border-white/20 bg-white/5 text-white/60">
                 <Clock className="h-3 w-3 mr-1" />
                 Last seen {lastSeen}
               </Badge>
             )}
             {hasOutstanding && (
-              <Badge variant="outline" className="text-xs font-normal border-rose-300 bg-rose-50 text-rose-700">
+              <Badge variant="outline" className="text-xs font-light border-rose-400/30 bg-rose-500/10 text-rose-400">
                 <AlertCircle className="h-3 w-3 mr-1" />
                 Payment due
               </Badge>
@@ -193,11 +150,11 @@ function PatientHeader({ patient, lastSeen, hasOutstanding }) {
       </div>
 
       {/* Contact Info */}
-      <div className="flex flex-wrap gap-4 text-sm text-gray-600">
+      <div className="flex flex-wrap gap-4 text-sm text-white/60 font-light">
         {patient.phone && (
           <a
             href={`tel:${patient.phone}`}
-            className="inline-flex items-center gap-1.5 hover:text-gray-900 transition-colors"
+            className="inline-flex items-center gap-1.5 hover:text-white/90 transition-colors"
           >
             <Phone className="h-3.5 w-3.5" />
             <span>{patient.phone}</span>
@@ -206,7 +163,7 @@ function PatientHeader({ patient, lastSeen, hasOutstanding }) {
         {(patient.contact || patient.email) && (
           <a
             href={`mailto:${patient.contact || patient.email}`}
-            className="inline-flex items-center gap-1.5 hover:text-gray-900 transition-colors"
+            className="inline-flex items-center gap-1.5 hover:text-white/90 transition-colors"
           >
             <Mail className="h-3.5 w-3.5" />
             <span className="truncate max-w-[200px]">{patient.contact || patient.email}</span>
@@ -220,20 +177,20 @@ function PatientHeader({ patient, lastSeen, hasOutstanding }) {
 // Compact Financial Summary
 function FinancialSummary({ totalBilled, totalPaid, outstanding }) {
   return (
-    <div className="py-4 border-y border-gray-200">
+    <div className="py-4 border-y border-white/10">
       {outstanding > 0 ? (
         <div className="flex items-baseline gap-2 mb-1">
-          <span className="text-2xl font-semibold text-rose-600 tabular-nums">
+          <span className="text-3xl font-light text-rose-400 tabular-nums">
             £{money(outstanding)}
           </span>
-          <span className="text-sm text-gray-600">outstanding balance</span>
+          <span className="text-sm text-white/60 font-light">outstanding balance</span>
         </div>
       ) : (
         <div className="flex items-baseline gap-2 mb-1">
-          <span className="text-lg font-medium text-emerald-600">Paid in full</span>
+          <span className="text-xl font-light text-emerald-400">Paid in full</span>
         </div>
       )}
-      <div className="text-sm text-gray-500">
+      <div className="text-sm text-white/50 font-light">
         £{money(totalPaid)} paid · £{money(totalBilled)} total spent
       </div>
     </div>
@@ -253,12 +210,12 @@ function QuickActions({
   return (
     <div className="flex flex-wrap gap-2 py-4">
       {hasOutstanding && (
-        <Button size="sm" variant="default" className="bg-gray-900 hover:bg-gray-800 text-white">
+        <Button size="sm" variant="default" className="bg-[#d6b164]/20 backdrop-blur-xl border border-[#d6b164]/30 hover:bg-[#d6b164]/30 text-[#d6b164] rounded-2xl font-light">
           <Bell className="h-3.5 w-3.5 mr-1.5" />
           Send reminder
         </Button>
       )}
-      <Button size="sm" variant="outline" className="border-gray-300 text-gray-700 hover:bg-gray-50" asChild>
+      <Button size="sm" variant="outline" className="bg-white/5 border-white/10 text-white/70 hover:border-white/20 rounded-2xl font-light" asChild>
         <Link to={createPageUrl("Records")}>
           <CreditCard className="h-3.5 w-3.5 mr-1.5" />
           View records
@@ -268,7 +225,7 @@ function QuickActions({
         <Button
           size="sm"
           variant="outline"
-          className="border-gray-300 text-gray-700 hover:bg-gray-50"
+          className="bg-white/5 border-white/10 text-white/70 hover:border-white/20 rounded-2xl font-light"
           onClick={onInvoiceAllUnpaid}
           disabled={invoiceGenerating}
         >
@@ -281,20 +238,20 @@ function QuickActions({
       <Button
         size="sm"
         variant="outline"
-        className="border-gray-300 text-gray-700 hover:bg-gray-50"
+        className="bg-white/5 border-white/10 text-white/70 hover:border-white/20 rounded-2xl font-light"
         onClick={onAddNote}
       >
         <Plus className="h-3.5 w-3.5 mr-1.5" />
         Add note
       </Button>
-      <Button size="sm" variant="outline" className="border-gray-300 text-gray-700 hover:bg-gray-50">
+      <Button size="sm" variant="outline" className="bg-white/5 border-white/10 text-white/70 hover:border-white/20 rounded-2xl font-light">
         <Calendar className="h-3.5 w-3.5 mr-1.5" />
         Follow up
       </Button>
       <Button
         size="sm"
         variant="outline"
-        className="border-rose-200 text-rose-700 hover:bg-rose-50"
+        className="bg-rose-500/10 border-rose-500/30 text-rose-400 hover:border-rose-500/50 rounded-2xl font-light"
         onClick={onRemovePatient}
         disabled={removePatientLoading}
       >
@@ -310,8 +267,8 @@ function TreatmentTimeline({ treatments }) {
   if (treatments.length === 0) {
     return (
       <div className="py-12 text-center">
-        <FileText className="h-10 w-10 text-gray-300 mx-auto mb-2" />
-        <p className="text-sm text-gray-500">No treatments recorded</p>
+        <FileText className="h-10 w-10 text-white/20 mx-auto mb-2" />
+        <p className="text-sm text-white/40 font-light">No treatments recorded</p>
       </div>
     );
   }
@@ -905,47 +862,50 @@ export default function PatientCards() {
     : null;
 
   return (
-    <div className="min-h-screen bg-white px-4 py-8">
-      <div className="max-w-3xl mx-auto">
+    <div className="min-h-screen relative overflow-hidden px-4 py-8" style={{ background: 'linear-gradient(135deg, #0a0e1a 0%, #1a1f35 50%, #0f1419 100%)' }}>
+      {/* Ambient glow */}
+      <div className="absolute top-0 right-1/4 w-96 h-96 bg-[#d6b164]/10 rounded-full blur-[120px] pointer-events-none" />
+
+      <div className="max-w-3xl mx-auto relative z-10">
         {/* Header with Search */}
         <div className="mb-8">
           <div className="flex items-center justify-between mb-4">
-            <h1 className="text-2xl font-semibold text-gray-900">Patient Cards</h1>
+            <h1 className="text-4xl font-light text-white/90 tracking-wider">Patient Cards</h1>
             <div className="flex items-center gap-2">
               <button
                 onClick={prevCard}
                 disabled={rows.length <= 1}
-                className="h-9 w-9 rounded-lg border border-gray-300 bg-white hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed transition-colors flex items-center justify-center"
+                className="h-9 w-9 rounded-2xl bg-white/5 backdrop-blur-xl border border-white/10 hover:border-[#d6b164]/30 disabled:opacity-40 disabled:cursor-not-allowed transition-all flex items-center justify-center"
               >
-                <ChevronLeft className="h-4 w-4 text-gray-700" />
+                <ChevronLeft className="h-4 w-4 text-white/70" />
               </button>
-              <span className="text-sm text-gray-600 min-w-[60px] text-center">
+              <span className="text-sm text-white/60 font-light min-w-[60px] text-center">
                 {currentIndex + 1} / {rows.length}
               </span>
               <button
                 onClick={nextCard}
                 disabled={rows.length <= 1}
-                className="h-9 w-9 rounded-lg border border-gray-300 bg-white hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed transition-colors flex items-center justify-center"
+                className="h-9 w-9 rounded-2xl bg-white/5 backdrop-blur-xl border border-white/10 hover:border-[#d6b164]/30 disabled:opacity-40 disabled:cursor-not-allowed transition-all flex items-center justify-center"
               >
-                <ChevronRight className="h-4 w-4 text-gray-700" />
+                <ChevronRight className="h-4 w-4 text-white/70" />
               </button>
             </div>
           </div>
 
           {/* Search Bar */}
           <div className="relative">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-white/40" />
             <Input
               type="text"
               placeholder="Search patients..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className="pl-10 pr-10 h-11 border-gray-300"
+              className="pl-10 pr-10 h-11 bg-white/5 backdrop-blur-xl border-white/10 hover:border-white/20 rounded-2xl text-white/90 placeholder:text-white/40 font-light"
             />
             {searchQuery && (
               <button
                 onClick={() => setSearchQuery("")}
-                className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-white/40 hover:text-white/70 transition-colors"
               >
                 <X className="h-4 w-4" />
               </button>
@@ -964,12 +924,11 @@ export default function PatientCards() {
             className="relative"
           >
             {/* Ambient glow effect */}
-            <div className={`absolute -inset-4 rounded-2xl bg-gradient-to-br ${cardGlow.gradient} blur-2xl opacity-30`} />
+            <div className={`absolute -inset-4 rounded-2xl bg-gradient-to-br ${cardGlow.gradient} blur-2xl opacity-20`} />
 
-            <div className={`relative bg-white rounded-lg p-8 overflow-hidden shadow-2xl ${cardGlow.shadow}`}>
-              {/* Gradient glow border effect */}
-              <div className={`absolute inset-0 rounded-lg bg-gradient-to-br ${cardGlow.gradient} opacity-100`} />
-              <div className="absolute inset-[1px] rounded-lg bg-white" />
+            <div className="relative bg-white/5 backdrop-blur-xl rounded-2xl p-8 overflow-hidden border border-white/10">
+              {/* Subtle gradient border effect */}
+              <div className={`absolute inset-0 rounded-2xl bg-gradient-to-br ${cardGlow.gradient} opacity-10`} />
 
               {/* Content wrapper with relative positioning */}
               <div className="relative z-10">
@@ -1002,16 +961,16 @@ export default function PatientCards() {
 
               {/* Tabs for History */}
               <Tabs value={activeTab} onValueChange={setActiveTab} className="mt-6">
-                <TabsList className="grid w-full grid-cols-2 bg-gray-100 p-1 rounded-lg h-10 mb-6">
+                <TabsList className="grid w-full grid-cols-2 bg-white/5 backdrop-blur-xl p-1 rounded-2xl h-11 mb-6 border border-white/10">
                   <TabsTrigger
                     value="treatments"
-                    className="rounded-md text-gray-500 data-[state=active]:bg-white data-[state=active]:text-gray-900 data-[state=active]:shadow-sm text-sm font-medium transition-colors"
+                    className="rounded-2xl text-white/60 data-[state=active]:bg-[#d6b164]/20 data-[state=active]:border data-[state=active]:border-[#d6b164]/30 data-[state=active]:text-[#d6b164] text-sm font-light tracking-wider transition-all"
                   >
                     Treatment history ({treatments.length})
                   </TabsTrigger>
                   <TabsTrigger
                     value="notes"
-                    className="rounded-md text-gray-500 data-[state=active]:bg-white data-[state=active]:text-gray-900 data-[state=active]:shadow-sm text-sm font-medium transition-colors"
+                    className="rounded-2xl text-white/60 data-[state=active]:bg-[#d6b164]/20 data-[state=active]:border data-[state=active]:border-[#d6b164]/30 data-[state=active]:text-[#d6b164] text-sm font-light tracking-wider transition-all"
                   >
                     Clinical notes ({notes.length})
                   </TabsTrigger>
