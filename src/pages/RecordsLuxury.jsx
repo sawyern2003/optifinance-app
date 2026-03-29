@@ -447,7 +447,10 @@ export default function RecordsLuxury() {
   };
 
   return (
-    <div className="min-h-screen bg-[#F5F6F8] flex">
+    <div className="min-h-screen relative overflow-hidden flex" style={{ background: 'linear-gradient(135deg, #0a0e1a 0%, #1a1f35 50%, #0f1419 100%)' }}>
+      {/* Ambient glow */}
+      <div className="absolute top-0 right-1/4 w-96 h-96 bg-[#d6b164]/10 rounded-full blur-[120px] pointer-events-none" />
+
       {/* Filter Sidebar */}
       {activeTab !== 'invoices' && (
         <FilterSidebar
@@ -463,26 +466,26 @@ export default function RecordsLuxury() {
       )}
 
       {/* Main Content */}
-      <div className="flex-1 flex flex-col">
+      <div className="flex-1 flex flex-col relative z-10">
         {/* Header */}
-        <div className="bg-white border-b border-gray-100">
+        <div className="bg-white/5 backdrop-blur-xl border-b border-white/10">
           <div className="px-6 py-6">
-            <h1 className="text-3xl font-light tracking-tight text-[#1a2845] mb-2">Records</h1>
-            <p className="text-sm text-gray-500 font-light">View and manage all your transactions</p>
+            <h1 className="text-4xl font-light tracking-wider text-white/90 mb-2">Records</h1>
+            <p className="text-sm text-white/60 font-light">View and manage all your transactions</p>
           </div>
         </div>
 
         {/* Tabs */}
-        <div className="bg-white border-b border-gray-100">
+        <div className="bg-white/5 backdrop-blur-xl border-b border-white/10">
           <div className="px-6 py-4">
             <div className="flex gap-2">
               <button
                 type="button"
                 onClick={() => setActiveTab("treatments")}
-                className={`flex items-center gap-2 px-6 py-3 rounded-xl font-medium transition-colors ${
+                className={`flex items-center gap-2 px-6 py-3 rounded-2xl font-light tracking-wider transition-all ${
                   activeTab === "treatments"
-                    ? 'bg-[#2C3E50] text-white'
-                    : 'text-gray-600 hover:text-gray-900'
+                    ? 'bg-[#d6b164]/20 backdrop-blur-xl border border-[#d6b164]/30 text-[#d6b164]'
+                    : 'bg-white/5 border border-white/10 text-white/70 hover:border-white/20'
                 }`}
               >
                 <Sparkles className="w-5 h-5" />
@@ -491,10 +494,10 @@ export default function RecordsLuxury() {
               <button
                 type="button"
                 onClick={() => setActiveTab("expenses")}
-                className={`flex items-center gap-2 px-6 py-3 rounded-xl font-medium transition-colors ${
+                className={`flex items-center gap-2 px-6 py-3 rounded-2xl font-light tracking-wider transition-all ${
                   activeTab === "expenses"
-                    ? 'bg-[#2C3E50] text-white'
-                    : 'text-gray-600 hover:text-gray-900'
+                    ? 'bg-[#d6b164]/20 backdrop-blur-xl border border-[#d6b164]/30 text-[#d6b164]'
+                    : 'bg-white/5 border border-white/10 text-white/70 hover:border-white/20'
                 }`}
               >
                 <CreditCard className="w-5 h-5" />
@@ -503,10 +506,10 @@ export default function RecordsLuxury() {
               <button
                 type="button"
                 onClick={() => setActiveTab("invoices")}
-                className={`flex items-center gap-2 px-6 py-3 rounded-xl font-medium transition-colors ${
+                className={`flex items-center gap-2 px-6 py-3 rounded-2xl font-light tracking-wider transition-all ${
                   activeTab === "invoices"
-                    ? 'bg-[#2C3E50] text-white'
-                    : 'text-gray-600 hover:text-gray-900'
+                    ? 'bg-[#d6b164]/20 backdrop-blur-xl border border-[#d6b164]/30 text-[#d6b164]'
+                    : 'bg-white/5 border border-white/10 text-white/70 hover:border-white/20'
                 }`}
               >
                 <FileCheck className="w-5 h-5" />
