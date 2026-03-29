@@ -10,7 +10,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { Textarea } from "@/components/ui/textarea";
-import { Plus, Pencil, Trash2, Sparkles, UserCog, Users, Copy, FileText, LayoutGrid } from "lucide-react";
+import { Plus, Pencil, Trash2, Sparkles, UserCog, Users, Copy, FileText, LayoutGrid, Download } from "lucide-react";
 import { useToast } from "@/components/ui/use-toast";
 import { format } from 'date-fns';
 
