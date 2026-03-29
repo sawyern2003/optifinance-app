@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { api } from '@/api/api';
-import { Plus, Package, AlertTriangle, TrendingDown, Search, Filter } from 'lucide-react';
+import { Plus, Package, AlertTriangle, X } from 'lucide-react';
 import { format } from 'date-fns';
 
 export default function Inventory() {
@@ -37,211 +37,185 @@ export default function Inventory() {
   const totalInventoryValue = products.reduce((sum, p) => sum + (p.current_stock * p.cost_per_unit), 0);
 
   return (
-    <div className="min-h-screen" style={{ background: 'linear-gradient(135deg, #fafbfc 0%, #f5f6f8 100%)' }}>
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+    <div className="min-h-screen relative overflow-hidden" style={{ background: 'linear-gradient(135deg, #0a0e1a 0%, #1a1f35 50%, #0f1419 100%)' }}>
+      {/* Ambient glow */}
+      <div className="absolute top-0 left-1/4 w-96 h-96 bg-[#d6b164]/10 rounded-full blur-[120px] pointer-events-none" />
+      <div className="absolute bottom-0 right-1/4 w-96 h-96 bg-[#4d647f]/10 rounded-full blur-[120px] pointer-events-none" />
+
+      <div className="relative max-w-7xl mx-auto px-8 py-12">
         {/* Header */}
-        <div className="mb-8">
-          <h1 className="text-3xl font-bold text-[#1a2845] mb-2">Inventory Management</h1>
-          <p className="text-gray-600">Track stock levels, manage products, and monitor expiry dates</p>
+        <div className="mb-12">
+          <h1 className="text-5xl font-light text-white/90 mb-3 tracking-tight">Inventory</h1>
+          <p className="text-white/40 text-lg font-light">Stock levels, expiry monitoring, and product management</p>
         </div>
 
-        {/* Stats Cards */}
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
-          <div className="bg-white rounded-xl p-6 shadow-sm border border-gray-100">
-            <div className="flex items-center justify-between mb-2">
-              <span className="text-sm text-gray-600">Total Products</span>
-              <Package className="w-5 h-5 text-[#1a2845]" />
+        {/* Stats Grid */}
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-12">
+          <div className="relative group">
+            <div className="absolute inset-0 bg-gradient-to-br from-[#d6b164]/20 to-transparent rounded-2xl blur-xl opacity-0 group-hover:opacity-100 transition-opacity duration-500" />
+            <div className="relative bg-white/5 backdrop-blur-xl rounded-2xl p-6 border border-white/10">
+              <div className="flex items-center justify-between mb-3">
+                <span className="text-white/40 text-xs tracking-[0.2em] uppercase">Products</span>
+                <Package className="w-5 h-5 text-[#d6b164]/60" />
+              </div>
+              <p className="text-4xl font-light text-white/90">{products.length}</p>
             </div>
-            <p className="text-2xl font-bold text-[#1a2845]">{products.length}</p>
           </div>
 
-          <div className="bg-white rounded-xl p-6 shadow-sm border border-gray-100">
-            <div className="flex items-center justify-between mb-2">
-              <span className="text-sm text-gray-600">Inventory Value</span>
-              <TrendingDown className="w-5 h-5 text-green-600" />
+          <div className="relative group">
+            <div className="absolute inset-0 bg-gradient-to-br from-emerald-400/20 to-transparent rounded-2xl blur-xl opacity-0 group-hover:opacity-100 transition-opacity duration-500" />
+            <div className="relative bg-white/5 backdrop-blur-xl rounded-2xl p-6 border border-white/10">
+              <div className="flex items-center justify-between mb-3">
+                <span className="text-white/40 text-xs tracking-[0.2em] uppercase">Value</span>
+                <div className="w-5 h-5 rounded-full bg-emerald-400/20 flex items-center justify-center">
+                  <div className="w-2 h-2 rounded-full bg-emerald-400" />
+                </div>
+              </div>
+              <p className="text-4xl font-light text-white/90">£{(totalInventoryValue / 1000).toFixed(1)}k</p>
             </div>
-            <p className="text-2xl font-bold text-[#1a2845]">£{totalInventoryValue.toFixed(2)}</p>
           </div>
 
-          <div className="bg-white rounded-xl p-6 shadow-sm border border-red-50">
-            <div className="flex items-center justify-between mb-2">
-              <span className="text-sm text-gray-600">Low Stock</span>
-              <AlertTriangle className="w-5 h-5 text-red-600" />
+          <div className="relative group">
+            <div className="absolute inset-0 bg-gradient-to-br from-red-400/20 to-transparent rounded-2xl blur-xl opacity-0 group-hover:opacity-100 transition-opacity duration-500" />
+            <div className="relative bg-white/5 backdrop-blur-xl rounded-2xl p-6 border border-red-400/20">
+              <div className="flex items-center justify-between mb-3">
+                <span className="text-white/40 text-xs tracking-[0.2em] uppercase">Low Stock</span>
+                <AlertTriangle className="w-5 h-5 text-red-400/60" />
+              </div>
+              <p className="text-4xl font-light text-red-400">{lowStockProducts.length}</p>
             </div>
-            <p className="text-2xl font-bold text-red-600">{lowStockProducts.length}</p>
           </div>
 
-          <div className="bg-white rounded-xl p-6 shadow-sm border border-orange-50">
-            <div className="flex items-center justify-between mb-2">
-              <span className="text-sm text-gray-600">Expiring Soon</span>
-              <AlertTriangle className="w-5 h-5 text-orange-600" />
+          <div className="relative group">
+            <div className="absolute inset-0 bg-gradient-to-br from-amber-400/20 to-transparent rounded-2xl blur-xl opacity-0 group-hover:opacity-100 transition-opacity duration-500" />
+            <div className="relative bg-white/5 backdrop-blur-xl rounded-2xl p-6 border border-amber-400/20">
+              <div className="flex items-center justify-between mb-3">
+                <span className="text-white/40 text-xs tracking-[0.2em] uppercase">Expiring</span>
+                <AlertTriangle className="w-5 h-5 text-amber-400/60" />
+              </div>
+              <p className="text-4xl font-light text-amber-400">{expiringProducts.length}</p>
             </div>
-            <p className="text-2xl font-bold text-orange-600">{expiringProducts.length}</p>
           </div>
         </div>
-
-        {/* Alerts */}
-        {(lowStockProducts.length > 0 || expiringProducts.length > 0) && (
-          <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 mb-8">
-            <h3 className="text-sm font-semibold text-amber-900 mb-2">Attention Required</h3>
-            {lowStockProducts.length > 0 && (
-              <p className="text-sm text-amber-800 mb-1">
-                <AlertTriangle className="w-4 h-4 inline mr-1" />
-                {lowStockProducts.length} product{lowStockProducts.length > 1 ? 's' : ''} running low on stock
-              </p>
-            )}
-            {expiringProducts.length > 0 && (
-              <p className="text-sm text-amber-800">
-                <AlertTriangle className="w-4 h-4 inline mr-1" />
-                {expiringProducts.length} product{expiringProducts.length > 1 ? 's' : ''} expiring within 30 days
-              </p>
-            )}
-          </div>
-        )}
 
         {/* Controls */}
-        <div className="bg-white rounded-xl p-6 shadow-sm border border-gray-100 mb-6">
-          <div className="flex flex-col md:flex-row gap-4">
-            {/* Search */}
-            <div className="flex-1 relative">
-              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400" />
-              <input
-                type="text"
-                placeholder="Search products by name or SKU..."
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                className="w-full pl-10 pr-4 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-[#1a2845] focus:border-transparent"
-              />
-            </div>
+        <div className="flex flex-col md:flex-row gap-4 mb-8">
+          {/* Search */}
+          <input
+            type="text"
+            placeholder="Search products..."
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            className="flex-1 px-6 py-3 bg-white/5 backdrop-blur-xl border border-white/10 rounded-full text-white/90 placeholder:text-white/30 focus:outline-none focus:border-[#d6b164]/50 transition-all"
+          />
 
-            {/* Category Filter */}
-            <div className="flex gap-2 flex-wrap">
-              {categories.map(cat => (
-                <button
-                  key={cat}
-                  onClick={() => setSelectedCategory(cat)}
-                  className={`px-4 py-2 rounded-lg text-sm font-medium transition-all ${
-                    selectedCategory === cat
-                      ? 'bg-[#1a2845] text-white'
-                      : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                  }`}
-                >
-                  {cat.charAt(0).toUpperCase() + cat.slice(1)}
-                </button>
-              ))}
-            </div>
-
-            {/* Add Product Button */}
-            <button
-              onClick={() => setShowAddProduct(true)}
-              className="flex items-center gap-2 px-6 py-2 bg-[#1a2845] text-white rounded-lg hover:bg-[#2a3855] transition-all"
-            >
-              <Plus className="w-5 h-5" />
-              Add Product
-            </button>
-          </div>
-        </div>
-
-        {/* Products Table */}
-        <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
-          {isLoading ? (
-            <div className="p-12 text-center">
-              <div className="w-8 h-8 border-4 border-[#1a2845] border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
-              <p className="text-gray-600">Loading inventory...</p>
-            </div>
-          ) : filteredProducts.length === 0 ? (
-            <div className="p-12 text-center">
-              <Package className="w-12 h-12 text-gray-300 mx-auto mb-4" />
-              <p className="text-gray-600">No products found</p>
+          {/* Category Pills */}
+          <div className="flex gap-2 flex-wrap">
+            {categories.map(cat => (
               <button
-                onClick={() => setShowAddProduct(true)}
-                className="mt-4 text-[#1a2845] hover:underline"
+                key={cat}
+                onClick={() => setSelectedCategory(cat)}
+                className={`px-5 py-2 rounded-full text-sm font-light tracking-wider transition-all ${
+                  selectedCategory === cat
+                    ? 'bg-[#d6b164]/20 text-[#d6b164] border border-[#d6b164]/30'
+                    : 'bg-white/5 text-white/40 border border-white/10 hover:border-white/20'
+                }`}
               >
-                Add your first product
+                {cat.toUpperCase()}
               </button>
-            </div>
-          ) : (
-            <div className="overflow-x-auto">
-              <table className="w-full">
-                <thead className="bg-gray-50 border-b border-gray-200">
-                  <tr>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Product</th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">SKU</th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Category</th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Stock</th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Cost/Unit</th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Value</th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Expiry</th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-gray-200">
-                  {filteredProducts.map((product) => {
-                    const isLowStock = product.current_stock <= product.minimum_stock;
-                    const daysUntilExpiry = product.expiry_date
-                      ? Math.floor((new Date(product.expiry_date) - new Date()) / (1000 * 60 * 60 * 24))
-                      : null;
-                    const isExpiringSoon = daysUntilExpiry !== null && daysUntilExpiry <= 30 && daysUntilExpiry >= 0;
+            ))}
+          </div>
 
-                    return (
-                      <tr key={product.id} className="hover:bg-gray-50">
-                        <td className="px-6 py-4">
-                          <div className="font-medium text-gray-900">{product.name}</div>
-                          {product.brand && <div className="text-sm text-gray-500">{product.brand}</div>}
-                        </td>
-                        <td className="px-6 py-4 text-sm text-gray-600">{product.sku || '-'}</td>
-                        <td className="px-6 py-4">
-                          <span className="px-2 py-1 text-xs font-medium rounded-full bg-blue-100 text-blue-800">
-                            {product.category}
-                          </span>
-                        </td>
-                        <td className="px-6 py-4">
-                          <div className={`font-medium ${isLowStock ? 'text-red-600' : 'text-gray-900'}`}>
-                            {product.current_stock} {product.unit}
-                          </div>
-                          <div className="text-xs text-gray-500">Min: {product.minimum_stock}</div>
-                        </td>
-                        <td className="px-6 py-4 text-sm text-gray-600">£{product.cost_per_unit.toFixed(2)}</td>
-                        <td className="px-6 py-4 text-sm font-medium text-gray-900">
-                          £{(product.current_stock * product.cost_per_unit).toFixed(2)}
-                        </td>
-                        <td className="px-6 py-4 text-sm">
-                          {product.expiry_date ? (
-                            <div className={isExpiringSoon ? 'text-orange-600 font-medium' : 'text-gray-600'}>
-                              {format(new Date(product.expiry_date), 'dd/MM/yyyy')}
-                              {isExpiringSoon && <div className="text-xs">({daysUntilExpiry} days)</div>}
-                            </div>
-                          ) : (
-                            <span className="text-gray-400">-</span>
-                          )}
-                        </td>
-                        <td className="px-6 py-4">
-                          <div className="flex gap-2">
-                            {isLowStock && (
-                              <span className="px-2 py-1 text-xs font-medium rounded-full bg-red-100 text-red-800">
-                                Low Stock
-                              </span>
-                            )}
-                            {isExpiringSoon && (
-                              <span className="px-2 py-1 text-xs font-medium rounded-full bg-orange-100 text-orange-800">
-                                Expiring
-                              </span>
-                            )}
-                            {!isLowStock && !isExpiringSoon && (
-                              <span className="px-2 py-1 text-xs font-medium rounded-full bg-green-100 text-green-800">
-                                Good
-                              </span>
-                            )}
-                          </div>
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
-          )}
+          <button
+            onClick={() => setShowAddProduct(true)}
+            className="px-6 py-3 bg-[#d6b164]/20 backdrop-blur-xl border border-[#d6b164]/30 rounded-full hover:bg-[#d6b164]/30 transition-all flex items-center gap-2"
+          >
+            <Plus className="w-5 h-5 text-[#d6b164]" />
+            <span className="text-[#d6b164] text-sm tracking-wider">ADD</span>
+          </button>
         </div>
+
+        {/* Products Grid */}
+        {isLoading ? (
+          <div className="flex items-center justify-center h-64">
+            <div className="w-8 h-8 border-2 border-[#d6b164]/30 border-t-[#d6b164] rounded-full animate-spin" />
+          </div>
+        ) : filteredProducts.length === 0 ? (
+          <div className="text-center py-20">
+            <Package className="w-16 h-16 text-white/10 mx-auto mb-4" />
+            <p className="text-white/30 text-lg">No products found</p>
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 gap-4">
+            {filteredProducts.map((product) => {
+              const isLowStock = product.current_stock <= product.minimum_stock;
+              const daysUntilExpiry = product.expiry_date
+                ? Math.floor((new Date(product.expiry_date) - new Date()) / (1000 * 60 * 60 * 24))
+                : null;
+              const isExpiringSoon = daysUntilExpiry !== null && daysUntilExpiry <= 30 && daysUntilExpiry >= 0;
+
+              return (
+                <div key={product.id} className="relative group">
+                  <div className="absolute inset-0 bg-gradient-to-r from-[#d6b164]/0 via-[#d6b164]/5 to-[#d6b164]/0 rounded-2xl opacity-0 group-hover:opacity-100 transition-opacity duration-500" />
+                  <div className="relative bg-white/5 backdrop-blur-xl rounded-2xl p-6 border border-white/10 group-hover:border-[#d6b164]/30 transition-all">
+                    <div className="grid grid-cols-1 md:grid-cols-6 gap-6 items-center">
+                      {/* Product Name */}
+                      <div className="md:col-span-2">
+                        <h3 className="text-white/90 text-lg font-light mb-1">{product.name}</h3>
+                        {product.brand && <p className="text-white/30 text-sm">{product.brand}</p>}
+                        <div className="mt-2 inline-flex items-center gap-2 px-3 py-1 rounded-full bg-[#4d647f]/20 border border-[#4d647f]/30">
+                          <span className="text-[#4d647f] text-xs tracking-wider">{product.category.toUpperCase()}</span>
+                        </div>
+                      </div>
+
+                      {/* Stock */}
+                      <div>
+                        <span className="text-white/30 text-xs tracking-wider uppercase block mb-1">Stock</span>
+                        <p className={`text-2xl font-light ${isLowStock ? 'text-red-400' : 'text-white/90'}`}>
+                          {product.current_stock} {product.unit}
+                        </p>
+                        <p className="text-white/20 text-xs">Min: {product.minimum_stock}</p>
+                      </div>
+
+                      {/* Cost */}
+                      <div>
+                        <span className="text-white/30 text-xs tracking-wider uppercase block mb-1">Cost</span>
+                        <p className="text-white/90 text-xl font-light">£{product.cost_per_unit.toFixed(2)}</p>
+                      </div>
+
+                      {/* Value */}
+                      <div>
+                        <span className="text-white/30 text-xs tracking-wider uppercase block mb-1">Value</span>
+                        <p className="text-[#d6b164] text-xl font-light">
+                          £{(product.current_stock * product.cost_per_unit).toFixed(0)}
+                        </p>
+                      </div>
+
+                      {/* Status */}
+                      <div className="flex flex-col gap-2">
+                        {isLowStock && (
+                          <div className="px-3 py-1 rounded-full bg-red-400/10 border border-red-400/30 text-center">
+                            <span className="text-red-400 text-xs tracking-wider">LOW STOCK</span>
+                          </div>
+                        )}
+                        {isExpiringSoon && (
+                          <div className="px-3 py-1 rounded-full bg-amber-400/10 border border-amber-400/30 text-center">
+                            <span className="text-amber-400 text-xs tracking-wider">{daysUntilExpiry}D LEFT</span>
+                          </div>
+                        )}
+                        {!isLowStock && !isExpiringSoon && (
+                          <div className="px-3 py-1 rounded-full bg-emerald-400/10 border border-emerald-400/30 text-center">
+                            <span className="text-emerald-400 text-xs tracking-wider">GOOD</span>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
 
         {/* Add Product Modal */}
         {showAddProduct && (
@@ -291,52 +265,51 @@ function AddProductModal({ onClose, onSuccess }) {
   };
 
   return (
-    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-      <div className="bg-white rounded-xl shadow-xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
-        <div className="p-6 border-b border-gray-200">
-          <h2 className="text-xl font-bold text-[#1a2845]">Add New Product</h2>
+    <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+      <div className="bg-gradient-to-br from-[#1a1f35] to-[#0a0e1a] rounded-3xl border border-white/10 max-w-3xl w-full max-h-[90vh] overflow-y-auto">
+        <div className="p-8 border-b border-white/10 flex items-center justify-between">
+          <div>
+            <h2 className="text-2xl font-light text-white/90 tracking-tight">Add Product</h2>
+            <p className="text-white/40 text-sm mt-1">Add new product to inventory</p>
+          </div>
+          <button
+            onClick={onClose}
+            className="text-white/40 hover:text-white/80 transition-colors"
+          >
+            <X className="w-6 h-6" />
+          </button>
         </div>
 
-        <form onSubmit={handleSubmit} className="p-6">
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <form onSubmit={handleSubmit} className="p-8">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Product Name *</label>
+              <label className="block text-white/40 text-xs tracking-wider uppercase mb-2">Product Name *</label>
               <input
                 type="text"
                 required
                 value={formData.name}
                 onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-[#1a2845] focus:border-transparent"
+                className="w-full px-4 py-3 bg-white/5 backdrop-blur-xl border border-white/10 rounded-xl text-white/90 placeholder:text-white/30 focus:outline-none focus:border-[#d6b164]/50 transition-all"
               />
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Brand</label>
+              <label className="block text-white/40 text-xs tracking-wider uppercase mb-2">Brand</label>
               <input
                 type="text"
                 value={formData.brand}
                 onChange={(e) => setFormData({ ...formData, brand: e.target.value })}
-                className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-[#1a2845] focus:border-transparent"
+                className="w-full px-4 py-3 bg-white/5 backdrop-blur-xl border border-white/10 rounded-xl text-white/90 placeholder:text-white/30 focus:outline-none focus:border-[#d6b164]/50 transition-all"
               />
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">SKU</label>
-              <input
-                type="text"
-                value={formData.sku}
-                onChange={(e) => setFormData({ ...formData, sku: e.target.value })}
-                className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-[#1a2845] focus:border-transparent"
-              />
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Category *</label>
+              <label className="block text-white/40 text-xs tracking-wider uppercase mb-2">Category *</label>
               <select
                 required
                 value={formData.category}
                 onChange={(e) => setFormData({ ...formData, category: e.target.value })}
-                className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-[#1a2845] focus:border-transparent"
+                className="w-full px-4 py-3 bg-white/5 backdrop-blur-xl border border-white/10 rounded-xl text-white/90 focus:outline-none focus:border-[#d6b164]/50 transition-all"
               >
                 <option value="fillers">Fillers</option>
                 <option value="toxins">Toxins</option>
@@ -348,51 +321,12 @@ function AddProductModal({ onClose, onSuccess }) {
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Current Stock *</label>
-              <input
-                type="number"
-                required
-                min="0"
-                step="0.01"
-                value={formData.current_stock}
-                onChange={(e) => setFormData({ ...formData, current_stock: parseFloat(e.target.value) || 0 })}
-                className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-[#1a2845] focus:border-transparent"
-              />
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Minimum Stock *</label>
-              <input
-                type="number"
-                required
-                min="0"
-                step="0.01"
-                value={formData.minimum_stock}
-                onChange={(e) => setFormData({ ...formData, minimum_stock: parseFloat(e.target.value) || 0 })}
-                className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-[#1a2845] focus:border-transparent"
-              />
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Cost per Unit (£) *</label>
-              <input
-                type="number"
-                required
-                min="0"
-                step="0.01"
-                value={formData.cost_per_unit}
-                onChange={(e) => setFormData({ ...formData, cost_per_unit: parseFloat(e.target.value) || 0 })}
-                className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-[#1a2845] focus:border-transparent"
-              />
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Unit *</label>
+              <label className="block text-white/40 text-xs tracking-wider uppercase mb-2">Unit *</label>
               <select
                 required
                 value={formData.unit}
                 onChange={(e) => setFormData({ ...formData, unit: e.target.value })}
-                className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-[#1a2845] focus:border-transparent"
+                className="w-full px-4 py-3 bg-white/5 backdrop-blur-xl border border-white/10 rounded-xl text-white/90 focus:outline-none focus:border-[#d6b164]/50 transition-all"
               >
                 <option value="units">Units</option>
                 <option value="ml">ml</option>
@@ -404,40 +338,69 @@ function AddProductModal({ onClose, onSuccess }) {
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Expiry Date</label>
+              <label className="block text-white/40 text-xs tracking-wider uppercase mb-2">Current Stock *</label>
               <input
-                type="date"
-                value={formData.expiry_date}
-                onChange={(e) => setFormData({ ...formData, expiry_date: e.target.value })}
-                className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-[#1a2845] focus:border-transparent"
+                type="number"
+                required
+                min="0"
+                step="0.01"
+                value={formData.current_stock}
+                onChange={(e) => setFormData({ ...formData, current_stock: parseFloat(e.target.value) || 0 })}
+                className="w-full px-4 py-3 bg-white/5 backdrop-blur-xl border border-white/10 rounded-xl text-white/90 placeholder:text-white/30 focus:outline-none focus:border-[#d6b164]/50 transition-all"
               />
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Supplier</label>
+              <label className="block text-white/40 text-xs tracking-wider uppercase mb-2">Minimum Stock *</label>
               <input
-                type="text"
-                value={formData.supplier}
-                onChange={(e) => setFormData({ ...formData, supplier: e.target.value })}
-                className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-[#1a2845] focus:border-transparent"
+                type="number"
+                required
+                min="0"
+                step="0.01"
+                value={formData.minimum_stock}
+                onChange={(e) => setFormData({ ...formData, minimum_stock: parseFloat(e.target.value) || 0 })}
+                className="w-full px-4 py-3 bg-white/5 backdrop-blur-xl border border-white/10 rounded-xl text-white/90 placeholder:text-white/30 focus:outline-none focus:border-[#d6b164]/50 transition-all"
+              />
+            </div>
+
+            <div>
+              <label className="block text-white/40 text-xs tracking-wider uppercase mb-2">Cost per Unit (£) *</label>
+              <input
+                type="number"
+                required
+                min="0"
+                step="0.01"
+                value={formData.cost_per_unit}
+                onChange={(e) => setFormData({ ...formData, cost_per_unit: parseFloat(e.target.value) || 0 })}
+                className="w-full px-4 py-3 bg-white/5 backdrop-blur-xl border border-white/10 rounded-xl text-white/90 placeholder:text-white/30 focus:outline-none focus:border-[#d6b164]/50 transition-all"
+              />
+            </div>
+
+            <div>
+              <label className="block text-white/40 text-xs tracking-wider uppercase mb-2">Expiry Date</label>
+              <input
+                type="date"
+                value={formData.expiry_date}
+                onChange={(e) => setFormData({ ...formData, expiry_date: e.target.value })}
+                className="w-full px-4 py-3 bg-white/5 backdrop-blur-xl border border-white/10 rounded-xl text-white/90 focus:outline-none focus:border-[#d6b164]/50 transition-all"
               />
             </div>
           </div>
 
-          <div className="flex gap-3 mt-6">
+          <div className="flex gap-4 mt-8">
             <button
               type="button"
               onClick={onClose}
-              className="flex-1 px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50"
+              className="flex-1 px-6 py-3 bg-white/5 backdrop-blur-xl border border-white/10 rounded-full text-white/60 hover:text-white/90 hover:border-white/20 transition-all"
             >
               Cancel
             </button>
             <button
               type="submit"
               disabled={saving}
-              className="flex-1 px-4 py-2 bg-[#1a2845] text-white rounded-lg hover:bg-[#2a3855] disabled:opacity-50"
+              className="flex-1 px-6 py-3 bg-[#d6b164]/20 backdrop-blur-xl border border-[#d6b164]/30 rounded-full text-[#d6b164] hover:bg-[#d6b164]/30 transition-all disabled:opacity-50"
             >
-              {saving ? 'Creating...' : 'Create Product'}
+              {saving ? 'Adding...' : 'Add Product'}
             </button>
           </div>
         </form>

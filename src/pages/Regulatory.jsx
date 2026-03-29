@@ -1,74 +1,62 @@
 import React, { useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { api } from '@/api/api';
-import { Plus, Thermometer, Wrench, ClipboardCheck, AlertCircle, CheckCircle, Calendar } from 'lucide-react';
-import { format, startOfWeek, endOfWeek, eachDayOfInterval } from 'date-fns';
+import { Plus, Thermometer, Wrench, AlertCircle, CheckCircle, X } from 'lucide-react';
+import { format } from 'date-fns';
 
 export default function Regulatory() {
   const [selectedTab, setSelectedTab] = useState('fridge');
-  const [showAddLog, setShowAddLog] = useState(false);
-  const queryClient = useQueryClient();
 
   return (
-    <div className="min-h-screen" style={{ background: 'linear-gradient(135deg, #fafbfc 0%, #f5f6f8 100%)' }}>
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+    <div className="min-h-screen relative overflow-hidden" style={{ background: 'linear-gradient(135deg, #0a0e1a 0%, #1a1f35 50%, #0f1419 100%)' }}>
+      {/* Ambient glow */}
+      <div className="absolute top-0 right-1/4 w-96 h-96 bg-[#4d647f]/10 rounded-full blur-[120px] pointer-events-none" />
+      <div className="absolute bottom-0 left-1/4 w-96 h-96 bg-[#d6b164]/10 rounded-full blur-[120px] pointer-events-none" />
+
+      <div className="relative max-w-7xl mx-auto px-8 py-12">
         {/* Header */}
-        <div className="mb-8">
-          <h1 className="text-3xl font-bold text-[#1a2845] mb-2">Regulatory Compliance</h1>
-          <p className="text-gray-600">Track temperatures, equipment maintenance, and regulatory requirements</p>
+        <div className="mb-12">
+          <h1 className="text-5xl font-light text-white/90 mb-3 tracking-tight">Regulatory</h1>
+          <p className="text-white/40 text-lg font-light">Compliance tracking for fridge temps and equipment maintenance</p>
         </div>
 
         {/* Tabs */}
-        <div className="bg-white rounded-xl shadow-sm border border-gray-100 mb-6">
-          <div className="flex overflow-x-auto">
-            <button
-              onClick={() => setSelectedTab('fridge')}
-              className={`flex items-center gap-2 px-6 py-4 font-medium transition-all border-b-2 ${
-                selectedTab === 'fridge'
-                  ? 'border-[#1a2845] text-[#1a2845]'
-                  : 'border-transparent text-gray-600 hover:text-[#1a2845]'
-              }`}
-            >
-              <Thermometer className="w-5 h-5" />
-              Fridge Temperatures
-            </button>
-            <button
-              onClick={() => setSelectedTab('equipment')}
-              className={`flex items-center gap-2 px-6 py-4 font-medium transition-all border-b-2 ${
-                selectedTab === 'equipment'
-                  ? 'border-[#1a2845] text-[#1a2845]'
-                  : 'border-transparent text-gray-600 hover:text-[#1a2845]'
-              }`}
-            >
-              <Wrench className="w-5 h-5" />
-              Equipment Maintenance
-            </button>
-            <button
-              onClick={() => setSelectedTab('checklists')}
-              className={`flex items-center gap-2 px-6 py-4 font-medium transition-all border-b-2 ${
-                selectedTab === 'checklists'
-                  ? 'border-[#1a2845] text-[#1a2845]'
-                  : 'border-transparent text-gray-600 hover:text-[#1a2845]'
-              }`}
-            >
-              <ClipboardCheck className="w-5 h-5" />
-              Daily Checklists
-            </button>
-          </div>
+        <div className="flex gap-4 mb-12">
+          <button
+            onClick={() => setSelectedTab('fridge')}
+            className={`flex items-center gap-3 px-8 py-4 rounded-2xl transition-all ${
+              selectedTab === 'fridge'
+                ? 'bg-[#d6b164]/20 backdrop-blur-xl border border-[#d6b164]/30 text-[#d6b164]'
+                : 'bg-white/5 backdrop-blur-xl border border-white/10 text-white/40 hover:border-white/20'
+            }`}
+          >
+            <Thermometer className="w-5 h-5" />
+            <span className="text-sm tracking-wider font-light">FRIDGE TEMPS</span>
+          </button>
+          <button
+            onClick={() => setSelectedTab('equipment')}
+            className={`flex items-center gap-3 px-8 py-4 rounded-2xl transition-all ${
+              selectedTab === 'equipment'
+                ? 'bg-[#d6b164]/20 backdrop-blur-xl border border-[#d6b164]/30 text-[#d6b164]'
+                : 'bg-white/5 backdrop-blur-xl border border-white/10 text-white/40 hover:border-white/20'
+            }`}
+          >
+            <Wrench className="w-5 h-5" />
+            <span className="text-sm tracking-wider font-light">EQUIPMENT</span>
+          </button>
         </div>
 
         {/* Content */}
-        {selectedTab === 'fridge' && <FridgeTemperatures showAddLog={showAddLog} setShowAddLog={setShowAddLog} />}
+        {selectedTab === 'fridge' && <FridgeTemperatures />}
         {selectedTab === 'equipment' && <EquipmentMaintenance />}
-        {selectedTab === 'checklists' && <DailyChecklists />}
       </div>
     </div>
   );
 }
 
-function FridgeTemperatures({ showAddLog, setShowAddLog }) {
+function FridgeTemperatures() {
+  const [showAddLog, setShowAddLog] = useState(false);
   const queryClient = useQueryClient();
-  const [selectedWeek, setSelectedWeek] = useState(new Date());
 
   const { data: logs = [], isLoading } = useQuery({
     queryKey: ['fridge-temps'],
@@ -76,10 +64,6 @@ function FridgeTemperatures({ showAddLog, setShowAddLog }) {
       return await api.entities.FridgeTemperature.list('-logged_at');
     },
   });
-
-  const weekStart = startOfWeek(selectedWeek, { weekStartsOn: 1 });
-  const weekEnd = endOfWeek(selectedWeek, { weekStartsOn: 1 });
-  const daysInWeek = eachDayOfInterval({ start: weekStart, end: weekEnd });
 
   // Get today's logs
   const today = format(new Date(), 'yyyy-MM-dd');
@@ -89,160 +73,116 @@ function FridgeTemperatures({ showAddLog, setShowAddLog }) {
 
   // Check if any readings are out of range
   const outOfRangeLogs = logs.filter(log => log.temperature < 2 || log.temperature > 8);
+  const recentLogs = logs.slice(0, 10);
 
   return (
     <div>
-      {/* Alert for missing logs */}
+      {/* Alert */}
       {(!hasAMLog || !hasPMLog) && (
-        <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 mb-6">
-          <div className="flex items-start gap-3">
-            <AlertCircle className="w-5 h-5 text-amber-600 mt-0.5" />
-            <div>
-              <h3 className="font-semibold text-amber-900 mb-1">Action Required</h3>
-              <p className="text-sm text-amber-800">
-                {!hasAMLog && !hasPMLog && "No temperature readings recorded today. Please log AM and PM readings."}
-                {!hasAMLog && hasPMLog && "Morning (AM) temperature reading not recorded yet."}
-                {hasAMLog && !hasPMLog && "Afternoon (PM) temperature reading not recorded yet."}
-              </p>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Out of range alert */}
-      {outOfRangeLogs.length > 0 && (
-        <div className="bg-red-50 border border-red-200 rounded-xl p-4 mb-6">
-          <div className="flex items-start gap-3">
-            <AlertCircle className="w-5 h-5 text-red-600 mt-0.5" />
-            <div>
-              <h3 className="font-semibold text-red-900 mb-1">Temperature Alert</h3>
-              <p className="text-sm text-red-800">
-                {outOfRangeLogs.length} reading{outOfRangeLogs.length > 1 ? 's' : ''} outside safe range (2-8°C). Action required.
-              </p>
+        <div className="relative mb-8">
+          <div className="absolute inset-0 bg-gradient-to-br from-amber-400/20 to-transparent rounded-2xl blur-xl" />
+          <div className="relative bg-amber-400/10 backdrop-blur-xl rounded-2xl p-6 border border-amber-400/30">
+            <div className="flex items-start gap-4">
+              <AlertCircle className="w-6 h-6 text-amber-400 mt-0.5 flex-shrink-0" />
+              <div>
+                <h3 className="text-amber-400 font-light text-lg mb-1">Action Required</h3>
+                <p className="text-white/60 text-sm">
+                  {!hasAMLog && !hasPMLog && "No temperature readings recorded today. Log AM and PM readings."}
+                  {!hasAMLog && hasPMLog && "Morning (AM) temperature reading not recorded yet."}
+                  {hasAMLog && !hasPMLog && "Afternoon (PM) temperature reading not recorded yet."}
+                </p>
+              </div>
             </div>
           </div>
         </div>
       )}
 
       {/* Quick Log Button */}
-      <div className="flex justify-between items-center mb-6">
+      <div className="flex justify-between items-center mb-8">
         <div>
-          <h2 className="text-lg font-semibold text-[#1a2845]">Temperature Log</h2>
-          <p className="text-sm text-gray-600">Record temperatures twice daily (AM & PM)</p>
+          <h2 className="text-2xl font-light text-white/90 mb-1">Temperature Log</h2>
+          <p className="text-white/40 text-sm">Record twice daily (AM & PM)</p>
         </div>
         <button
           onClick={() => setShowAddLog(true)}
-          className="flex items-center gap-2 px-6 py-3 bg-[#1a2845] text-white rounded-lg hover:bg-[#2a3855] transition-all"
+          className="px-6 py-3 bg-[#d6b164]/20 backdrop-blur-xl border border-[#d6b164]/30 rounded-full hover:bg-[#d6b164]/30 transition-all flex items-center gap-2"
         >
-          <Plus className="w-5 h-5" />
-          Log Temperature
+          <Plus className="w-5 h-5 text-[#d6b164]" />
+          <span className="text-[#d6b164] text-sm tracking-wider">LOG TEMP</span>
         </button>
       </div>
 
-      {/* Weekly View */}
-      <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
-        <div className="p-6 border-b border-gray-200">
-          <div className="flex items-center justify-between">
-            <h3 className="font-semibold text-[#1a2845]">
-              Week of {format(weekStart, 'MMM d')} - {format(weekEnd, 'MMM d, yyyy')}
-            </h3>
-            <div className="flex gap-2">
-              <button
-                onClick={() => setSelectedWeek(new Date(selectedWeek.setDate(selectedWeek.getDate() - 7)))}
-                className="px-3 py-1 text-sm border border-gray-300 rounded-lg hover:bg-gray-50"
-              >
-                Previous Week
-              </button>
-              <button
-                onClick={() => setSelectedWeek(new Date())}
-                className="px-3 py-1 text-sm border border-gray-300 rounded-lg hover:bg-gray-50"
-              >
-                This Week
-              </button>
-              <button
-                onClick={() => setSelectedWeek(new Date(selectedWeek.setDate(selectedWeek.getDate() + 7)))}
-                className="px-3 py-1 text-sm border border-gray-300 rounded-lg hover:bg-gray-50"
-              >
-                Next Week
-              </button>
-            </div>
-          </div>
+      {/* Recent Logs */}
+      {isLoading ? (
+        <div className="flex items-center justify-center h-64">
+          <div className="w-8 h-8 border-2 border-[#d6b164]/30 border-t-[#d6b164] rounded-full animate-spin" />
         </div>
+      ) : recentLogs.length === 0 ? (
+        <div className="text-center py-20">
+          <Thermometer className="w-16 h-16 text-white/10 mx-auto mb-4" />
+          <p className="text-white/30 text-lg">No temperature logs yet</p>
+        </div>
+      ) : (
+        <div className="grid grid-cols-1 gap-4">
+          {recentLogs.map((log) => {
+            const isOutOfRange = log.temperature < 2 || log.temperature > 8;
+            const logDate = new Date(log.logged_at);
 
-        <div className="overflow-x-auto">
-          <table className="w-full">
-            <thead className="bg-gray-50 border-b border-gray-200">
-              <tr>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Date</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">AM Reading</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">PM Reading</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Status</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Notes</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-gray-200">
-              {daysInWeek.map(day => {
-                const dateStr = format(day, 'yyyy-MM-dd');
-                const dayLogs = logs.filter(log => format(new Date(log.logged_at), 'yyyy-MM-dd') === dateStr);
-                const amLog = dayLogs.find(log => log.time_of_day === 'am');
-                const pmLog = dayLogs.find(log => log.time_of_day === 'pm');
-                const hasIssue = dayLogs.some(log => log.temperature < 2 || log.temperature > 8);
-                const isComplete = amLog && pmLog;
+            return (
+              <div key={log.id} className="relative group">
+                <div className="absolute inset-0 bg-gradient-to-r from-[#d6b164]/0 via-[#d6b164]/5 to-[#d6b164]/0 rounded-2xl opacity-0 group-hover:opacity-100 transition-opacity duration-500" />
+                <div className={`relative bg-white/5 backdrop-blur-xl rounded-2xl p-6 border transition-all ${
+                  isOutOfRange ? 'border-red-400/30' : 'border-white/10 group-hover:border-[#d6b164]/30'
+                }`}>
+                  <div className="grid grid-cols-1 md:grid-cols-5 gap-6 items-center">
+                    {/* Date/Time */}
+                    <div>
+                      <span className="text-white/30 text-xs tracking-wider uppercase block mb-1">Date</span>
+                      <p className="text-white/90 text-lg font-light">{format(logDate, 'MMM d')}</p>
+                      <p className="text-white/40 text-sm">{format(logDate, 'HH:mm')}</p>
+                    </div>
 
-                return (
-                  <tr key={dateStr} className="hover:bg-gray-50">
-                    <td className="px-6 py-4">
-                      <div className="font-medium text-gray-900">{format(day, 'EEE, MMM d')}</div>
-                    </td>
-                    <td className="px-6 py-4">
-                      {amLog ? (
-                        <div className={`font-medium ${amLog.temperature < 2 || amLog.temperature > 8 ? 'text-red-600' : 'text-gray-900'}`}>
-                          {amLog.temperature}°C
-                          <div className="text-xs text-gray-500">{format(new Date(amLog.logged_at), 'HH:mm')}</div>
+                    {/* Time of Day */}
+                    <div>
+                      <span className="text-white/30 text-xs tracking-wider uppercase block mb-1">Period</span>
+                      <div className="px-3 py-1 rounded-full bg-[#4d647f]/20 border border-[#4d647f]/30 inline-block">
+                        <span className="text-[#4d647f] text-sm tracking-wider">{log.time_of_day.toUpperCase()}</span>
+                      </div>
+                    </div>
+
+                    {/* Temperature */}
+                    <div>
+                      <span className="text-white/30 text-xs tracking-wider uppercase block mb-1">Reading</span>
+                      <p className={`text-3xl font-light ${isOutOfRange ? 'text-red-400' : 'text-[#d6b164]'}`}>
+                        {log.temperature}°C
+                      </p>
+                    </div>
+
+                    {/* Notes */}
+                    <div className="md:col-span-1">
+                      <span className="text-white/30 text-xs tracking-wider uppercase block mb-1">Notes</span>
+                      <p className="text-white/60 text-sm">{log.notes || '-'}</p>
+                    </div>
+
+                    {/* Status */}
+                    <div>
+                      {isOutOfRange ? (
+                        <div className="px-3 py-1 rounded-full bg-red-400/10 border border-red-400/30 text-center">
+                          <span className="text-red-400 text-xs tracking-wider">OUT OF RANGE</span>
                         </div>
                       ) : (
-                        <span className="text-gray-400">-</span>
-                      )}
-                    </td>
-                    <td className="px-6 py-4">
-                      {pmLog ? (
-                        <div className={`font-medium ${pmLog.temperature < 2 || pmLog.temperature > 8 ? 'text-red-600' : 'text-gray-900'}`}>
-                          {pmLog.temperature}°C
-                          <div className="text-xs text-gray-500">{format(new Date(pmLog.logged_at), 'HH:mm')}</div>
+                        <div className="px-3 py-1 rounded-full bg-emerald-400/10 border border-emerald-400/30 text-center">
+                          <span className="text-emerald-400 text-xs tracking-wider">GOOD</span>
                         </div>
-                      ) : (
-                        <span className="text-gray-400">-</span>
                       )}
-                    </td>
-                    <td className="px-6 py-4">
-                      {hasIssue ? (
-                        <span className="px-2 py-1 text-xs font-medium rounded-full bg-red-100 text-red-800">
-                          Out of Range
-                        </span>
-                      ) : isComplete ? (
-                        <span className="px-2 py-1 text-xs font-medium rounded-full bg-green-100 text-green-800">
-                          Complete
-                        </span>
-                      ) : dayLogs.length > 0 ? (
-                        <span className="px-2 py-1 text-xs font-medium rounded-full bg-amber-100 text-amber-800">
-                          Incomplete
-                        </span>
-                      ) : (
-                        <span className="px-2 py-1 text-xs font-medium rounded-full bg-gray-100 text-gray-600">
-                          No Data
-                        </span>
-                      )}
-                    </td>
-                    <td className="px-6 py-4 text-sm text-gray-600">
-                      {amLog?.notes || pmLog?.notes || '-'}
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            );
+          })}
         </div>
-      </div>
+      )}
 
       {/* Add Log Modal */}
       {showAddLog && (
@@ -294,67 +234,90 @@ function AddFridgeTempModal({ onClose, onSuccess }) {
   };
 
   return (
-    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-      <div className="bg-white rounded-xl shadow-xl max-w-md w-full">
-        <div className="p-6 border-b border-gray-200">
-          <h2 className="text-xl font-bold text-[#1a2845]">Log Fridge Temperature</h2>
+    <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+      <div className="bg-gradient-to-br from-[#1a1f35] to-[#0a0e1a] rounded-3xl border border-white/10 max-w-lg w-full">
+        <div className="p-8 border-b border-white/10 flex items-center justify-between">
+          <div>
+            <h2 className="text-2xl font-light text-white/90 tracking-tight">Log Temperature</h2>
+            <p className="text-white/40 text-sm mt-1">Safe range: 2-8°C</p>
+          </div>
+          <button
+            onClick={onClose}
+            className="text-white/40 hover:text-white/80 transition-colors"
+          >
+            <X className="w-6 h-6" />
+          </button>
         </div>
 
-        <form onSubmit={handleSubmit} className="p-6">
-          <div className="space-y-4">
+        <form onSubmit={handleSubmit} className="p-8">
+          <div className="space-y-6">
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Temperature (°C) *</label>
+              <label className="block text-white/40 text-xs tracking-wider uppercase mb-2">Temperature (°C) *</label>
               <input
                 type="number"
                 required
                 step="0.1"
                 value={formData.temperature}
                 onChange={(e) => setFormData({ ...formData, temperature: e.target.value })}
-                className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-[#1a2845] focus:border-transparent text-lg"
+                className="w-full px-4 py-4 bg-white/5 backdrop-blur-xl border border-white/10 rounded-xl text-white/90 text-2xl placeholder:text-white/30 focus:outline-none focus:border-[#d6b164]/50 transition-all"
                 placeholder="5.0"
               />
-              <p className="text-xs text-gray-500 mt-1">Safe range: 2-8°C</p>
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Time of Day *</label>
-              <select
-                required
-                value={formData.time_of_day}
-                onChange={(e) => setFormData({ ...formData, time_of_day: e.target.value })}
-                className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-[#1a2845] focus:border-transparent"
-              >
-                <option value="am">Morning (AM)</option>
-                <option value="pm">Afternoon (PM)</option>
-              </select>
+              <label className="block text-white/40 text-xs tracking-wider uppercase mb-2">Time of Day *</label>
+              <div className="flex gap-4">
+                <button
+                  type="button"
+                  onClick={() => setFormData({ ...formData, time_of_day: 'am' })}
+                  className={`flex-1 px-6 py-4 rounded-xl transition-all ${
+                    formData.time_of_day === 'am'
+                      ? 'bg-[#d6b164]/20 border border-[#d6b164]/30 text-[#d6b164]'
+                      : 'bg-white/5 border border-white/10 text-white/40 hover:border-white/20'
+                  }`}
+                >
+                  <span className="text-sm tracking-wider font-light">MORNING (AM)</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setFormData({ ...formData, time_of_day: 'pm' })}
+                  className={`flex-1 px-6 py-4 rounded-xl transition-all ${
+                    formData.time_of_day === 'pm'
+                      ? 'bg-[#d6b164]/20 border border-[#d6b164]/30 text-[#d6b164]'
+                      : 'bg-white/5 border border-white/10 text-white/40 hover:border-white/20'
+                  }`}
+                >
+                  <span className="text-sm tracking-wider font-light">AFTERNOON (PM)</span>
+                </button>
+              </div>
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Notes</label>
+              <label className="block text-white/40 text-xs tracking-wider uppercase mb-2">Notes</label>
               <textarea
                 value={formData.notes}
                 onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
-                className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-[#1a2845] focus:border-transparent"
+                className="w-full px-4 py-3 bg-white/5 backdrop-blur-xl border border-white/10 rounded-xl text-white/90 placeholder:text-white/30 focus:outline-none focus:border-[#d6b164]/50 transition-all"
                 rows="3"
-                placeholder="Any issues or observations..."
+                placeholder="Any observations..."
               />
             </div>
           </div>
 
-          <div className="flex gap-3 mt-6">
+          <div className="flex gap-4 mt-8">
             <button
               type="button"
               onClick={onClose}
-              className="flex-1 px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50"
+              className="flex-1 px-6 py-3 bg-white/5 backdrop-blur-xl border border-white/10 rounded-full text-white/60 hover:text-white/90 hover:border-white/20 transition-all"
             >
               Cancel
             </button>
             <button
               type="submit"
               disabled={saving}
-              className="flex-1 px-4 py-2 bg-[#1a2845] text-white rounded-lg hover:bg-[#2a3855] disabled:opacity-50"
+              className="flex-1 px-6 py-3 bg-[#d6b164]/20 backdrop-blur-xl border border-[#d6b164]/30 rounded-full text-[#d6b164] hover:bg-[#d6b164]/30 transition-all disabled:opacity-50"
             >
-              {saving ? 'Saving...' : 'Log Temperature'}
+              {saving ? 'Logging...' : 'Log Temperature'}
             </button>
           </div>
         </form>
@@ -374,12 +337,6 @@ function EquipmentMaintenance() {
     },
   });
 
-  const upcomingMaintenance = equipment.filter(eq => {
-    if (!eq.next_service_date) return false;
-    const daysUntil = Math.floor((new Date(eq.next_service_date) - new Date()) / (1000 * 60 * 60 * 24));
-    return daysUntil <= 30 && daysUntil >= 0;
-  });
-
   const overdueMaintenance = equipment.filter(eq => {
     if (!eq.next_service_date) return false;
     return new Date(eq.next_service_date) < new Date();
@@ -387,128 +344,128 @@ function EquipmentMaintenance() {
 
   return (
     <div>
-      {/* Alert for upcoming/overdue */}
-      {(upcomingMaintenance.length > 0 || overdueMaintenance.length > 0) && (
-        <div className={`${overdueMaintenance.length > 0 ? 'bg-red-50 border-red-200' : 'bg-amber-50 border-amber-200'} border rounded-xl p-4 mb-6`}>
-          <div className="flex items-start gap-3">
-            <AlertCircle className={`w-5 h-5 ${overdueMaintenance.length > 0 ? 'text-red-600' : 'text-amber-600'} mt-0.5`} />
-            <div>
-              <h3 className={`font-semibold ${overdueMaintenance.length > 0 ? 'text-red-900' : 'text-amber-900'} mb-1`}>Maintenance Required</h3>
-              {overdueMaintenance.length > 0 && (
-                <p className="text-sm text-red-800 mb-1">
+      {/* Alert */}
+      {overdueMaintenance.length > 0 && (
+        <div className="relative mb-8">
+          <div className="absolute inset-0 bg-gradient-to-br from-red-400/20 to-transparent rounded-2xl blur-xl" />
+          <div className="relative bg-red-400/10 backdrop-blur-xl rounded-2xl p-6 border border-red-400/30">
+            <div className="flex items-start gap-4">
+              <AlertCircle className="w-6 h-6 text-red-400 mt-0.5 flex-shrink-0" />
+              <div>
+                <h3 className="text-red-400 font-light text-lg mb-1">Maintenance Overdue</h3>
+                <p className="text-white/60 text-sm">
                   {overdueMaintenance.length} equipment item{overdueMaintenance.length > 1 ? 's' : ''} overdue for service
                 </p>
-              )}
-              {upcomingMaintenance.length > 0 && (
-                <p className={`text-sm ${overdueMaintenance.length > 0 ? 'text-red-800' : 'text-amber-800'}`}>
-                  {upcomingMaintenance.length} equipment item{upcomingMaintenance.length > 1 ? 's' : ''} due for service within 30 days
-                </p>
-              )}
+              </div>
             </div>
           </div>
         </div>
       )}
 
       {/* Header */}
-      <div className="flex justify-between items-center mb-6">
+      <div className="flex justify-between items-center mb-8">
         <div>
-          <h2 className="text-lg font-semibold text-[#1a2845]">Equipment Register</h2>
-          <p className="text-sm text-gray-600">Track maintenance, calibration, and service records</p>
+          <h2 className="text-2xl font-light text-white/90 mb-1">Equipment Register</h2>
+          <p className="text-white/40 text-sm">Track maintenance and service records</p>
         </div>
         <button
           onClick={() => setShowAddEquipment(true)}
-          className="flex items-center gap-2 px-6 py-3 bg-[#1a2845] text-white rounded-lg hover:bg-[#2a3855] transition-all"
+          className="px-6 py-3 bg-[#d6b164]/20 backdrop-blur-xl border border-[#d6b164]/30 rounded-full hover:bg-[#d6b164]/30 transition-all flex items-center gap-2"
         >
-          <Plus className="w-5 h-5" />
-          Add Equipment
+          <Plus className="w-5 h-5 text-[#d6b164]" />
+          <span className="text-[#d6b164] text-sm tracking-wider">ADD EQUIPMENT</span>
         </button>
       </div>
 
-      {/* Equipment List */}
-      <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
-        {isLoading ? (
-          <div className="p-12 text-center">
-            <div className="w-8 h-8 border-4 border-[#1a2845] border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
-            <p className="text-gray-600">Loading equipment...</p>
-          </div>
-        ) : equipment.length === 0 ? (
-          <div className="p-12 text-center">
-            <Wrench className="w-12 h-12 text-gray-300 mx-auto mb-4" />
-            <p className="text-gray-600">No equipment registered</p>
-            <button
-              onClick={() => setShowAddEquipment(true)}
-              className="mt-4 text-[#1a2845] hover:underline"
-            >
-              Add your first equipment
-            </button>
-          </div>
-        ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full">
-              <thead className="bg-gray-50 border-b border-gray-200">
-                <tr>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Equipment</th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Serial Number</th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Last Service</th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Next Service</th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Status</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-gray-200">
-                {equipment.map((eq) => {
-                  const daysUntilService = eq.next_service_date
-                    ? Math.floor((new Date(eq.next_service_date) - new Date()) / (1000 * 60 * 60 * 24))
-                    : null;
-                  const isOverdue = daysUntilService !== null && daysUntilService < 0;
-                  const isUpcoming = daysUntilService !== null && daysUntilService <= 30 && daysUntilService >= 0;
+      {/* Equipment Grid */}
+      {isLoading ? (
+        <div className="flex items-center justify-center h-64">
+          <div className="w-8 h-8 border-2 border-[#d6b164]/30 border-t-[#d6b164] rounded-full animate-spin" />
+        </div>
+      ) : equipment.length === 0 ? (
+        <div className="text-center py-20">
+          <Wrench className="w-16 h-16 text-white/10 mx-auto mb-4" />
+          <p className="text-white/30 text-lg">No equipment registered</p>
+        </div>
+      ) : (
+        <div className="grid grid-cols-1 gap-4">
+          {equipment.map((eq) => {
+            const daysUntilService = eq.next_service_date
+              ? Math.floor((new Date(eq.next_service_date) - new Date()) / (1000 * 60 * 60 * 24))
+              : null;
+            const isOverdue = daysUntilService !== null && daysUntilService < 0;
+            const isUpcoming = daysUntilService !== null && daysUntilService <= 30 && daysUntilService >= 0;
 
-                  return (
-                    <tr key={eq.id} className="hover:bg-gray-50">
-                      <td className="px-6 py-4">
-                        <div className="font-medium text-gray-900">{eq.name}</div>
-                        <div className="text-sm text-gray-500">{eq.type}</div>
-                      </td>
-                      <td className="px-6 py-4 text-sm text-gray-600">{eq.serial_number || '-'}</td>
-                      <td className="px-6 py-4 text-sm text-gray-600">
+            return (
+              <div key={eq.id} className="relative group">
+                <div className="absolute inset-0 bg-gradient-to-r from-[#d6b164]/0 via-[#d6b164]/5 to-[#d6b164]/0 rounded-2xl opacity-0 group-hover:opacity-100 transition-opacity duration-500" />
+                <div className={`relative bg-white/5 backdrop-blur-xl rounded-2xl p-6 border transition-all ${
+                  isOverdue ? 'border-red-400/30' : 'border-white/10 group-hover:border-[#d6b164]/30'
+                }`}>
+                  <div className="grid grid-cols-1 md:grid-cols-5 gap-6 items-center">
+                    {/* Equipment Name */}
+                    <div className="md:col-span-2">
+                      <h3 className="text-white/90 text-lg font-light mb-1">{eq.name}</h3>
+                      <div className="flex items-center gap-2">
+                        <div className="px-3 py-1 rounded-full bg-[#4d647f]/20 border border-[#4d647f]/30">
+                          <span className="text-[#4d647f] text-xs tracking-wider">{eq.type.toUpperCase()}</span>
+                        </div>
+                        {eq.serial_number && (
+                          <span className="text-white/30 text-sm">S/N: {eq.serial_number}</span>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Last Service */}
+                    <div>
+                      <span className="text-white/30 text-xs tracking-wider uppercase block mb-1">Last Service</span>
+                      <p className="text-white/90 text-sm">
                         {eq.last_service_date ? format(new Date(eq.last_service_date), 'dd/MM/yyyy') : '-'}
-                      </td>
-                      <td className="px-6 py-4">
-                        {eq.next_service_date ? (
-                          <div className={`text-sm ${isOverdue ? 'text-red-600 font-medium' : isUpcoming ? 'text-amber-600 font-medium' : 'text-gray-600'}`}>
+                      </p>
+                    </div>
+
+                    {/* Next Service */}
+                    <div>
+                      <span className="text-white/30 text-xs tracking-wider uppercase block mb-1">Next Service</span>
+                      {eq.next_service_date ? (
+                        <div>
+                          <p className={`text-sm font-light ${isOverdue ? 'text-red-400' : isUpcoming ? 'text-amber-400' : 'text-white/90'}`}>
                             {format(new Date(eq.next_service_date), 'dd/MM/yyyy')}
-                            {(isOverdue || isUpcoming) && (
-                              <div className="text-xs">
-                                {isOverdue ? `${Math.abs(daysUntilService)} days overdue` : `in ${daysUntilService} days`}
-                              </div>
-                            )}
-                          </div>
-                        ) : (
-                          <span className="text-gray-400">-</span>
-                        )}
-                      </td>
-                      <td className="px-6 py-4">
-                        {isOverdue ? (
-                          <span className="px-2 py-1 text-xs font-medium rounded-full bg-red-100 text-red-800">
-                            Overdue
-                          </span>
-                        ) : isUpcoming ? (
-                          <span className="px-2 py-1 text-xs font-medium rounded-full bg-amber-100 text-amber-800">
-                            Due Soon
-                          </span>
-                        ) : (
-                          <span className="px-2 py-1 text-xs font-medium rounded-full bg-green-100 text-green-800">
-                            Up to Date
-                          </span>
-                        )}
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
-        )}
-      </div>
+                          </p>
+                          {(isOverdue || isUpcoming) && (
+                            <p className="text-xs text-white/40">
+                              {isOverdue ? `${Math.abs(daysUntilService)}d overdue` : `in ${daysUntilService}d`}
+                            </p>
+                          )}
+                        </div>
+                      ) : (
+                        <span className="text-white/30">-</span>
+                      )}
+                    </div>
+
+                    {/* Status */}
+                    <div>
+                      {isOverdue ? (
+                        <div className="px-3 py-1 rounded-full bg-red-400/10 border border-red-400/30 text-center">
+                          <span className="text-red-400 text-xs tracking-wider">OVERDUE</span>
+                        </div>
+                      ) : isUpcoming ? (
+                        <div className="px-3 py-1 rounded-full bg-amber-400/10 border border-amber-400/30 text-center">
+                          <span className="text-amber-400 text-xs tracking-wider">DUE SOON</span>
+                        </div>
+                      ) : (
+                        <div className="px-3 py-1 rounded-full bg-emerald-400/10 border border-emerald-400/30 text-center">
+                          <span className="text-emerald-400 text-xs tracking-wider">UP TO DATE</span>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
 
       {showAddEquipment && (
         <AddEquipmentModal
@@ -531,7 +488,6 @@ function AddEquipmentModal({ onClose, onSuccess }) {
     manufacturer: '',
     last_service_date: '',
     next_service_date: '',
-    service_interval_months: 12,
   });
   const [saving, setSaving] = useState(false);
 
@@ -553,32 +509,41 @@ function AddEquipmentModal({ onClose, onSuccess }) {
   };
 
   return (
-    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-      <div className="bg-white rounded-xl shadow-xl max-w-2xl w-full">
-        <div className="p-6 border-b border-gray-200">
-          <h2 className="text-xl font-bold text-[#1a2845]">Add Equipment</h2>
+    <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+      <div className="bg-gradient-to-br from-[#1a1f35] to-[#0a0e1a] rounded-3xl border border-white/10 max-w-2xl w-full max-h-[90vh] overflow-y-auto">
+        <div className="p-8 border-b border-white/10 flex items-center justify-between">
+          <div>
+            <h2 className="text-2xl font-light text-white/90 tracking-tight">Add Equipment</h2>
+            <p className="text-white/40 text-sm mt-1">Register new equipment for tracking</p>
+          </div>
+          <button
+            onClick={onClose}
+            className="text-white/40 hover:text-white/80 transition-colors"
+          >
+            <X className="w-6 h-6" />
+          </button>
         </div>
 
-        <form onSubmit={handleSubmit} className="p-6">
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <form onSubmit={handleSubmit} className="p-8">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Equipment Name *</label>
+              <label className="block text-white/40 text-xs tracking-wider uppercase mb-2">Equipment Name *</label>
               <input
                 type="text"
                 required
                 value={formData.name}
                 onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-[#1a2845] focus:border-transparent"
+                className="w-full px-4 py-3 bg-white/5 backdrop-blur-xl border border-white/10 rounded-xl text-white/90 placeholder:text-white/30 focus:outline-none focus:border-[#d6b164]/50 transition-all"
               />
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Type *</label>
+              <label className="block text-white/40 text-xs tracking-wider uppercase mb-2">Type *</label>
               <select
                 required
                 value={formData.type}
                 onChange={(e) => setFormData({ ...formData, type: e.target.value })}
-                className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-[#1a2845] focus:border-transparent"
+                className="w-full px-4 py-3 bg-white/5 backdrop-blur-xl border border-white/10 rounded-xl text-white/90 focus:outline-none focus:border-[#d6b164]/50 transition-all"
               >
                 <option value="laser">Laser</option>
                 <option value="ultrasound">Ultrasound</option>
@@ -589,74 +554,64 @@ function AddEquipmentModal({ onClose, onSuccess }) {
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Serial Number</label>
+              <label className="block text-white/40 text-xs tracking-wider uppercase mb-2">Serial Number</label>
               <input
                 type="text"
                 value={formData.serial_number}
                 onChange={(e) => setFormData({ ...formData, serial_number: e.target.value })}
-                className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-[#1a2845] focus:border-transparent"
+                className="w-full px-4 py-3 bg-white/5 backdrop-blur-xl border border-white/10 rounded-xl text-white/90 placeholder:text-white/30 focus:outline-none focus:border-[#d6b164]/50 transition-all"
               />
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Manufacturer</label>
+              <label className="block text-white/40 text-xs tracking-wider uppercase mb-2">Manufacturer</label>
               <input
                 type="text"
                 value={formData.manufacturer}
                 onChange={(e) => setFormData({ ...formData, manufacturer: e.target.value })}
-                className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-[#1a2845] focus:border-transparent"
+                className="w-full px-4 py-3 bg-white/5 backdrop-blur-xl border border-white/10 rounded-xl text-white/90 placeholder:text-white/30 focus:outline-none focus:border-[#d6b164]/50 transition-all"
               />
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Last Service Date</label>
+              <label className="block text-white/40 text-xs tracking-wider uppercase mb-2">Last Service Date</label>
               <input
                 type="date"
                 value={formData.last_service_date}
                 onChange={(e) => setFormData({ ...formData, last_service_date: e.target.value })}
-                className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-[#1a2845] focus:border-transparent"
+                className="w-full px-4 py-3 bg-white/5 backdrop-blur-xl border border-white/10 rounded-xl text-white/90 focus:outline-none focus:border-[#d6b164]/50 transition-all"
               />
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Next Service Date</label>
+              <label className="block text-white/40 text-xs tracking-wider uppercase mb-2">Next Service Date</label>
               <input
                 type="date"
                 value={formData.next_service_date}
                 onChange={(e) => setFormData({ ...formData, next_service_date: e.target.value })}
-                className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-[#1a2845] focus:border-transparent"
+                className="w-full px-4 py-3 bg-white/5 backdrop-blur-xl border border-white/10 rounded-xl text-white/90 focus:outline-none focus:border-[#d6b164]/50 transition-all"
               />
             </div>
           </div>
 
-          <div className="flex gap-3 mt-6">
+          <div className="flex gap-4 mt-8">
             <button
               type="button"
               onClick={onClose}
-              className="flex-1 px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50"
+              className="flex-1 px-6 py-3 bg-white/5 backdrop-blur-xl border border-white/10 rounded-full text-white/60 hover:text-white/90 hover:border-white/20 transition-all"
             >
               Cancel
             </button>
             <button
               type="submit"
               disabled={saving}
-              className="flex-1 px-4 py-2 bg-[#1a2845] text-white rounded-lg hover:bg-[#2a3855] disabled:opacity-50"
+              className="flex-1 px-6 py-3 bg-[#d6b164]/20 backdrop-blur-xl border border-[#d6b164]/30 rounded-full text-[#d6b164] hover:bg-[#d6b164]/30 transition-all disabled:opacity-50"
             >
-              {saving ? 'Creating...' : 'Create Equipment'}
+              {saving ? 'Adding...' : 'Add Equipment'}
             </button>
           </div>
         </form>
       </div>
-    </div>
-  );
-}
-
-function DailyChecklists() {
-  return (
-    <div className="text-center py-12">
-      <ClipboardCheck className="w-16 h-16 text-gray-300 mx-auto mb-4" />
-      <h3 className="text-lg font-semibold text-gray-900 mb-2">Daily Checklists</h3>
-      <p className="text-gray-600">Coming soon - Daily infection control and safety checklists</p>
     </div>
   );
 }
