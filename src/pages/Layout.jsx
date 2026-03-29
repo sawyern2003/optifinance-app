@@ -39,11 +39,6 @@ const navigationItems = [
     icon: Send,
   },
   {
-    title: "Business Intelligence",
-    url: createPageUrl("BusinessIntelligence"),
-    icon: TrendingUp,
-  },
-  {
     title: "Reports",
     url: createPageUrl("Reports"),
     icon: BarChart3,

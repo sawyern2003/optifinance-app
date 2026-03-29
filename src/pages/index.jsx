@@ -13,7 +13,6 @@ import Dashboard from "./Dashboard";
 
 import Home from "./Home";
 
-import BusinessIntelligence from "./BusinessIntelligence";
 
 import QuickAdd from "./QuickAdd";
 
@@ -63,7 +62,6 @@ const PAGES = {
     // `/Invoices` now redirects to `Records?tab=invoices`; keep this mapping to avoid runtime errors.
     Invoices: RecordsLuxury,
 
-    BusinessIntelligence: BusinessIntelligence,
 
     Records: RecordsLuxury,
 
@@ -192,7 +190,6 @@ function PagesContent() {
                               element={<Navigate to={`${createPageUrl("Records")}?tab=invoices`} replace />}
                             />
                             <Route path="/Communications" element={<Communications />} />
-                            <Route path="/BusinessIntelligence" element={<BusinessIntelligence />} />
                             <Route path="/VoiceAssistant" element={<VoiceAssistant />} />
                             <Route path="/Calendar" element={<Calendar />} />
                             <Route path="/Records" element={<RecordsLuxury />} />
