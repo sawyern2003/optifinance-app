@@ -114,134 +114,143 @@ export default function Calendar() {
   });
 
   return (
-    <div className="min-h-screen bg-gray-50 p-6">
-      <div className="max-w-4xl mx-auto">
+    <div className="min-h-screen relative overflow-hidden p-6" style={{ background: 'linear-gradient(135deg, #0a0e1a 0%, #1a1f35 50%, #0f1419 100%)' }}>
+      {/* Ambient glow */}
+      <div className="absolute top-0 right-1/4 w-96 h-96 bg-[#d6b164]/10 rounded-full blur-[120px] pointer-events-none" />
+
+      <div className="max-w-4xl mx-auto relative">
         {/* Header */}
         <div className="mb-8">
-          <h1 className="text-3xl font-semibold text-[#1a2845] mb-2">Calendar</h1>
-          <p className="text-gray-600 font-light">
+          <h1 className="text-5xl font-light tracking-wider text-white/90 mb-3">Calendar</h1>
+          <p className="text-lg font-light text-white/60">
             Manage your daily appointments
           </p>
         </div>
 
         {/* Date Navigation Card */}
-        <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-6 mb-6">
-          <div className="flex items-center justify-between mb-4">
-            <Button
-              variant="outline"
-              onClick={goToPreviousDay}
-              className="hover:bg-[#fef9f0]"
-            >
-              <ChevronLeft className="w-5 h-5" />
-            </Button>
-
-            <div className="text-center flex-1 mx-4">
-              <h2 className="text-2xl font-semibold text-[#1a2845]">
-                {formatDate(selectedDate)}
-              </h2>
-              {isToday(selectedDate) && (
-                <span className="inline-block mt-1 px-3 py-1 bg-[#d4a740] text-white text-xs font-medium rounded-full">
-                  Today
-                </span>
-              )}
-            </div>
-
-            <Button
-              variant="outline"
-              onClick={goToNextDay}
-              className="hover:bg-[#fef9f0]"
-            >
-              <ChevronRight className="w-5 h-5" />
-            </Button>
-          </div>
-
-          <div className="flex gap-2 justify-center">
-            {!isToday(selectedDate) && (
+        <div className="relative group mb-6">
+          <div className="absolute inset-0 bg-gradient-to-br from-[#4d647f]/20 to-transparent rounded-2xl blur-xl opacity-0 group-hover:opacity-100 transition-opacity duration-500" />
+          <div className="relative bg-white/5 backdrop-blur-xl rounded-2xl border border-white/10 p-6">
+            <div className="flex items-center justify-between mb-4">
               <Button
                 variant="outline"
-                onClick={goToToday}
-                className="hover:bg-[#fef9f0]"
+                onClick={goToPreviousDay}
+                className="bg-white/5 backdrop-blur-xl border border-white/10 hover:border-[#d6b164]/30 text-white/90 rounded-2xl"
               >
-                <CalendarIcon className="w-4 h-4 mr-2" />
-                Go to Today
+                <ChevronLeft className="w-5 h-5" />
               </Button>
-            )}
 
-            <Dialog open={addDialogOpen} onOpenChange={setAddDialogOpen}>
-              <DialogTrigger asChild>
-                <Button className="bg-[#1a2845] hover:bg-[#2C3E50]">
-                  <Plus className="w-4 h-4 mr-2" />
-                  Add Appointment
+              <div className="text-center flex-1 mx-4">
+                <h2 className="text-2xl font-light tracking-wider text-white/90">
+                  {formatDate(selectedDate)}
+                </h2>
+                {isToday(selectedDate) && (
+                  <span className="inline-block mt-2 px-4 py-1.5 bg-[#d6b164]/20 backdrop-blur-xl border border-[#d6b164]/30 text-[#d6b164] text-xs font-light tracking-wider rounded-full">
+                    Today
+                  </span>
+                )}
+              </div>
+
+              <Button
+                variant="outline"
+                onClick={goToNextDay}
+                className="bg-white/5 backdrop-blur-xl border border-white/10 hover:border-[#d6b164]/30 text-white/90 rounded-2xl"
+              >
+                <ChevronRight className="w-5 h-5" />
+              </Button>
+            </div>
+
+            <div className="flex gap-2 justify-center">
+              {!isToday(selectedDate) && (
+                <Button
+                  variant="outline"
+                  onClick={goToToday}
+                  className="bg-white/5 backdrop-blur-xl border border-white/10 hover:border-white/20 text-white/70 hover:text-white/90 rounded-2xl font-light"
+                >
+                  <CalendarIcon className="w-4 h-4 mr-2" />
+                  Go to Today
                 </Button>
-              </DialogTrigger>
-              <DialogContent className="sm:max-w-[500px]">
-                <AddAppointmentDialog
-                  selectedDate={selectedDate}
-                  patients={patients}
-                  onClose={() => setAddDialogOpen(false)}
-                />
-              </DialogContent>
-            </Dialog>
+              )}
+
+              <Dialog open={addDialogOpen} onOpenChange={setAddDialogOpen}>
+                <DialogTrigger asChild>
+                  <Button className="bg-[#d6b164]/20 backdrop-blur-xl border border-[#d6b164]/30 hover:bg-[#d6b164]/30 text-[#d6b164] rounded-2xl font-light tracking-wider">
+                    <Plus className="w-4 h-4 mr-2" />
+                    Add Appointment
+                  </Button>
+                </DialogTrigger>
+                <DialogContent className="sm:max-w-[500px] bg-[#0a0e1a] border-white/10">
+                  <AddAppointmentDialog
+                    selectedDate={selectedDate}
+                    patients={patients}
+                    onClose={() => setAddDialogOpen(false)}
+                  />
+                </DialogContent>
+              </Dialog>
+            </div>
           </div>
         </div>
 
         {/* Appointments List */}
-        <div className="bg-white rounded-2xl shadow-sm border border-gray-200">
-          {/* Summary Header */}
-          <div className="px-6 py-4 border-b border-gray-100">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm text-gray-500">Appointments</p>
-                <p className="text-2xl font-semibold text-[#1a2845]">
-                  {dayAppointments.length}
-                </p>
-              </div>
-              {dayAppointments.length > 0 && (
-                <div className="text-right">
-                  <p className="text-sm text-gray-500">Total Revenue</p>
-                  <p className="text-2xl font-semibold text-[#1a2845]">
-                    £{dayAppointments.reduce((sum, apt) => sum + (apt.price || 0), 0).toFixed(2)}
+        <div className="relative group">
+          <div className="absolute inset-0 bg-gradient-to-br from-[#d6b164]/20 to-transparent rounded-2xl blur-xl opacity-0 group-hover:opacity-100 transition-opacity duration-500" />
+          <div className="relative bg-white/5 backdrop-blur-xl rounded-2xl border border-white/10">
+            {/* Summary Header */}
+            <div className="px-6 py-5 border-b border-white/10">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-xs font-light text-white/40 tracking-[0.2em] uppercase mb-2">Appointments</p>
+                  <p className="text-3xl font-light text-white/90">
+                    {dayAppointments.length}
                   </p>
                 </div>
+                {dayAppointments.length > 0 && (
+                  <div className="text-right">
+                    <p className="text-xs font-light text-white/40 tracking-[0.2em] uppercase mb-2">Total Revenue</p>
+                    <p className="text-3xl font-light text-emerald-400">
+                      £{dayAppointments.reduce((sum, apt) => sum + (apt.price || 0), 0).toFixed(2)}
+                    </p>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* Appointments */}
+            <div className="divide-y divide-white/10">
+              {isLoading ? (
+                <div className="p-12 text-center text-white/60 font-light">
+                  Loading appointments...
+                </div>
+              ) : dayAppointments.length === 0 ? (
+                <div className="p-12 text-center">
+                  <CalendarIcon className="w-16 h-16 text-white/20 mx-auto mb-4" />
+                  <p className="text-white/60 mb-2 font-light">No appointments scheduled</p>
+                  <p className="text-sm text-white/40 font-light">
+                    {isToday(selectedDate)
+                      ? "Add an appointment or use voice command"
+                      : "This day is free"}
+                  </p>
+                </div>
+              ) : (
+                dayAppointments.map((appointment) => (
+                  <AppointmentCard
+                    key={appointment.id}
+                    appointment={appointment}
+                    onEdit={() => {
+                      setEditingAppointment(appointment);
+                      setEditDialogOpen(true);
+                    }}
+                    onDelete={() => deleteMutation.mutate(appointment.id)}
+                  />
+                ))
               )}
             </div>
-          </div>
-
-          {/* Appointments */}
-          <div className="divide-y divide-gray-100">
-            {isLoading ? (
-              <div className="p-12 text-center text-gray-500">
-                Loading appointments...
-              </div>
-            ) : dayAppointments.length === 0 ? (
-              <div className="p-12 text-center">
-                <CalendarIcon className="w-16 h-16 text-gray-300 mx-auto mb-4" />
-                <p className="text-gray-500 mb-2">No appointments scheduled</p>
-                <p className="text-sm text-gray-400">
-                  {isToday(selectedDate)
-                    ? "Add an appointment or use voice command"
-                    : "This day is free"}
-                </p>
-              </div>
-            ) : (
-              dayAppointments.map((appointment) => (
-                <AppointmentCard
-                  key={appointment.id}
-                  appointment={appointment}
-                  onEdit={() => {
-                    setEditingAppointment(appointment);
-                    setEditDialogOpen(true);
-                  }}
-                  onDelete={() => deleteMutation.mutate(appointment.id)}
-                />
-              ))
-            )}
           </div>
         </div>
 
         {/* Edit Dialog */}
         <Dialog open={editDialogOpen} onOpenChange={setEditDialogOpen}>
-          <DialogContent className="sm:max-w-[500px]">
+          <DialogContent className="sm:max-w-[500px] bg-[#0a0e1a] border-white/10">
             {editingAppointment && (
               <EditAppointmentDialog
                 appointment={editingAppointment}
@@ -268,32 +277,32 @@ function AppointmentCard({ appointment, onEdit, onDelete }) {
   const getStatusStyle = () => {
     switch (appointment.status) {
       case 'scheduled':
-        return 'bg-blue-50 text-blue-700 border-blue-200';
+        return 'bg-[#4d647f]/10 text-[#4d647f] border-[#4d647f]/30';
       case 'completed':
-        return 'bg-emerald-50 text-emerald-700 border-emerald-200';
+        return 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30';
       case 'cancelled':
-        return 'bg-gray-50 text-gray-700 border-gray-200';
+        return 'bg-white/10 text-white/60 border-white/20';
       case 'no-show':
-        return 'bg-red-50 text-red-700 border-red-200';
+        return 'bg-rose-500/10 text-rose-400 border-rose-500/30';
       default:
-        return 'bg-gray-50 text-gray-700 border-gray-200';
+        return 'bg-white/10 text-white/60 border-white/20';
     }
   };
 
   return (
-    <div className="p-6 hover:bg-[#fef9f0] transition-colors group">
+    <div className="p-6 hover:bg-white/5 transition-colors group">
       <div className="flex items-start gap-4">
         {/* Time */}
         <div className="flex-shrink-0 text-center">
-          <div className="w-16 h-16 rounded-xl bg-[#1a2845] text-white flex items-center justify-center">
+          <div className="w-16 h-16 rounded-2xl bg-[#4d647f]/20 backdrop-blur-xl border border-[#4d647f]/30 text-white flex items-center justify-center">
             <div>
-              <div className="text-xs font-medium opacity-75">
+              <div className="text-xs font-light opacity-75">
                 {appointment.time.split(':')[1] === '00' ? '' : appointment.time.split(':')[1]}
               </div>
-              <div className="text-lg font-semibold">
+              <div className="text-xl font-light">
                 {parseInt(appointment.time.split(':')[0])}
               </div>
-              <div className="text-xs opacity-75">
+              <div className="text-xs font-light opacity-75">
                 {parseInt(appointment.time.split(':')[0]) >= 12 ? 'PM' : 'AM'}
               </div>
             </div>
@@ -304,10 +313,10 @@ function AppointmentCard({ appointment, onEdit, onDelete }) {
         <div className="flex-1 min-w-0">
           <div className="flex items-start justify-between mb-2">
             <div>
-              <h3 className="text-lg font-semibold text-[#1a2845] mb-1">
+              <h3 className="text-lg font-light tracking-wider text-white/90 mb-1">
                 {appointment.treatment_name}
               </h3>
-              <div className="flex flex-wrap gap-3 text-sm text-gray-600">
+              <div className="flex flex-wrap gap-3 text-sm text-white/60 font-light">
                 <span className="flex items-center gap-1">
                   <User className="w-4 h-4" />
                   {appointment.patient_name}
@@ -319,20 +328,20 @@ function AppointmentCard({ appointment, onEdit, onDelete }) {
                   </span>
                 )}
                 {appointment.price && (
-                  <span className="font-medium text-[#1a2845]">
+                  <span className="font-light text-emerald-400">
                     £{appointment.price.toFixed(2)}
                   </span>
                 )}
               </div>
             </div>
 
-            <div className={`px-3 py-1 rounded-full text-xs font-medium border ${getStatusStyle()}`}>
+            <div className={`px-3 py-1.5 rounded-full text-xs font-light tracking-wider border backdrop-blur-xl ${getStatusStyle()}`}>
               {appointment.status}
             </div>
           </div>
 
           {appointment.notes && (
-            <p className="text-sm text-gray-600 mb-3 line-clamp-2">
+            <p className="text-sm text-white/50 mb-3 line-clamp-2 font-light">
               {appointment.notes}
             </p>
           )}
@@ -343,7 +352,7 @@ function AppointmentCard({ appointment, onEdit, onDelete }) {
               variant="outline"
               size="sm"
               onClick={onEdit}
-              className="hover:bg-white"
+              className="bg-white/5 backdrop-blur-xl border border-white/10 hover:border-white/20 text-white/70 hover:text-white/90 rounded-2xl font-light"
             >
               <Edit2 className="w-3 h-3 mr-1" />
               Edit
@@ -353,7 +362,7 @@ function AppointmentCard({ appointment, onEdit, onDelete }) {
                 variant="outline"
                 size="sm"
                 onClick={() => setShowDeleteConfirm(true)}
-                className="hover:bg-red-50 hover:text-red-600 hover:border-red-200"
+                className="bg-white/5 backdrop-blur-xl border border-white/10 hover:bg-rose-500/10 hover:text-rose-400 hover:border-rose-500/30 rounded-2xl font-light text-white/70"
               >
                 <Trash2 className="w-3 h-3 mr-1" />
                 Delete
@@ -364,6 +373,7 @@ function AppointmentCard({ appointment, onEdit, onDelete }) {
                   variant="destructive"
                   size="sm"
                   onClick={onDelete}
+                  className="bg-rose-500/20 backdrop-blur-xl border border-rose-500/30 text-rose-400 hover:bg-rose-500/30 rounded-2xl font-light"
                 >
                   Confirm Delete
                 </Button>
@@ -371,6 +381,7 @@ function AppointmentCard({ appointment, onEdit, onDelete }) {
                   variant="outline"
                   size="sm"
                   onClick={() => setShowDeleteConfirm(false)}
+                  className="bg-white/5 backdrop-blur-xl border border-white/10 hover:border-white/20 text-white/70 hover:text-white/90 rounded-2xl font-light"
                 >
                   Cancel
                 </Button>
@@ -439,20 +450,20 @@ function AddAppointmentDialog({ selectedDate, patients, onClose }) {
   return (
     <>
       <DialogHeader>
-        <DialogTitle className="text-[#1a2845]">Add Appointment</DialogTitle>
-        <DialogDescription>
+        <DialogTitle className="text-xl font-light tracking-wider text-white/90">Add Appointment</DialogTitle>
+        <DialogDescription className="text-white/60 font-light">
           Schedule a new appointment
         </DialogDescription>
       </DialogHeader>
 
       <form onSubmit={handleSubmit} className="space-y-4">
         <div>
-          <Label htmlFor="patient">Patient</Label>
+          <Label htmlFor="patient" className="text-white/70 font-light">Patient</Label>
           <Select
             value={formData.patient_id}
             onValueChange={handlePatientChange}
           >
-            <SelectTrigger>
+            <SelectTrigger className="bg-white/5 backdrop-blur-xl border border-white/10 hover:border-white/20 rounded-2xl text-white/90 font-light">
               <SelectValue placeholder="Select patient" />
             </SelectTrigger>
             <SelectContent>
@@ -466,35 +477,38 @@ function AddAppointmentDialog({ selectedDate, patients, onClose }) {
         </div>
 
         <div>
-          <Label htmlFor="treatment_name">Treatment</Label>
+          <Label htmlFor="treatment_name" className="text-white/70 font-light">Treatment</Label>
           <Input
             id="treatment_name"
             value={formData.treatment_name}
             onChange={(e) => setFormData(prev => ({ ...prev, treatment_name: e.target.value }))}
             placeholder="e.g., Botox, Dermal Fillers"
+            className="bg-white/5 backdrop-blur-xl border border-white/10 hover:border-white/20 rounded-2xl text-white/90 font-light"
             required
           />
         </div>
 
         <div className="grid grid-cols-2 gap-4">
           <div>
-            <Label htmlFor="date">Date</Label>
+            <Label htmlFor="date" className="text-white/70 font-light">Date</Label>
             <Input
               id="date"
               type="date"
               value={formData.date}
               onChange={(e) => setFormData(prev => ({ ...prev, date: e.target.value }))}
+              className="bg-white/5 backdrop-blur-xl border border-white/10 hover:border-white/20 rounded-2xl text-white/90 font-light"
               required
             />
           </div>
 
           <div>
-            <Label htmlFor="time">Time</Label>
+            <Label htmlFor="time" className="text-white/70 font-light">Time</Label>
             <Input
               id="time"
               type="time"
               value={formData.time}
               onChange={(e) => setFormData(prev => ({ ...prev, time: e.target.value }))}
+              className="bg-white/5 backdrop-blur-xl border border-white/10 hover:border-white/20 rounded-2xl text-white/90 font-light"
               required
             />
           </div>
@@ -502,7 +516,7 @@ function AddAppointmentDialog({ selectedDate, patients, onClose }) {
 
         <div className="grid grid-cols-2 gap-4">
           <div>
-            <Label htmlFor="duration">Duration (minutes)</Label>
+            <Label htmlFor="duration" className="text-white/70 font-light">Duration (minutes)</Label>
             <Input
               id="duration"
               type="number"
@@ -510,11 +524,12 @@ function AddAppointmentDialog({ selectedDate, patients, onClose }) {
               onChange={(e) => setFormData(prev => ({ ...prev, duration_minutes: parseInt(e.target.value) || 0 }))}
               min="0"
               step="15"
+              className="bg-white/5 backdrop-blur-xl border border-white/10 hover:border-white/20 rounded-2xl text-white/90 font-light"
             />
           </div>
 
           <div>
-            <Label htmlFor="price">Price (£)</Label>
+            <Label htmlFor="price" className="text-white/70 font-light">Price (£)</Label>
             <Input
               id="price"
               type="number"
@@ -523,28 +538,30 @@ function AddAppointmentDialog({ selectedDate, patients, onClose }) {
               min="0"
               step="0.01"
               placeholder="0.00"
+              className="bg-white/5 backdrop-blur-xl border border-white/10 hover:border-white/20 rounded-2xl text-white/90 font-light"
             />
           </div>
         </div>
 
         <div>
-          <Label htmlFor="notes">Notes (optional)</Label>
+          <Label htmlFor="notes" className="text-white/70 font-light">Notes (optional)</Label>
           <Textarea
             id="notes"
             value={formData.notes}
             onChange={(e) => setFormData(prev => ({ ...prev, notes: e.target.value }))}
             placeholder="Any additional notes..."
             rows={3}
+            className="bg-white/5 backdrop-blur-xl border border-white/10 hover:border-white/20 rounded-2xl text-white/90 font-light"
           />
         </div>
 
         <div className="flex justify-end gap-2 pt-4">
-          <Button type="button" variant="outline" onClick={onClose}>
+          <Button type="button" variant="outline" onClick={onClose} className="bg-white/5 backdrop-blur-xl border border-white/10 hover:border-white/20 text-white/70 hover:text-white/90 rounded-2xl font-light">
             Cancel
           </Button>
           <Button
             type="submit"
-            className="bg-[#1a2845] hover:bg-[#2C3E50]"
+            className="bg-[#d6b164]/20 backdrop-blur-xl border border-[#d6b164]/30 hover:bg-[#d6b164]/30 text-[#d6b164] rounded-2xl font-light tracking-wider"
             disabled={createMutation.isPending}
           >
             {createMutation.isPending ? 'Creating...' : 'Create Appointment'}
@@ -611,20 +628,20 @@ function EditAppointmentDialog({ appointment, patients, onClose }) {
   return (
     <>
       <DialogHeader>
-        <DialogTitle className="text-[#1a2845]">Edit Appointment</DialogTitle>
-        <DialogDescription>
+        <DialogTitle className="text-xl font-light tracking-wider text-white/90">Edit Appointment</DialogTitle>
+        <DialogDescription className="text-white/60 font-light">
           Update appointment details
         </DialogDescription>
       </DialogHeader>
 
       <form onSubmit={handleSubmit} className="space-y-4">
         <div>
-          <Label htmlFor="patient">Patient</Label>
+          <Label htmlFor="patient" className="text-white/70 font-light">Patient</Label>
           <Select
             value={formData.patient_id}
             onValueChange={handlePatientChange}
           >
-            <SelectTrigger>
+            <SelectTrigger className="bg-white/5 backdrop-blur-xl border border-white/10 hover:border-white/20 rounded-2xl text-white/90 font-light">
               <SelectValue placeholder="Select patient" />
             </SelectTrigger>
             <SelectContent>
@@ -638,34 +655,37 @@ function EditAppointmentDialog({ appointment, patients, onClose }) {
         </div>
 
         <div>
-          <Label htmlFor="treatment_name">Treatment</Label>
+          <Label htmlFor="treatment_name" className="text-white/70 font-light">Treatment</Label>
           <Input
             id="treatment_name"
             value={formData.treatment_name}
             onChange={(e) => setFormData(prev => ({ ...prev, treatment_name: e.target.value }))}
+            className="bg-white/5 backdrop-blur-xl border border-white/10 hover:border-white/20 rounded-2xl text-white/90 font-light"
             required
           />
         </div>
 
         <div className="grid grid-cols-2 gap-4">
           <div>
-            <Label htmlFor="date">Date</Label>
+            <Label htmlFor="date" className="text-white/70 font-light">Date</Label>
             <Input
               id="date"
               type="date"
               value={formData.date}
               onChange={(e) => setFormData(prev => ({ ...prev, date: e.target.value }))}
+              className="bg-white/5 backdrop-blur-xl border border-white/10 hover:border-white/20 rounded-2xl text-white/90 font-light"
               required
             />
           </div>
 
           <div>
-            <Label htmlFor="time">Time</Label>
+            <Label htmlFor="time" className="text-white/70 font-light">Time</Label>
             <Input
               id="time"
               type="time"
               value={formData.time}
               onChange={(e) => setFormData(prev => ({ ...prev, time: e.target.value }))}
+              className="bg-white/5 backdrop-blur-xl border border-white/10 hover:border-white/20 rounded-2xl text-white/90 font-light"
               required
             />
           </div>
@@ -673,7 +693,7 @@ function EditAppointmentDialog({ appointment, patients, onClose }) {
 
         <div className="grid grid-cols-2 gap-4">
           <div>
-            <Label htmlFor="duration">Duration (minutes)</Label>
+            <Label htmlFor="duration" className="text-white/70 font-light">Duration (minutes)</Label>
             <Input
               id="duration"
               type="number"
@@ -681,11 +701,12 @@ function EditAppointmentDialog({ appointment, patients, onClose }) {
               onChange={(e) => setFormData(prev => ({ ...prev, duration_minutes: parseInt(e.target.value) || 0 }))}
               min="0"
               step="15"
+              className="bg-white/5 backdrop-blur-xl border border-white/10 hover:border-white/20 rounded-2xl text-white/90 font-light"
             />
           </div>
 
           <div>
-            <Label htmlFor="price">Price (£)</Label>
+            <Label htmlFor="price" className="text-white/70 font-light">Price (£)</Label>
             <Input
               id="price"
               type="number"
@@ -693,17 +714,18 @@ function EditAppointmentDialog({ appointment, patients, onClose }) {
               onChange={(e) => setFormData(prev => ({ ...prev, price: e.target.value }))}
               min="0"
               step="0.01"
+              className="bg-white/5 backdrop-blur-xl border border-white/10 hover:border-white/20 rounded-2xl text-white/90 font-light"
             />
           </div>
         </div>
 
         <div>
-          <Label htmlFor="status">Status</Label>
+          <Label htmlFor="status" className="text-white/70 font-light">Status</Label>
           <Select
             value={formData.status}
             onValueChange={(value) => setFormData(prev => ({ ...prev, status: value }))}
           >
-            <SelectTrigger>
+            <SelectTrigger className="bg-white/5 backdrop-blur-xl border border-white/10 hover:border-white/20 rounded-2xl text-white/90 font-light">
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
@@ -716,22 +738,23 @@ function EditAppointmentDialog({ appointment, patients, onClose }) {
         </div>
 
         <div>
-          <Label htmlFor="notes">Notes (optional)</Label>
+          <Label htmlFor="notes" className="text-white/70 font-light">Notes (optional)</Label>
           <Textarea
             id="notes"
             value={formData.notes}
             onChange={(e) => setFormData(prev => ({ ...prev, notes: e.target.value }))}
             rows={3}
+            className="bg-white/5 backdrop-blur-xl border border-white/10 hover:border-white/20 rounded-2xl text-white/90 font-light"
           />
         </div>
 
         <div className="flex justify-end gap-2 pt-4">
-          <Button type="button" variant="outline" onClick={onClose}>
+          <Button type="button" variant="outline" onClick={onClose} className="bg-white/5 backdrop-blur-xl border border-white/10 hover:border-white/20 text-white/70 hover:text-white/90 rounded-2xl font-light">
             Cancel
           </Button>
           <Button
             type="submit"
-            className="bg-[#1a2845] hover:bg-[#2C3E50]"
+            className="bg-[#d6b164]/20 backdrop-blur-xl border border-[#d6b164]/30 hover:bg-[#d6b164]/30 text-[#d6b164] rounded-2xl font-light tracking-wider"
             disabled={updateMutation.isPending}
           >
             {updateMutation.isPending ? 'Saving...' : 'Save Changes'}
