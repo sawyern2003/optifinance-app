@@ -224,13 +224,19 @@ export function FloatingVoiceAssistant() {
   };
 
   const handleConfirmCommand = async () => {
-    if (!parsedCommand) return;
+    console.log('[VOICE] handleConfirmCommand called with:', parsedCommand);
+    if (!parsedCommand) {
+      console.warn('[VOICE] No parsed command to execute!');
+      return;
+    }
 
     setShowConfirmDialog(false);
     setIsProcessing(true);
 
     try {
+      console.log('[VOICE] Executing command...');
       const commandResult = await executeVoiceCommand(parsedCommand);
+      console.log('[VOICE] Command result:', commandResult);
       setResult(commandResult);
 
       // AI speaks back with the result

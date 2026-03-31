@@ -179,6 +179,8 @@ Always include a friendly "message" field that will be spoken back to the user.`
  * Execute a parsed voice command
  */
 export async function executeVoiceCommand(command, context = {}) {
+  console.log('[VOICE] executeVoiceCommand called with:', command);
+
   try {
     switch (command.action) {
       case 'add_treatment':
@@ -272,13 +274,24 @@ async function addTreatmentCommand(command) {
     profit: (amount_paid || (payment_status === 'paid' ? price : 0)) - (catalogTreatment?.typical_product_cost || 0)
   };
 
-  const treatment = await api.entities.TreatmentEntry.create(treatmentData);
+  console.log('[VOICE] Creating treatment with data:', treatmentData);
 
-  return {
-    success: true,
-    message: `Treatment added for ${treatmentData.patient_name}: ${treatmentData.treatment_name} £${price}`,
-    data: treatment
-  };
+  try {
+    const treatment = await api.entities.TreatmentEntry.create(treatmentData);
+    console.log('[VOICE] Treatment created successfully:', treatment);
+
+    return {
+      success: true,
+      message: `Treatment added for ${treatmentData.patient_name}: ${treatmentData.treatment_name} £${price}`,
+      data: treatment
+    };
+  } catch (error) {
+    console.error('[VOICE] Failed to create treatment:', error);
+    return {
+      success: false,
+      message: `Failed to add treatment: ${error.message}`
+    };
+  }
 }
 
 /**
@@ -310,8 +323,11 @@ async function addExpenseCommand(command) {
     notes: expense_description || null
   };
 
+  console.log('[VOICE] Creating expense with data:', expenseData);
+
   try {
     const expense = await api.entities.Expense.create(expenseData);
+    console.log('[VOICE] Expense created successfully:', expense);
 
     return {
       success: true,
@@ -319,7 +335,7 @@ async function addExpenseCommand(command) {
       data: expense
     };
   } catch (error) {
-    console.error('Error creating expense:', error);
+    console.error('[VOICE] Error creating expense:', error);
     return {
       success: false,
       message: `Failed to log expense: ${error.message}`
