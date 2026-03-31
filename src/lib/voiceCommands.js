@@ -21,13 +21,15 @@ User said: "${transcript}"
 COMMANDS YOU CAN EXECUTE:
 
 1. Add treatment: "Add [treatment] for [patient name] [price] [payment status]"
-2. Send invoice: "Send invoice to [patient name]"
-3. Send reminder: "Send payment reminder to [patient name]"
-4. Mark as paid: "Mark invoice [number] as paid"
-5. Book appointment: "Book [patient name] for [treatment] [date/time]"
-6. Show schedule: "What's my schedule" / "Show me appointments"
-7. Show patient: "Show me [patient name]" / "Find [patient name]"
-8. Navigate: "Go to [page]" / "Open [page]" (pages: calendar, patients, records, settings)
+2. Add expense: "I spent [amount] on [category]" / "Log expense [amount] for [category]"
+3. Send invoice: "Send invoice to [patient name]"
+4. Send reminder: "Send payment reminder to [patient name]"
+5. Mark as paid: "Mark invoice [number] as paid"
+6. Book appointment: "Book [patient name] for [treatment] [date/time]"
+7. Show schedule: "What's my schedule" / "Show me appointments"
+8. Show patient: "Show me [patient name]" / "Find [patient name]"
+9. Navigate: "Go to [page]" / "Open [page]" (pages: calendar, patients, records, settings)
+10. Send review request: "Send review request to [patient name]"
 
 QUESTIONS YOU CAN ANSWER:
 
@@ -36,12 +38,16 @@ QUESTIONS YOU CAN ANSWER:
 
 Return JSON in this format:
 {
-  "action": "add_treatment" | "send_invoice" | "send_reminder" | "mark_paid" | "book_appointment" | "show_schedule" | "show_patient" | "navigate" | "answer_question" | "unknown",
+  "action": "add_treatment" | "add_expense" | "send_invoice" | "send_reminder" | "send_review_request" | "mark_paid" | "book_appointment" | "show_schedule" | "show_patient" | "navigate" | "answer_question" | "unknown",
   "patient_name": "string (if applicable)",
   "treatment_name": "string (for treatments/appointments)",
   "price": number (for add_treatment),
   "payment_status": "paid" | "pending" | "partially_paid",
   "amount_paid": number (optional),
+  "expense_amount": number (for add_expense),
+  "expense_category": "Rent" | "Products" | "Wages" | "Insurance" | "Marketing" | "Utilities" | "Equipment" | "Other" (for add_expense),
+  "expense_description": "string (optional, for add_expense)",
+  "expense_date": "YYYY-MM-DD (optional, defaults to today)",
   "invoice_number": "string (for mark_paid)",
   "date": "YYYY-MM-DD" (for appointments)",
   "time": "HH:mm" (for appointments)",
@@ -63,6 +69,8 @@ Always include a friendly "message" field that will be spoken back to the user.`
 
     // The response should be the parsed command object
     const parsed = data;
+    console.log('[VOICE] Transcript:', transcript);
+    console.log('[VOICE] Parsed command:', parsed);
 
     // If low confidence or unknown action, return error
     if (parsed.action === 'unknown' || (parsed.confidence && parsed.confidence < 0.6)) {
@@ -74,6 +82,7 @@ Always include a friendly "message" field that will be spoken back to the user.`
 
     // Execute the parsed command
     const result = await executeVoiceCommand(parsed, context);
+    console.log('[VOICE] Execution result:', result);
     return result;
 
   } catch (error) {
@@ -94,11 +103,17 @@ async function executeVoiceCommand(command, context) {
       case 'add_treatment':
         return await addTreatmentCommand(command);
 
+      case 'add_expense':
+        return await addExpenseCommand(command);
+
       case 'send_invoice':
         return await sendInvoiceCommand(command);
 
       case 'send_reminder':
         return await sendReminderCommand(command);
+
+      case 'send_review_request':
+        return await sendReviewRequestCommand(command);
 
       case 'mark_paid':
         return await markPaidCommand(command);
@@ -183,6 +198,52 @@ async function addTreatmentCommand(command) {
     message: `Treatment added for ${treatmentData.patient_name}: ${treatmentData.treatment_name} £${price}`,
     data: treatment
   };
+}
+
+/**
+ * Add an expense via voice command
+ */
+async function addExpenseCommand(command) {
+  const { expense_amount, expense_category, expense_description, expense_date } = command;
+
+  // Validate amount
+  if (!expense_amount || expense_amount <= 0) {
+    return {
+      success: false,
+      message: "Please specify a valid expense amount"
+    };
+  }
+
+  // Validate category (must match one of the predefined categories)
+  const validCategories = ['Rent', 'Products', 'Wages', 'Insurance', 'Marketing', 'Utilities', 'Equipment', 'Other'];
+  const category = expense_category && validCategories.includes(expense_category)
+    ? expense_category
+    : 'Other';
+
+  // Create expense entry
+  const expenseData = {
+    date: expense_date || new Date().toISOString().split('T')[0],
+    category: category,
+    amount: Math.abs(expense_amount), // Ensure positive
+    description: expense_description || `${category} expense`,
+    notes: expense_description || null
+  };
+
+  try {
+    const expense = await api.entities.Expense.create(expenseData);
+
+    return {
+      success: true,
+      message: `Expense logged: £${expense_amount} for ${category}${expense_description ? ` - ${expense_description}` : ''}`,
+      data: expense
+    };
+  } catch (error) {
+    console.error('Error creating expense:', error);
+    return {
+      success: false,
+      message: `Failed to log expense: ${error.message}`
+    };
+  }
 }
 
 /**
@@ -281,6 +342,62 @@ async function sendReminderCommand(command) {
     success: true,
     message: `Payment reminder sent to ${patient_name}`
   };
+}
+
+/**
+ * Send review request via voice command
+ */
+async function sendReviewRequestCommand(command) {
+  const { patient_name } = command;
+
+  if (!patient_name) {
+    return {
+      success: false,
+      message: "Please specify which patient to send the review request to"
+    };
+  }
+
+  // Find patient
+  const patients = await api.entities.Patient.list();
+  const patient = patients.find(p =>
+    p.name.toLowerCase().includes(patient_name.toLowerCase())
+  );
+
+  if (!patient) {
+    return {
+      success: false,
+      message: `I couldn't find a patient named ${patient_name}`
+    };
+  }
+
+  try {
+    // Send review request via SMS or email
+    const reviewMessage = `Hi ${patient.name}, thank you for visiting us! We'd love to hear about your experience. Please leave us a review: [review_link]`;
+
+    // Use the Supabase function to send SMS
+    const { data, error } = await supabase.functions.invoke('send-sms', {
+      body: {
+        to: patient.contact || patient.phone,
+        message: reviewMessage
+      }
+    });
+
+    if (error) {
+      throw new Error(error.message || 'Failed to send SMS');
+    }
+
+    return {
+      success: true,
+      message: `Review request sent to ${patient_name}`,
+      data: { patient: patient.name }
+    };
+  } catch (error) {
+    console.error('Error sending review request:', error);
+    return {
+      success: false,
+      message: `Failed to send review request: ${error.message}`
+    };
+  }
 }
 
 /**

@@ -4,6 +4,7 @@ import { useNavigate } from 'react-router-dom';
 import { useToast } from '@/components/ui/use-toast';
 import { api } from '@/api/api';
 import { useElevenLabs } from '@/hooks/useElevenLabs';
+import { parseAndExecuteVoiceCommand } from '@/lib/voiceCommands';
 
 /**
  * Voice Assistant Hero - Stunning redesign
@@ -251,11 +252,45 @@ Return JSON with action and workflow info.`,
 
         case 'confirm_send':
           if (isYes) {
-            // TODO: Actually create and send invoice here
-            return {
-              message: "Invoice sent! Would you like me to request a review?",
-              workflow: { ...workflow, step: 'ask_review' },
-            };
+            // Extract patient and treatment info from workflow data
+            const { patient_name, treatment_name, price, discount } = workflow.data;
+
+            // Calculate discounted amount
+            const finalAmount = discount ? price - (price * discount / 100) : price;
+
+            try {
+              // Execute the send invoice command
+              const result = await parseAndExecuteVoiceCommand(
+                `Send invoice to ${patient_name}`,
+                {
+                  command: {
+                    action: 'send_invoice',
+                    patient_name: patient_name,
+                    treatment_name: treatment_name,
+                    amount: finalAmount,
+                    discount: discount || 0
+                  }
+                }
+              );
+
+              if (result.success) {
+                return {
+                  message: "Invoice sent! Would you like me to request a review?",
+                  workflow: { ...workflow, step: 'ask_review' },
+                };
+              } else {
+                return {
+                  message: `Failed to send invoice: ${result.message}. What would you like to do?`,
+                  workflow: null,
+                };
+              }
+            } catch (error) {
+              console.error('Error sending invoice:', error);
+              return {
+                message: `Error sending invoice: ${error.message}`,
+                workflow: null,
+              };
+            }
           } else {
             return {
               message: "No problem. Invoice saved as draft. Anything else?",
@@ -265,11 +300,33 @@ Return JSON with action and workflow info.`,
 
         case 'ask_review':
           if (isYes) {
-            // TODO: Send review request
-            return {
-              message: "Review request sent! All done. What else can I help with?",
-              workflow: null,
-            };
+            const { patient_name } = workflow.data;
+
+            try {
+              // Send review request
+              const result = await parseAndExecuteVoiceCommand(
+                `Send review request to ${patient_name}`,
+                {
+                  command: {
+                    action: 'send_review_request',
+                    patient_name: patient_name
+                  }
+                }
+              );
+
+              return {
+                message: result.success
+                  ? "Review request sent! All done. What else can I help with?"
+                  : `Couldn't send review request: ${result.message}. All done. What else can I help with?`,
+                workflow: null,
+              };
+            } catch (error) {
+              console.error('Error sending review request:', error);
+              return {
+                message: "Review request feature coming soon! All done. What else can I help with?",
+                workflow: null,
+              };
+            }
           } else {
             return {
               message: "No problem. All set! What else can I help with?",

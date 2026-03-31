@@ -7,6 +7,7 @@ import { useToast } from "@/components/ui/use-toast";
 import { createPageUrl } from "@/utils";
 import { Link, useNavigate } from "react-router-dom";
 import { useElevenLabs } from '@/hooks/useElevenLabs';
+import { parseAndExecuteVoiceCommand } from '@/lib/voiceCommands';
 
 /**
  * Voice Command Center - Immersive cinematic interface
@@ -191,19 +192,68 @@ export default function VoiceDiary() {
           break;
 
         case 'create_treatment':
-          // Could implement auto-fill treatment form here
-          toast({
-            title: "Creating treatment",
-            description: "Opening quick add...",
-          });
-          navigate('/QuickAdd');
+          // Extract treatment data from action
+          const treatmentData = {
+            date: data.date || new Date().toISOString().split('T')[0],
+            patient_name: data.patient || data.patient_name || 'Walk-in',
+            treatment_name: data.treatment || data.treatment_name,
+            price_paid: data.price || data.amount || 0,
+            payment_status: data.status || 'pending',
+            amount_paid: data.amount_paid || (data.status === 'paid' ? data.price : 0)
+          };
+
+          try {
+            const treatment = await api.entities.TreatmentEntry.create(treatmentData);
+
+            toast({
+              title: "Treatment created",
+              description: `${treatmentData.patient_name} - ${treatmentData.treatment_name} £${treatmentData.price_paid}`,
+            });
+
+            queryClient.invalidateQueries(['treatments']);
+          } catch (error) {
+            console.error('Error creating treatment:', error);
+            toast({
+              title: "Failed to create treatment",
+              description: error.message,
+              variant: "destructive",
+            });
+          }
           break;
 
         case 'create_invoice':
-          toast({
-            title: "Feature coming soon",
-            description: "Invoice creation will be implemented",
-          });
+          // Use the voiceCommands.js sendInvoiceCommand logic
+          const invoiceCommand = {
+            action: 'send_invoice',
+            patient_name: data.patient || data.patient_name,
+            treatment_name: data.treatment || data.treatment_name,
+            amount: data.amount || data.price
+          };
+
+          try {
+            const invoiceResult = await parseAndExecuteVoiceCommand('', { command: invoiceCommand });
+
+            if (invoiceResult.success) {
+              toast({
+                title: "Invoice created",
+                description: invoiceResult.message,
+              });
+              queryClient.invalidateQueries(['invoices']);
+            } else {
+              toast({
+                title: "Invoice creation failed",
+                description: invoiceResult.message,
+                variant: "destructive",
+              });
+            }
+          } catch (error) {
+            console.error('Error creating invoice:', error);
+            toast({
+              title: "Failed to create invoice",
+              description: error.message,
+              variant: "destructive",
+            });
+          }
           break;
 
         default:
