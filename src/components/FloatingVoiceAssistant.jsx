@@ -2,9 +2,11 @@ import React, { useState, useEffect, useRef } from 'react';
 import { Mic, MicOff, Loader2, Check, X, Volume2 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useToast } from '@/components/ui/use-toast';
-import { parseAndExecuteVoiceCommand } from '@/lib/voiceCommands';
+import { parseVoiceCommand, executeVoiceCommand } from '@/lib/voiceCommands';
 import { api } from '@/api/api';
 import { useElevenLabs } from '@/hooks/useElevenLabs';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
+import { Button } from '@/components/ui/button';
 
 /**
  * Floating Voice Assistant - Global voice control orb
@@ -18,6 +20,8 @@ export function FloatingVoiceAssistant() {
   const [transcript, setTranscript] = useState('');
   const [result, setResult] = useState(null);
   const [aiResponse, setAiResponse] = useState('');
+  const [showConfirmDialog, setShowConfirmDialog] = useState(false);
+  const [parsedCommand, setParsedCommand] = useState(null);
 
   const mediaRecorderRef = useRef(null);
   const audioChunksRef = useRef([]);
@@ -124,35 +128,76 @@ export function FloatingVoiceAssistant() {
         return;
       }
 
-      // Parse and execute the voice command
-      const commandResult = await parseAndExecuteVoiceCommand(transcribedText);
-      setResult(commandResult);
+      // Detect Whisper hallucinations (common when transcribing silence/noise)
+      const hallucinations = [
+        /thank you for watching/i,
+        /subscribe to my channel/i,
+        /let's get together/i,
+        /wonderful place/i,
+        /lots of trees/i,
+        /please like and subscribe/i,
+        /thank you so much/i,
+        /see you next time/i,
+      ];
 
-      // AI speaks back with the result
-      if (commandResult.message) {
-        setAiResponse(commandResult.message);
-        try {
-          await speak(commandResult.message);
-        } catch (ttsError) {
-          console.error('TTS error:', ttsError);
-          // Continue even if TTS fails
+      const isHallucination = hallucinations.some(pattern => pattern.test(transcribedText));
+
+      // Also check if transcript is suspiciously long (>200 chars from short audio)
+      const isTooLong = transcribedText.length > 200;
+
+      if (isHallucination || isTooLong) {
+        console.warn('[VOICE] Detected Whisper hallucination:', transcribedText);
+        setResult({
+          success: false,
+          message: "Sorry, I didn't catch that. Please speak clearly and try again."
+        });
+        setIsProcessing(false);
+        return;
+      }
+
+      // Parse the voice command (without executing)
+      const parsed = await parseVoiceCommand(transcribedText);
+
+      // If low confidence or unknown action, show error immediately
+      if (parsed.action === 'unknown' || (parsed.confidence && parsed.confidence < 0.6)) {
+        setResult({
+          success: false,
+          message: parsed.message || "I didn't quite catch that. Could you try rephrasing?"
+        });
+        setIsProcessing(false);
+        return;
+      }
+
+      // For simple queries (answer_question, navigate), execute immediately without confirmation
+      if (parsed.action === 'answer_question' || parsed.action === 'navigate') {
+        const commandResult = await executeVoiceCommand(parsed);
+        setResult(commandResult);
+
+        // AI speaks back with the result
+        if (commandResult.message) {
+          setAiResponse(commandResult.message);
+          try {
+            await speak(commandResult.message);
+          } catch (ttsError) {
+            console.error('TTS error:', ttsError);
+          }
         }
+
+        // Handle navigation if needed
+        if (commandResult.success && commandResult.action === 'navigate' && commandResult.navigateTo) {
+          setTimeout(() => {
+            navigate(commandResult.navigateTo);
+          }, 1500);
+        }
+
+        setIsProcessing(false);
+        return;
       }
 
-      // Handle navigation if needed
-      if (commandResult.success && commandResult.action === 'navigate' && commandResult.navigateTo) {
-        setTimeout(() => {
-          navigate(commandResult.navigateTo);
-        }, 1500);
-      }
-
-      // Show toast notification
-      toast({
-        title: commandResult.success ? 'Command executed' : 'Command failed',
-        description: commandResult.message,
-        className: commandResult.success ? 'bg-green-50 border-green-200' : '',
-        variant: commandResult.success ? undefined : 'destructive',
-      });
+      // For data-changing commands (add_treatment, add_expense, etc.), show confirmation dialog
+      setParsedCommand(parsed);
+      setShowConfirmDialog(true);
+      setIsProcessing(false);
 
     } catch (error) {
       console.error('Error processing audio:', error);
@@ -175,6 +220,84 @@ export function FloatingVoiceAssistant() {
       stopListening();
     } else {
       startListening();
+    }
+  };
+
+  const handleConfirmCommand = async () => {
+    if (!parsedCommand) return;
+
+    setShowConfirmDialog(false);
+    setIsProcessing(true);
+
+    try {
+      const commandResult = await executeVoiceCommand(parsedCommand);
+      setResult(commandResult);
+
+      // AI speaks back with the result
+      if (commandResult.message) {
+        setAiResponse(commandResult.message);
+        try {
+          await speak(commandResult.message);
+        } catch (ttsError) {
+          console.error('TTS error:', ttsError);
+        }
+      }
+
+      // Handle navigation if needed
+      if (commandResult.success && commandResult.action === 'navigate' && commandResult.navigateTo) {
+        setTimeout(() => {
+          navigate(commandResult.navigateTo);
+        }, 1500);
+      }
+
+      // Show toast notification
+      toast({
+        title: commandResult.success ? 'Command executed' : 'Command failed',
+        description: commandResult.message,
+        className: commandResult.success ? 'bg-green-50 border-green-200' : '',
+        variant: commandResult.success ? undefined : 'destructive',
+      });
+    } catch (error) {
+      console.error('Error executing command:', error);
+      toast({
+        title: 'Execution failed',
+        description: error.message,
+        variant: 'destructive',
+      });
+    } finally {
+      setIsProcessing(false);
+      setParsedCommand(null);
+    }
+  };
+
+  const handleCancelCommand = () => {
+    setShowConfirmDialog(false);
+    setParsedCommand(null);
+    setTranscript('');
+    toast({
+      title: 'Command cancelled',
+      description: 'No changes were made',
+    });
+  };
+
+  const formatCommandDescription = (command) => {
+    switch (command.action) {
+      case 'add_treatment':
+        return `Add treatment: ${command.treatment_name || 'Treatment'} for ${command.patient_name || 'patient'} - £${command.price || 0} (${command.payment_status || 'pending'})`;
+      case 'add_expense':
+        return `Add expense: £${command.expense_amount || 0} for ${command.expense_category || 'Other'}${command.expense_description ? ` - ${command.expense_description}` : ''}`;
+      case 'send_invoice':
+        return `Send invoice to ${command.patient_name || 'patient'}`;
+      case 'send_reminder':
+        return `Send payment reminder to ${command.patient_name || 'patient'}`;
+      case 'send_review_request':
+        return `Send review request to ${command.patient_name || 'patient'}`;
+      case 'mark_paid':
+        return `Mark ${command.invoice_number ? `invoice ${command.invoice_number}` : `invoice for ${command.patient_name || 'patient'}`} as paid`;
+      case 'book_appointment':
+        return `Book appointment for ${command.patient_name || 'patient'} - ${command.treatment_name || 'Treatment'} on ${command.date || 'today'} at ${command.time || 'TBD'}`;
+      default:
+        return command.message || 'Execute this command?';
     }
   };
 
@@ -274,6 +397,65 @@ export function FloatingVoiceAssistant() {
           </div>
         </div>
       )}
+
+      {/* Confirmation Dialog */}
+      <Dialog open={showConfirmDialog} onOpenChange={setShowConfirmDialog}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Confirm Voice Command</DialogTitle>
+            <DialogDescription>
+              Please confirm this action before I execute it.
+            </DialogDescription>
+          </DialogHeader>
+
+          {parsedCommand && (
+            <div className="space-y-4">
+              {/* Show what user said */}
+              <div className="bg-gray-50 rounded-lg p-3">
+                <p className="text-xs font-medium text-gray-500 mb-1">You said:</p>
+                <p className="text-sm text-gray-700">&quot;{transcript}&quot;</p>
+              </div>
+
+              {/* Show parsed command */}
+              <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
+                <p className="text-xs font-medium text-blue-700 mb-1">I will:</p>
+                <p className="text-sm font-medium text-blue-900">{formatCommandDescription(parsedCommand)}</p>
+              </div>
+
+              {/* Show confidence if available */}
+              {parsedCommand.confidence && (
+                <div className="text-xs text-gray-500">
+                  Confidence: {Math.round(parsedCommand.confidence * 100)}%
+                </div>
+              )}
+            </div>
+          )}
+
+          <DialogFooter className="flex gap-2 sm:gap-2">
+            <Button
+              variant="outline"
+              onClick={handleCancelCommand}
+              className="flex-1"
+            >
+              Cancel
+            </Button>
+            <Button
+              onClick={handleConfirmCommand}
+              disabled={isProcessing}
+              className="flex-1 bg-[#d4a740] hover:bg-[#c49730] text-white"
+            >
+              {isProcessing ? (
+                <>
+                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                  Executing...
+                </>
+              ) : (
+                'Confirm'
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

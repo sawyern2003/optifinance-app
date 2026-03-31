@@ -3,6 +3,87 @@ import { invoicesAPI } from '@/api/invoices';
 import { supabase } from '@/config/supabase';
 
 /**
+ * Parse voice command (without executing) - for confirmation dialogs
+ */
+export async function parseVoiceCommand(transcript) {
+  try {
+    // Call clinic-llm edge function directly with voice command parsing task
+    const { data, error } = await supabase.functions.invoke('clinic-llm', {
+      body: {
+        task: 'voice_command',
+        transcript,
+        prompt: `You are a helpful AI assistant for a clinic management system. You understand natural conversation and can answer questions or execute commands.
+
+Current date: ${new Date().toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}
+
+User said: "${transcript}"
+
+COMMANDS YOU CAN EXECUTE:
+
+1. Add treatment: "Add [treatment] for [patient name] [price] [payment status]"
+2. Add expense: "I spent [amount] on [category]" / "Log expense [amount] for [category]"
+3. Send invoice: "Send invoice to [patient name]"
+4. Send reminder: "Send payment reminder to [patient name]"
+5. Mark as paid: "Mark invoice [number] as paid"
+6. Book appointment: "Book [patient name] for [treatment] [date/time]"
+7. Show schedule: "What's my schedule" / "Show me appointments"
+8. Show patient: "Show me [patient name]" / "Find [patient name]"
+9. Navigate: "Go to [page]" / "Open [page]" (pages: calendar, patients, records, settings)
+10. Send review request: "Send review request to [patient name]"
+
+QUESTIONS YOU CAN ANSWER:
+
+- Date/time: "What's the date", "What day is it", "What time is it"
+- General: "Hello", "How are you", "What can you do"
+
+Return JSON in this format:
+{
+  "action": "add_treatment" | "add_expense" | "send_invoice" | "send_reminder" | "send_review_request" | "mark_paid" | "book_appointment" | "show_schedule" | "show_patient" | "navigate" | "answer_question" | "unknown",
+  "patient_name": "string (if applicable)",
+  "treatment_name": "string (for treatments/appointments)",
+  "price": number (for add_treatment),
+  "payment_status": "paid" | "pending" | "partially_paid",
+  "amount_paid": number (optional),
+  "expense_amount": number (for add_expense),
+  "expense_category": "Rent" | "Products" | "Wages" | "Insurance" | "Marketing" | "Utilities" | "Equipment" | "Other" (for add_expense),
+  "expense_description": "string (optional, for add_expense)",
+  "expense_date": "YYYY-MM-DD (optional, defaults to today)",
+  "invoice_number": "string (for mark_paid)",
+  "date": "YYYY-MM-DD" (for appointments)",
+  "time": "HH:mm" (for appointments)",
+  "page": "string (for navigate: calendar, patients, records, settings)",
+  "answer": "string (for answer_question - your friendly response)",
+  "message": "string (confirmation message to speak back to user)",
+  "confidence": number (0-1)
+}
+
+Be conversational and helpful. If someone asks "What's the date", use action "answer_question" with answer containing today's date.
+Always include a friendly "message" field that will be spoken back to the user.`,
+      },
+    });
+
+    if (error) {
+      console.error('clinic-llm error:', error);
+      throw error;
+    }
+
+    // The response should be the parsed command object
+    const parsed = data;
+    console.log('[VOICE] Transcript:', transcript);
+    console.log('[VOICE] Parsed command:', parsed);
+
+    return parsed;
+  } catch (error) {
+    console.error('Voice command parsing error:', error);
+    return {
+      action: 'unknown',
+      message: 'Failed to understand command',
+      confidence: 0
+    };
+  }
+}
+
+/**
  * Parse and execute voice commands using GPT-4
  */
 export async function parseAndExecuteVoiceCommand(transcript, context = {}) {
@@ -97,7 +178,7 @@ Always include a friendly "message" field that will be spoken back to the user.`
 /**
  * Execute a parsed voice command
  */
-async function executeVoiceCommand(command, context) {
+export async function executeVoiceCommand(command, context = {}) {
   try {
     switch (command.action) {
       case 'add_treatment':
