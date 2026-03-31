@@ -7,7 +7,9 @@ import { useToast } from "@/components/ui/use-toast";
 import { createPageUrl } from "@/utils";
 import { Link, useNavigate } from "react-router-dom";
 import { useElevenLabs } from '@/hooks/useElevenLabs';
-import { parseAndExecuteVoiceCommand } from '@/lib/voiceCommands';
+import { parseVoiceCommand, executeVoiceCommand } from '@/lib/voiceCommands';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
+import { Button } from '@/components/ui/button';
 
 /**
  * Voice Command Center - Immersive cinematic interface
@@ -26,7 +28,8 @@ export default function VoiceDiary() {
   const [activityFeed, setActivityFeed] = useState([]);
   const [completedAction, setCompletedAction] = useState(null);
   const [inConversation, setInConversation] = useState(false);
-  const [actionOptions, setActionOptions] = useState([]);
+  const [showConfirmDialog, setShowConfirmDialog] = useState(false);
+  const [parsedCommand, setParsedCommand] = useState(null);
 
   // Patient notes mode
   const [notesMode, setNotesMode] = useState(false);
@@ -311,6 +314,121 @@ export default function VoiceDiary() {
     }
   };
 
+  const handleConfirmCommand = async () => {
+    console.log('[VOICE ASSISTANT] handleConfirmCommand called with:', parsedCommand);
+    if (!parsedCommand) {
+      console.warn('[VOICE ASSISTANT] No parsed command to execute!');
+      return;
+    }
+
+    setShowConfirmDialog(false);
+    setIsProcessing(true);
+    setParsedIntent('Executing command...');
+
+    try {
+      console.log('[VOICE ASSISTANT] Executing command...');
+      const commandResult = await executeVoiceCommand(parsedCommand);
+      console.log('[VOICE ASSISTANT] Command result:', commandResult);
+
+      setCompletedAction({
+        success: commandResult.success,
+        message: commandResult.message
+      });
+      setParsedIntent('');
+
+      // Add to activity feed
+      setActivityFeed(prev => [{
+        id: Date.now(),
+        timestamp: new Date(),
+        action: finalTranscript,
+        result: commandResult.message,
+        success: commandResult.success,
+      }, ...prev]);
+
+      // Speak the result
+      await speak(commandResult.message, selectedVoiceId);
+
+      // Handle navigation if needed
+      if (commandResult.success && commandResult.action === 'navigate' && commandResult.navigateTo) {
+        setTimeout(() => {
+          navigate(commandResult.navigateTo);
+        }, 1500);
+      }
+
+      // Show toast notification
+      toast({
+        title: commandResult.success ? 'Command executed' : 'Command failed',
+        description: commandResult.message,
+        variant: commandResult.success ? undefined : 'destructive',
+      });
+
+      // Auto-clear after delay
+      setTimeout(() => {
+        setFinalTranscript('');
+        setParsedIntent('');
+        setCompletedAction(null);
+      }, 5000);
+
+    } catch (error) {
+      console.error('[VOICE ASSISTANT] Error executing command:', error);
+      setCompletedAction({
+        success: false,
+        message: error.message
+      });
+      setParsedIntent('');
+
+      toast({
+        title: 'Execution failed',
+        description: error.message,
+        variant: 'destructive',
+      });
+    } finally {
+      setIsProcessing(false);
+      setParsedCommand(null);
+    }
+  };
+
+  const handleCancelCommand = () => {
+    setShowConfirmDialog(false);
+    setParsedCommand(null);
+    setFinalTranscript('');
+    setParsedIntent('');
+    setCompletedAction({
+      success: false,
+      message: 'Command cancelled'
+    });
+
+    toast({
+      title: 'Command cancelled',
+      description: 'No changes were made',
+    });
+
+    setTimeout(() => {
+      setCompletedAction(null);
+    }, 3000);
+  };
+
+  const formatCommandDescription = (command) => {
+    switch (command.action) {
+      case 'add_treatment':
+        return `Add treatment: ${command.treatment_name || 'Treatment'} for ${command.patient_name || 'patient'} - £${command.price || 0} (${command.payment_status || 'pending'})`;
+      case 'add_expense':
+        return `Add expense: £${command.expense_amount || 0} for ${command.expense_category || 'Other'}${command.expense_description ? ` - ${command.expense_description}` : ''}`;
+      case 'book_appointment':
+        return `Book appointment: ${command.patient_name || 'patient'} - ${command.treatment_name || 'Consultation'} on ${command.date || 'today'} at ${command.time || 'TBD'}`;
+      case 'send_invoice':
+        return `Send invoice to ${command.patient_name || 'patient'}`;
+      case 'send_reminder':
+        return `Send payment reminder to ${command.patient_name || 'patient'}`;
+      case 'send_review_request':
+        return `Send review request to ${command.patient_name || 'patient'}`;
+      case 'mark_paid':
+        return `Mark ${command.invoice_number ? `invoice ${command.invoice_number}` : `invoice for ${command.patient_name || 'patient'}`} as paid`;
+      default:
+        return command.message || 'Execute this command?';
+    }
+  };
+
   const startListening = async () => {
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
@@ -409,7 +527,29 @@ export default function VoiceDiary() {
         return;
       }
 
-      await processConversation(userSaid);
+      // Detect hallucinations
+      const hallucinations = [
+        /thank you for watching/i,
+        /subscribe to my channel/i,
+        /let's get together/i,
+        /wonderful place/i,
+        /lots of trees/i,
+      ];
+
+      const isHallucination = hallucinations.some(pattern => pattern.test(userSaid));
+      const isTooLong = userSaid.length > 200;
+
+      if (isHallucination || isTooLong) {
+        console.warn('[VOICE] Detected Whisper hallucination:', userSaid);
+        setCompletedAction({
+          success: false,
+          message: "Sorry, I didn't catch that clearly. Please speak again."
+        });
+        setIsProcessing(false);
+        return;
+      }
+
+      await processVoiceCommand(userSaid);
 
     } catch (error) {
       console.error('Processing error:', error);
@@ -422,103 +562,89 @@ export default function VoiceDiary() {
     }
   };
 
-  const processConversation = async (userMessage) => {
+  const processVoiceCommand = async (transcript) => {
     try {
-      setParsedIntent('Processing command...');
+      console.log('[VOICE ASSISTANT] Processing:', transcript);
+      setParsedIntent('Analyzing command...');
 
-      const startOfWeek = new Date(today);
-      startOfWeek.setDate(today.getDate() - today.getDay());
+      // Parse the voice command
+      const parsed = await parseVoiceCommand(transcript);
+      console.log('[VOICE ASSISTANT] Parsed command:', parsed);
 
-      const thisWeekTreatments = treatments.filter(t => {
-        const treatmentDate = new Date(t.date);
-        return treatmentDate >= startOfWeek;
-      });
-
-      const revenue = thisWeekTreatments.reduce((sum, t) => sum + (Number(t.amount_paid) || 0), 0);
-      const pending = treatments.filter(t => t.payment_status === 'pending');
-
-      const appContext = {
-        todayDate: format(today, 'yyyy-MM-dd'),
-        currentPage: window.location.pathname,
-        stats: {
-          totalPatients: patients.length,
-          totalTreatments: treatments.length,
-          thisWeekTreatments: thisWeekTreatments.length,
-          thisWeekRevenue: revenue,
-          pendingPayments: pending.length,
-          pendingAmount: pending.reduce((sum, t) => sum + (Number(t.price_paid) || 0), 0),
-        },
-        recentTreatments: treatments.slice(0, 5).map(t => ({
-          date: t.date,
-          patient: t.patient_name,
-          treatment: t.treatment_name,
-          amount: t.price_paid,
-          status: t.payment_status,
-        })),
-      };
-
-      const data = await api.integrations.Core.ProcessVoiceConversation({
-        userMessage,
-        currentContext: appContext,
-        conversationHistory: [],
-        patientNames: patients.map(p => p.name),
-        treatmentNames: treatmentCatalog.map(t => t.treatment_name),
-        todayDate: format(today, 'yyyy-MM-dd'),
-      });
-
-      const aiResponse = data.response || "I'm here to help!";
-      const actions = data.actionOptions || [];
-
-      setParsedIntent(aiResponse);
-      setActionOptions(actions);
-
-      const activityEntry = {
-        id: Date.now(),
-        timestamp: new Date(),
-        action: userMessage,
-        result: aiResponse,
-        success: true,
-      };
-      setActivityFeed(prev => [activityEntry, ...prev]);
-
-      setCompletedAction({
-        success: true,
-        message: aiResponse,
-        details: []
-      });
-
-      await speak(aiResponse, selectedVoiceId);
-
-      if (inConversation) {
-        setFinalTranscript('');
+      // Check if valid command
+      if (parsed.action === 'unknown' || (parsed.confidence && parsed.confidence < 0.6)) {
+        console.warn('[VOICE ASSISTANT] Low confidence or unknown action');
+        setCompletedAction({
+          success: false,
+          message: parsed.message || "I didn't quite understand that. Could you rephrase?"
+        });
         setParsedIntent('');
-        setCompletedAction(null);
 
-        setTimeout(async () => {
-          if (inConversation) {
-            await startListening();
-          }
-        }, 500);
-      } else {
+        setActivityFeed(prev => [{
+          id: Date.now(),
+          timestamp: new Date(),
+          action: transcript,
+          result: "Command not understood",
+          success: false,
+        }, ...prev]);
+
+        return;
+      }
+
+      // For simple queries (answer_question, navigate), execute immediately
+      if (parsed.action === 'answer_question' || parsed.action === 'navigate') {
+        console.log('[VOICE ASSISTANT] Simple command, executing immediately');
+        const result = await executeVoiceCommand(parsed);
+
+        setCompletedAction({
+          success: result.success,
+          message: result.message
+        });
+        setParsedIntent(result.message);
+
+        setActivityFeed(prev => [{
+          id: Date.now(),
+          timestamp: new Date(),
+          action: transcript,
+          result: result.message,
+          success: result.success,
+        }, ...prev]);
+
+        await speak(result.message, selectedVoiceId);
+
+        // Handle navigation
+        if (result.success && result.action === 'navigate' && result.navigateTo) {
+          setTimeout(() => navigate(result.navigateTo), 1500);
+        }
+
+        // Auto-clear after a delay
         setTimeout(() => {
           setFinalTranscript('');
           setParsedIntent('');
           setCompletedAction(null);
         }, 5000);
+
+        return;
       }
 
+      // For data-changing commands, show confirmation dialog
+      console.log('[VOICE ASSISTANT] Data command, showing confirmation');
+      setParsedCommand(parsed);
+      setShowConfirmDialog(true);
+      setParsedIntent('Waiting for confirmation...');
+
     } catch (error) {
-      console.error('Conversation processing error:', error);
-      setParsedIntent('');
+      console.error('[VOICE ASSISTANT] Command processing error:', error);
       setCompletedAction({
         success: false,
-        message: error.message || "I'm having trouble understanding. Could you rephrase that?"
+        message: 'Failed to process command. Please try again.'
       });
+      setParsedIntent('');
 
       setActivityFeed(prev => [{
         id: Date.now(),
         timestamp: new Date(),
-        action: userMessage,
+        action: transcript,
         result: error.message,
         success: false,
       }, ...prev]);
@@ -529,7 +655,7 @@ export default function VoiceDiary() {
     setIsProcessing(true);
     setFinalTranscript(suggestionText);
     try {
-      await processConversation(suggestionText);
+      await processVoiceCommand(suggestionText);
     } catch (error) {
       console.error('Suggestion processing error:', error);
     } finally {
@@ -1257,6 +1383,65 @@ export default function VoiceDiary() {
           </div>
         </div>
       </div>
+
+      {/* Confirmation Dialog */}
+      <Dialog open={showConfirmDialog} onOpenChange={setShowConfirmDialog}>
+        <DialogContent className="sm:max-w-md bg-[#0a0e1a]/95 backdrop-blur-xl border-white/10">
+          <DialogHeader>
+            <DialogTitle className="text-white text-xl">Confirm Voice Command</DialogTitle>
+            <DialogDescription className="text-white/60">
+              Please confirm this action before I execute it.
+            </DialogDescription>
+          </DialogHeader>
+
+          {parsedCommand && (
+            <div className="space-y-4">
+              {/* Show what user said */}
+              <div className="bg-white/5 rounded-lg p-3 border border-white/10">
+                <p className="text-xs font-medium text-white/50 mb-1">You said:</p>
+                <p className="text-sm text-white/90">&quot;{finalTranscript}&quot;</p>
+              </div>
+
+              {/* Show parsed command */}
+              <div className="bg-[#d6b164]/10 border border-[#d6b164]/30 rounded-lg p-3">
+                <p className="text-xs font-medium text-[#d6b164]/70 mb-1">I will:</p>
+                <p className="text-sm font-medium text-[#d6b164]">{formatCommandDescription(parsedCommand)}</p>
+              </div>
+
+              {/* Show confidence if available */}
+              {parsedCommand.confidence && (
+                <div className="text-xs text-white/40">
+                  Confidence: {Math.round(parsedCommand.confidence * 100)}%
+                </div>
+              )}
+            </div>
+          )}
+
+          <DialogFooter className="flex gap-2 sm:gap-2">
+            <Button
+              variant="outline"
+              onClick={handleCancelCommand}
+              className="flex-1 bg-white/5 hover:bg-white/10 border-white/20 text-white"
+            >
+              Cancel
+            </Button>
+            <Button
+              onClick={handleConfirmCommand}
+              disabled={isProcessing}
+              className="flex-1 bg-[#d6b164] hover:bg-[#c4a054] text-[#0a0e1a] font-medium"
+            >
+              {isProcessing ? (
+                <>
+                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                  Executing...
+                </>
+              ) : (
+                'Confirm'
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <style>{`
         @keyframes slideIn {

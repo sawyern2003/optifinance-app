@@ -4,7 +4,7 @@ import { Link, useLocation } from "react-router-dom";
 import { createPageUrl } from "@/utils";
 import { LayoutDashboard, Plus, FileText, BarChart3, Settings, LogOut, TrendingUp, MessageSquare, CircleDot, Send, ContactRound, Calendar, Package, Shield } from "lucide-react";
 import { api } from "@/api/api";
-import { FloatingVoiceAssistant } from "@/components/FloatingVoiceAssistant";
+// import { FloatingVoiceAssistant } from "@/components/FloatingVoiceAssistant"; // Removed - all voice functionality now in VoiceAssistant page
 import FloatingQuickAdd from "@/components/FloatingQuickAdd";
 
 const navigationItems = [
@@ -277,8 +277,8 @@ export default function Layout({ children, currentPageName }) {
           </div>
         </main>
 
-        {/* Global Voice Assistant - appears on all pages */}
-        <FloatingVoiceAssistant />
+        {/* Global Voice Assistant - removed, all voice functionality now in VoiceAssistant page */}
+        {/* <FloatingVoiceAssistant /> */}
 
         {/* Global Quick Add - floating button appears on all pages */}
         <FloatingQuickAdd />
