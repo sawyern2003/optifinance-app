@@ -32,6 +32,12 @@ export default function VoiceDiary() {
   const [agentThinking, setAgentThinking] = useState(false);
   const [agentSteps, setAgentSteps] = useState([]);
 
+  // Conversation session management
+  const [sessionId, setSessionId] = useState(() => {
+    // Generate session ID on mount
+    return `session_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+  });
+
   // Patient notes mode
   const [notesMode, setNotesMode] = useState(false);
   const [selectedPatient, setSelectedPatient] = useState(null);
@@ -287,8 +293,9 @@ export default function VoiceDiary() {
       // Track intermediate steps for progress display
       const intermediateSteps = [];
 
-      // Execute command with enterprise agent
+      // Execute command with enterprise agent (with session memory)
       const agentResponse = await executeAgentCommand(transcript, {
+        sessionId: sessionId, // Pass session ID for memory
         onToolUse: (toolName, toolInput) => {
           console.log('[AGENT] Using tool:', toolName, toolInput);
           setParsedIntent(`Using ${toolName}...`);

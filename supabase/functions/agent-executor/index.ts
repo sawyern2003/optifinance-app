@@ -373,30 +373,64 @@ async function executeFunction(functionName: string, args: any) {
     }
 
     case 'get_today_summary': {
-      const today = new Date().toISOString().split('T')[0];
+      // Get today's date in UK timezone
+      const ukDate = new Date().toLocaleString('en-GB', { timeZone: 'Europe/London', dateStyle: 'short' });
+      const [day, month, year] = ukDate.split('/');
+      const today = `${year}-${month.padStart(2, '0')}-${day.padStart(2, '0')}`;
+
+      console.log('[AGENT] Checking data for date:', today);
 
       const { data: appointments } = await supabase
         .from('appointments')
         .select('*')
-        .eq('date', today);
+        .eq('date', today)
+        .order('time', { ascending: true });
 
       const { data: treatments } = await supabase
         .from('treatment_entries')
         .select('*')
-        .eq('date', today);
+        .eq('date', today)
+        .order('created_at', { ascending: false });
 
       const revenue = treatments?.reduce((sum, t) => sum + (t.amount_paid || 0), 0) || 0;
       const pending = treatments?.filter((t) => t.payment_status === 'pending').length || 0;
 
+      // Build detailed summary
+      let detailsMsg = `Today (${today}):\n\n`;
+
+      if (appointments && appointments.length > 0) {
+        detailsMsg += `📅 APPOINTMENTS (${appointments.length}):\n`;
+        appointments.forEach((apt, idx) => {
+          detailsMsg += `${idx + 1}. ${apt.patient_name} - ${apt.treatment_name} at ${apt.time} (${apt.status})\n`;
+        });
+        detailsMsg += '\n';
+      } else {
+        detailsMsg += '📅 No appointments scheduled\n\n';
+      }
+
+      if (treatments && treatments.length > 0) {
+        detailsMsg += `💉 TREATMENTS COMPLETED (${treatments.length}):\n`;
+        treatments.forEach((tx, idx) => {
+          detailsMsg += `${idx + 1}. ${tx.patient_name} - ${tx.treatment_name} £${tx.price_paid} (${tx.payment_status})\n`;
+        });
+        detailsMsg += '\n';
+      } else {
+        detailsMsg += '💉 No treatments completed yet\n\n';
+      }
+
+      detailsMsg += `💰 Revenue: £${revenue.toFixed(2)}\n`;
+      detailsMsg += `⏳ Pending Payments: ${pending}`;
+
       return {
         success: true,
         summary: {
-          appointments: appointments?.length || 0,
-          treatments: treatments?.length || 0,
+          date: today,
+          appointments: appointments || [],
+          treatments: treatments || [],
           revenue,
           pending_payments: pending,
         },
-        message: `Today: ${appointments?.length || 0} appointments, ${treatments?.length || 0} treatments, £${revenue} revenue, ${pending} pending payments`,
+        message: detailsMsg,
       };
     }
 
@@ -406,13 +440,76 @@ async function executeFunction(functionName: string, args: any) {
 }
 
 /**
+ * Load conversation history from database
+ */
+async function loadConversationHistory(sessionId: string) {
+  const supabase = createClient(supabaseUrl, supabaseServiceKey);
+
+  const { data: history, error } = await supabase
+    .from('agent_conversations')
+    .select('*')
+    .eq('session_id', sessionId)
+    .order('created_at', { ascending: true })
+    .limit(20); // Last 20 messages
+
+  if (error) {
+    console.error('[AGENT] Error loading history:', error);
+    return [];
+  }
+
+  // Convert to OpenAI message format
+  const messages: any[] = [];
+  for (const msg of history || []) {
+    if (msg.role === 'user' || msg.role === 'assistant' || msg.role === 'system') {
+      messages.push({
+        role: msg.role,
+        content: msg.content,
+      });
+    } else if (msg.role === 'tool') {
+      messages.push({
+        role: 'tool',
+        tool_call_id: msg.tool_call_id,
+        name: msg.tool_name,
+        content: msg.content,
+      });
+    }
+  }
+
+  return messages;
+}
+
+/**
+ * Save message to conversation history
+ */
+async function saveMessage(sessionId: string, role: string, content: string, toolCalls?: any, toolCallId?: string, toolName?: string) {
+  const supabase = createClient(supabaseUrl, supabaseServiceKey);
+
+  await supabase.from('agent_conversations').insert({
+    session_id: sessionId,
+    role,
+    content,
+    tool_calls: toolCalls || null,
+    tool_call_id: toolCallId || null,
+    tool_name: toolName || null,
+  });
+}
+
+/**
  * AGENT EXECUTION with OpenAI Function Calling
  */
-async function runAgent(userInput: string) {
+async function runAgent(userInput: string, sessionId: string) {
+  // Load conversation history
+  const history = await loadConversationHistory(sessionId);
+
+  // Start with system prompt + history + new user message
   const messages: any[] = [
     { role: 'system', content: AGENT_SYSTEM_PROMPT },
+    ...history,
     { role: 'user', content: userInput },
   ];
+
+  // Save user message
+  await saveMessage(sessionId, 'user', userInput);
 
   let iteration = 0;
   const maxIterations = 10;
@@ -490,6 +587,9 @@ async function runAgent(userInput: string) {
 
     // Agent has finished - return final message
     if (message.content) {
+      // Save assistant's final response
+      await saveMessage(sessionId, 'assistant', message.content);
+
       return {
         output: message.content,
         success: true,
@@ -516,16 +616,19 @@ serve(async (req) => {
   }
 
   try {
-    const { input } = await req.json();
+    const { input, session_id } = await req.json();
 
     if (!input) {
       throw new Error('No input provided');
     }
 
-    console.log('[AGENT] Processing:', input);
+    // Generate session ID if not provided
+    const sessionId = session_id || `session_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+
+    console.log('[AGENT] Processing:', input, 'Session:', sessionId);
 
     // Run the agent
-    const result = await runAgent(input);
+    const result = await runAgent(input, sessionId);
 
     console.log('[AGENT] Success:', result.output);
 
