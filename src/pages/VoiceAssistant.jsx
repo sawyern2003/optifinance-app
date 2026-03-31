@@ -8,8 +8,8 @@ import { createPageUrl } from "@/utils";
 import { Link, useNavigate } from "react-router-dom";
 import { useElevenLabs } from '@/hooks/useElevenLabs';
 import { parseVoiceCommand, executeVoiceCommand } from '@/lib/voiceCommands';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
-import { Button } from '@/components/ui/button';
+import { executeAgentCommand, parseAgentResponse } from '@/api/agent';
+// Dialog removed - agent executes immediately in Phase 1
 
 /**
  * Voice Command Center - Immersive cinematic interface
@@ -28,12 +28,9 @@ export default function VoiceDiary() {
   const [activityFeed, setActivityFeed] = useState([]);
   const [completedAction, setCompletedAction] = useState(null);
   const [inConversation, setInConversation] = useState(false);
-  const [showConfirmDialog, setShowConfirmDialog] = useState(false);
-  const [parsedCommand, setParsedCommand] = useState(null);
-
-  // Workflow progress tracking
-  const [workflowProgress, setWorkflowProgress] = useState(null);
-  const [isExecutingWorkflow, setIsExecutingWorkflow] = useState(false);
+  // Agent execution tracking
+  const [agentThinking, setAgentThinking] = useState(false);
+  const [agentSteps, setAgentSteps] = useState([]);
 
   // Patient notes mode
   const [notesMode, setNotesMode] = useState(false);
@@ -318,181 +315,8 @@ export default function VoiceDiary() {
     }
   };
 
-  const handleConfirmCommand = async () => {
-    console.log('[VOICE ASSISTANT] handleConfirmCommand called with:', parsedCommand);
-    if (!parsedCommand) {
-      console.warn('[VOICE ASSISTANT] No parsed command to execute!');
-      return;
-    }
-
-    setShowConfirmDialog(false);
-    setIsProcessing(true);
-
-    // Check if this is a workflow
-    const isWorkflow = parsedCommand.action === 'workflow' && parsedCommand.workflow;
-
-    if (isWorkflow) {
-      setIsExecutingWorkflow(true);
-      setParsedIntent('Executing workflow...');
-
-      // Initialize workflow progress
-      setWorkflowProgress({
-        total: parsedCommand.workflow.steps.length,
-        completed: 0,
-        current_step: null,
-        steps: parsedCommand.workflow.steps.map(step => ({
-          ...step,
-          status: 'pending'
-        }))
-      });
-    } else {
-      setParsedIntent('Executing command...');
-    }
-
-    try {
-      console.log('[VOICE ASSISTANT] Executing command...');
-
-      // Execute with progress callback for workflows
-      const commandResult = await executeVoiceCommand(parsedCommand, {
-        onProgress: isWorkflow ? (progress) => {
-          console.log('[WORKFLOW PROGRESS]', progress);
-
-          setWorkflowProgress(prev => {
-            if (!prev) return null;
-
-            const updatedSteps = [...prev.steps];
-            const stepIndex = progress.step - 1;
-
-            if (stepIndex >= 0 && stepIndex < updatedSteps.length) {
-              updatedSteps[stepIndex] = {
-                ...updatedSteps[stepIndex],
-                status: progress.status,
-                result_message: progress.message
-              };
-            }
-
-            return {
-              ...prev,
-              completed: progress.status === 'completed' ? progress.step : prev.completed,
-              current_step: progress.description,
-              steps: updatedSteps
-            };
-          });
-
-          setParsedIntent(`Step ${progress.step}/${parsedCommand.workflow.steps.length}: ${progress.description}`);
-        } : null
-      });
-
-      console.log('[VOICE ASSISTANT] Command result:', commandResult);
-
-      setCompletedAction({
-        success: commandResult.success,
-        message: commandResult.message,
-        workflow_results: commandResult.workflow_results || null
-      });
-      setParsedIntent('');
-      setWorkflowProgress(null);
-
-      // Add to activity feed
-      setActivityFeed(prev => [{
-        id: Date.now(),
-        timestamp: new Date(),
-        action: finalTranscript,
-        result: commandResult.message,
-        success: commandResult.success,
-        workflow_results: commandResult.workflow_results || null
-      }, ...prev]);
-
-      // Speak the result
-      await speak(commandResult.message, selectedVoiceId);
-
-      // Handle navigation if needed
-      if (commandResult.success && commandResult.action === 'navigate' && commandResult.navigateTo) {
-        setTimeout(() => {
-          navigate(commandResult.navigateTo);
-        }, 1500);
-      }
-
-      // Show toast notification
-      toast({
-        title: commandResult.success ? 'Command executed' : 'Command failed',
-        description: commandResult.message,
-        variant: commandResult.success ? undefined : 'destructive',
-      });
-
-      // Auto-clear after delay
-      setTimeout(() => {
-        setFinalTranscript('');
-        setParsedIntent('');
-        setCompletedAction(null);
-      }, 8000); // Longer delay for workflows
-
-    } catch (error) {
-      console.error('[VOICE ASSISTANT] Error executing command:', error);
-      setCompletedAction({
-        success: false,
-        message: error.message
-      });
-      setParsedIntent('');
-      setWorkflowProgress(null);
-
-      toast({
-        title: 'Execution failed',
-        description: error.message,
-        variant: 'destructive',
-      });
-    } finally {
-      setIsProcessing(false);
-      setIsExecutingWorkflow(false);
-      setParsedCommand(null);
-    }
-  };
-
-  const handleCancelCommand = () => {
-    setShowConfirmDialog(false);
-    setParsedCommand(null);
-    setFinalTranscript('');
-    setParsedIntent('');
-    setCompletedAction({
-      success: false,
-      message: 'Command cancelled'
-    });
-
-    toast({
-      title: 'Command cancelled',
-      description: 'No changes were made',
-    });
-
-    setTimeout(() => {
-      setCompletedAction(null);
-    }, 3000);
-  };
-
-  const formatCommandDescription = (command) => {
-    // If this is a workflow, return the workflow summary
-    if (command.action === 'workflow' && command.workflow) {
-      return command.workflow.summary;
-    }
-
-    switch (command.action) {
-      case 'add_treatment':
-        return `Add treatment: ${command.treatment_name || 'Treatment'} for ${command.patient_name || 'patient'} - £${command.price || 0} (${command.payment_status || 'pending'})`;
-      case 'add_expense':
-        return `Add expense: £${command.expense_amount || 0} for ${command.expense_category || 'Other'}${command.expense_description ? ` - ${command.expense_description}` : ''}`;
-      case 'book_appointment':
-        return `Book appointment: ${command.patient_name || 'patient'} - ${command.treatment_name || 'Consultation'} on ${command.date || 'today'} at ${command.time || 'TBD'}`;
-      case 'send_invoice':
-        return `Send invoice to ${command.patient_name || 'patient'}`;
-      case 'send_reminder':
-        return `Send payment reminder to ${command.patient_name || 'patient'}`;
-      case 'send_review_request':
-        return `Send review request to ${command.patient_name || 'patient'}`;
-      case 'mark_paid':
-        return `Mark ${command.invoice_number ? `invoice ${command.invoice_number}` : `invoice for ${command.patient_name || 'patient'}`} as paid`;
-      default:
-        return command.message || 'Execute this command?';
-    }
-  };
+  // Note: Confirmation dialogs removed - agent executes immediately
+  // Will be added back in Phase 2 with smarter confirmation logic
 
   const startListening = async () => {
     try {
@@ -629,74 +453,98 @@ export default function VoiceDiary() {
 
   const processVoiceCommand = async (transcript) => {
     try {
-      console.log('[VOICE ASSISTANT] Processing:', transcript);
-      setParsedIntent('Analyzing command...');
+      console.log('[VOICE ASSISTANT] Processing with AGENT:', transcript);
+      setParsedIntent('Agent is thinking...');
+      setIsProcessing(true);
 
-      // Parse the voice command
-      const parsed = await parseVoiceCommand(transcript);
-      console.log('[VOICE ASSISTANT] Parsed command:', parsed);
+      // Track intermediate steps for progress display
+      const intermediateSteps = [];
 
-      // Check if valid command
-      if (parsed.action === 'unknown' || (parsed.confidence && parsed.confidence < 0.6)) {
-        console.warn('[VOICE ASSISTANT] Low confidence or unknown action');
+      // Execute command with enterprise agent
+      const agentResponse = await executeAgentCommand(transcript, {
+        onToolUse: (toolName, toolInput) => {
+          console.log('[AGENT] Using tool:', toolName, toolInput);
+          setParsedIntent(`Using ${toolName}...`);
+
+          intermediateSteps.push({
+            tool: toolName,
+            input: toolInput,
+            status: 'in_progress'
+          });
+        },
+        onComplete: (result) => {
+          console.log('[AGENT] Completed:', result);
+        },
+        onError: (error) => {
+          console.error('[AGENT] Error:', error);
+        },
+      });
+
+      console.log('[VOICE ASSISTANT] Agent response:', agentResponse);
+
+      // Parse the agent's response
+      const parsed = parseAgentResponse(agentResponse);
+
+      if (!parsed.success) {
         setCompletedAction({
           success: false,
-          message: parsed.message || "I didn't quite understand that. Could you rephrase?"
+          message: parsed.message
         });
         setParsedIntent('');
+        setIsProcessing(false);
 
         setActivityFeed(prev => [{
           id: Date.now(),
           timestamp: new Date(),
           action: transcript,
-          result: "Command not understood",
+          result: parsed.message,
           success: false,
         }, ...prev]);
 
-        return;
-      }
+        await speak(parsed.message, selectedVoiceId);
 
-      // For simple queries (answer_question, navigate), execute immediately
-      if (parsed.action === 'answer_question' || parsed.action === 'navigate') {
-        console.log('[VOICE ASSISTANT] Simple command, executing immediately');
-        const result = await executeVoiceCommand(parsed);
-
-        setCompletedAction({
-          success: result.success,
-          message: result.message
-        });
-        setParsedIntent(result.message);
-
-        setActivityFeed(prev => [{
-          id: Date.now(),
-          timestamp: new Date(),
-          action: transcript,
-          result: result.message,
-          success: result.success,
-        }, ...prev]);
-
-        await speak(result.message, selectedVoiceId);
-
-        // Handle navigation
-        if (result.success && result.action === 'navigate' && result.navigateTo) {
-          setTimeout(() => navigate(result.navigateTo), 1500);
-        }
-
-        // Auto-clear after a delay
         setTimeout(() => {
           setFinalTranscript('');
-          setParsedIntent('');
           setCompletedAction(null);
         }, 5000);
 
         return;
       }
 
-      // For data-changing commands, show confirmation dialog
-      console.log('[VOICE ASSISTANT] Data command, showing confirmation');
-      setParsedCommand(parsed);
-      setShowConfirmDialog(true);
-      setParsedIntent('Waiting for confirmation...');
+      // Success! Show the results
+      setCompletedAction({
+        success: true,
+        message: parsed.message,
+        workflow_results: parsed.steps.map(step => ({
+          step: step.step_number,
+          action: step.tool,
+          description: step.tool.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase()),
+          success: step.status === 'completed',
+          message: typeof step.output === 'string' ? step.output : JSON.stringify(step.output),
+        }))
+      });
+      setParsedIntent('');
+      setIsProcessing(false);
+
+      // Add to activity feed
+      setActivityFeed(prev => [{
+        id: Date.now(),
+        timestamp: new Date(),
+        action: transcript,
+        result: parsed.message,
+        success: true,
+        workflow_results: parsed.steps,
+      }, ...prev]);
+
+      // Speak the result
+      await speak(parsed.message, selectedVoiceId);
+
+      // Auto-clear after delay
+      setTimeout(() => {
+        setFinalTranscript('');
+        setParsedIntent('');
+        setCompletedAction(null);
+      }, 8000);
 
     } catch (error) {
       console.error('[VOICE ASSISTANT] Command processing error:', error);
@@ -705,6 +553,7 @@ export default function VoiceDiary() {
         message: 'Failed to process command. Please try again.'
       });
       setParsedIntent('');
+      setIsProcessing(false);
 
       setActivityFeed(prev => [{
         id: Date.now(),
@@ -713,6 +562,8 @@ export default function VoiceDiary() {
         result: error.message,
         success: false,
       }, ...prev]);
+
+      await speak('Sorry, something went wrong. Please try again.', selectedVoiceId);
     }
   };
 
@@ -1271,54 +1122,24 @@ export default function VoiceDiary() {
                   <Loader2 className="w-16 h-16 text-white/60 animate-spin" style={{ animationDuration: '1.5s' }} />
                 </div>
 
-                {/* Workflow progress display */}
-                {workflowProgress && (
-                  <div className="absolute -bottom-[200px] left-1/2 -translate-x-1/2 text-center w-[600px] px-8">
-                    <div className="text-white/40 text-xs tracking-[0.3em] uppercase mb-4">
-                      Executing Workflow: {workflowProgress.completed}/{workflowProgress.total} Steps
+                {/* Agent thinking display */}
+                <div className="absolute -bottom-[120px] left-1/2 -translate-x-1/2 text-center w-[600px] px-8">
+                  {finalTranscript && (
+                    <div className="mb-4">
+                      <div className="text-white/40 text-xs tracking-[0.3em] uppercase mb-2">You said</div>
+                      <p className="text-white/70 text-base font-light whitespace-normal break-words">"{finalTranscript}"</p>
                     </div>
+                  )}
 
-                    {/* Progress bar */}
-                    <div className="h-2 bg-white/10 rounded-full overflow-hidden mb-4">
-                      <div
-                        className="h-full bg-gradient-to-r from-[#d6b164] to-[#b89a52] transition-all duration-300"
-                        style={{ width: `${(workflowProgress.completed / workflowProgress.total) * 100}%` }}
-                      />
+                  {parsedIntent && (
+                    <div className="mt-4">
+                      <div className="flex items-center justify-center gap-3 mb-2">
+                        <Loader2 className="w-4 h-4 text-[#d6b164] animate-spin" />
+                        <span className="text-[#d6b164] text-sm font-light tracking-wide">{parsedIntent}</span>
+                      </div>
                     </div>
-
-                    {/* Current step */}
-                    {workflowProgress.current_step && (
-                      <p className="text-white/70 text-sm font-light mb-4">{workflowProgress.current_step}</p>
-                    )}
-
-                    {/* Step indicators */}
-                    <div className="flex items-center justify-center gap-2">
-                      {workflowProgress.steps.map((step, idx) => (
-                        <div
-                          key={idx}
-                          className={`w-2 h-2 rounded-full transition-all duration-300 ${
-                            step.status === 'completed'
-                              ? 'bg-emerald-400 scale-110'
-                              : step.status === 'in_progress'
-                              ? 'bg-[#d6b164] scale-125 animate-pulse'
-                              : step.status === 'failed'
-                              ? 'bg-red-400'
-                              : 'bg-white/20'
-                          }`}
-                          title={step.description}
-                        />
-                      ))}
-                    </div>
-                  </div>
-                )}
-
-                {/* Simple command processing */}
-                {!workflowProgress && finalTranscript && (
-                  <div className="absolute -bottom-[96px] left-1/2 -translate-x-1/2 text-center w-[600px] px-8">
-                    <div className="text-white/40 text-xs tracking-[0.3em] uppercase mb-2">You said</div>
-                    <p className="text-white/70 text-base font-light whitespace-normal break-words">"{finalTranscript}"</p>
-                  </div>
-                )}
+                  )}
+                </div>
               </div>
             )}
 
@@ -1518,90 +1339,8 @@ export default function VoiceDiary() {
         </div>
       </div>
 
-      {/* Confirmation Dialog */}
-      <Dialog open={showConfirmDialog} onOpenChange={setShowConfirmDialog}>
-        <DialogContent className="sm:max-w-md bg-[#0a0e1a]/95 backdrop-blur-xl border-white/10">
-          <DialogHeader>
-            <DialogTitle className="text-white text-xl">Confirm Voice Command</DialogTitle>
-            <DialogDescription className="text-white/60">
-              Please confirm this action before I execute it.
-            </DialogDescription>
-          </DialogHeader>
-
-          {parsedCommand && (
-            <div className="space-y-4">
-              {/* Show what user said */}
-              <div className="bg-white/5 rounded-lg p-3 border border-white/10">
-                <p className="text-xs font-medium text-white/50 mb-1">You said:</p>
-                <p className="text-sm text-white/90">&quot;{finalTranscript}&quot;</p>
-              </div>
-
-              {/* Show parsed command or workflow */}
-              {parsedCommand.action === 'workflow' && parsedCommand.workflow ? (
-                <div className="bg-[#d6b164]/10 border border-[#d6b164]/30 rounded-lg p-4">
-                  <p className="text-xs font-medium text-[#d6b164]/70 mb-3">I will complete these steps:</p>
-
-                  {/* Workflow steps */}
-                  <div className="space-y-2">
-                    {parsedCommand.workflow.steps.map((step, idx) => (
-                      <div key={idx} className="flex items-start gap-3 p-2 bg-white/5 rounded-lg">
-                        <div className="flex-shrink-0 w-6 h-6 rounded-full bg-[#d6b164]/20 flex items-center justify-center text-[#d6b164] text-xs font-medium">
-                          {step.step_number}
-                        </div>
-                        <div className="flex-1 min-w-0">
-                          <p className="text-sm text-[#d6b164] font-medium">{step.description}</p>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-
-                  {/* Workflow summary */}
-                  <div className="mt-3 pt-3 border-t border-[#d6b164]/20">
-                    <p className="text-xs text-[#d6b164]/60 mb-1">Summary:</p>
-                    <p className="text-sm text-[#d6b164]">{parsedCommand.workflow.summary}</p>
-                  </div>
-                </div>
-              ) : (
-                <div className="bg-[#d6b164]/10 border border-[#d6b164]/30 rounded-lg p-3">
-                  <p className="text-xs font-medium text-[#d6b164]/70 mb-1">I will:</p>
-                  <p className="text-sm font-medium text-[#d6b164]">{formatCommandDescription(parsedCommand)}</p>
-                </div>
-              )}
-
-              {/* Show confidence if available */}
-              {parsedCommand.confidence && (
-                <div className="text-xs text-white/40">
-                  Confidence: {Math.round(parsedCommand.confidence * 100)}%
-                </div>
-              )}
-            </div>
-          )}
-
-          <DialogFooter className="flex gap-2 sm:gap-2">
-            <Button
-              variant="outline"
-              onClick={handleCancelCommand}
-              className="flex-1 bg-white/5 hover:bg-white/10 border-white/20 text-white"
-            >
-              Cancel
-            </Button>
-            <Button
-              onClick={handleConfirmCommand}
-              disabled={isProcessing}
-              className="flex-1 bg-[#d6b164] hover:bg-[#c4a054] text-[#0a0e1a] font-medium"
-            >
-              {isProcessing ? (
-                <>
-                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                  Executing...
-                </>
-              ) : (
-                'Confirm'
-              )}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      {/* Confirmation Dialog removed - Agent executes immediately in Phase 1 */}
+      {/* Will add smarter confirmation logic in Phase 2 */}
 
       <style>{`
         @keyframes slideIn {
