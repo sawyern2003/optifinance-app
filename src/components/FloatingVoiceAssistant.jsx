@@ -157,9 +157,12 @@ export function FloatingVoiceAssistant() {
 
       // Parse the voice command (without executing)
       const parsed = await parseVoiceCommand(transcribedText);
+      console.log('[VOICE] FloatingVoiceAssistant - Parsed action type:', parsed.action);
+      console.log('[VOICE] FloatingVoiceAssistant - Full parsed command:', parsed);
 
       // If low confidence or unknown action, show error immediately
       if (parsed.action === 'unknown' || (parsed.confidence && parsed.confidence < 0.6)) {
+        console.warn('[VOICE] Command rejected - unknown action or low confidence');
         setResult({
           success: false,
           message: parsed.message || "I didn't quite catch that. Could you try rephrasing?"
@@ -170,6 +173,8 @@ export function FloatingVoiceAssistant() {
 
       // For simple queries (answer_question, navigate), execute immediately without confirmation
       if (parsed.action === 'answer_question' || parsed.action === 'navigate') {
+        console.log('[VOICE] Executing simple command immediately (no confirmation needed)');
+
         const commandResult = await executeVoiceCommand(parsed);
         setResult(commandResult);
 
@@ -195,6 +200,8 @@ export function FloatingVoiceAssistant() {
       }
 
       // For data-changing commands (add_treatment, add_expense, etc.), show confirmation dialog
+      console.log('[VOICE] Data-changing command detected, showing confirmation dialog');
+      console.log('[VOICE] Command to confirm:', parsed);
       setParsedCommand(parsed);
       setShowConfirmDialog(true);
       setIsProcessing(false);

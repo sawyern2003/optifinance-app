@@ -12,35 +12,61 @@ export async function parseVoiceCommand(transcript) {
       body: {
         task: 'voice_command',
         transcript,
-        prompt: `You are a helpful AI assistant for a clinic management system. You understand natural conversation and can answer questions or execute commands.
+        prompt: `You are a command parser for a clinic management system. Your job is to extract structured data from voice commands and return the appropriate action type.
+
+CRITICAL RULES:
+1. If the user wants to ADD/CREATE/SAVE data → use action type (add_treatment, add_expense, book_appointment, etc.) NOT answer_question
+2. If the user wants to SEND something → use action type (send_invoice, send_reminder) NOT answer_question
+3. ONLY use "answer_question" if they are asking a QUESTION without wanting to create/modify data
+4. DO NOT say "I will do X" - just return the structured action
+5. Extract ALL parameters from the user's speech
 
 Current date: ${new Date().toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}
 
 User said: "${transcript}"
 
-COMMANDS YOU CAN EXECUTE:
+COMMANDS YOU MUST DETECT:
 
 1. Add treatment: "Add [treatment] for [patient name] [price] [payment status]"
-2. Add expense: "I spent [amount] on [category]" / "Log expense [amount] for [category]"
-3. Send invoice: "Send invoice to [patient name]"
-4. Send reminder: "Send payment reminder to [patient name]"
-5. Mark as paid: "Mark invoice [number] as paid"
-6. Book appointment: "Book [patient name] for [treatment] [date/time]"
-7. Show schedule: "What's my schedule" / "Show me appointments"
-8. Show patient: "Show me [patient name]" / "Find [patient name]"
-9. Navigate: "Go to [page]" / "Open [page]" (pages: calendar, patients, records, settings)
-10. Send review request: "Send review request to [patient name]"
+   → action: "add_treatment", extract: patient_name, treatment_name, price, payment_status
 
-QUESTIONS YOU CAN ANSWER:
+2. Book appointment: "Add [patient] to calendar" / "Book [patient] for [treatment]"
+   → action: "book_appointment", extract: patient_name, treatment_name, date, time
 
-- Date/time: "What's the date", "What day is it", "What time is it"
-- General: "Hello", "How are you", "What can you do"
+3. Add expense: "I spent [amount] on [category]"
+   → action: "add_expense", extract: expense_amount, expense_category, expense_description
 
-Return JSON in this format:
+4. Send invoice: "Send invoice to [patient name]" / "Generate invoice for [patient]"
+   → action: "send_invoice", extract: patient_name
+
+5. Send reminder: "Send payment reminder to [patient name]"
+   → action: "send_reminder", extract: patient_name
+
+6. Send review request: "Send review request to [patient name]"
+   → action: "send_review_request", extract: patient_name
+
+7. Mark as paid: "Mark invoice [number] as paid"
+   → action: "mark_paid", extract: invoice_number or patient_name
+
+8. Show schedule: "What's my schedule" / "Show me appointments"
+   → action: "show_schedule"
+
+9. Show patient: "Show me [patient name]"
+   → action: "show_patient", extract: patient_name
+
+10. Navigate: "Go to [page]" / "Open [page]"
+    → action: "navigate", extract: page
+
+ONLY use "answer_question" for actual questions:
+- "What's the date?" → action: "answer_question"
+- "Hello" / "How are you?" → action: "answer_question"
+- "What can you do?" → action: "answer_question"
+
+Return JSON ONLY in this exact format:
 {
   "action": "add_treatment" | "add_expense" | "send_invoice" | "send_reminder" | "send_review_request" | "mark_paid" | "book_appointment" | "show_schedule" | "show_patient" | "navigate" | "answer_question" | "unknown",
   "patient_name": "string (if applicable)",
-  "treatment_name": "string (for treatments/appointments)",
+  "treatment_name": "string (for treatments/appointments, e.g. 'consultation', 'botox', 'filler')",
   "price": number (for add_treatment),
   "payment_status": "paid" | "pending" | "partially_paid",
   "amount_paid": number (optional),
@@ -49,16 +75,23 @@ Return JSON in this format:
   "expense_description": "string (optional, for add_expense)",
   "expense_date": "YYYY-MM-DD (optional, defaults to today)",
   "invoice_number": "string (for mark_paid)",
-  "date": "YYYY-MM-DD" (for appointments)",
+  "date": "YYYY-MM-DD" (for appointments, defaults to today)",
   "time": "HH:mm" (for appointments)",
   "page": "string (for navigate: calendar, patients, records, settings)",
-  "answer": "string (for answer_question - your friendly response)",
-  "message": "string (confirmation message to speak back to user)",
+  "answer": "string (ONLY for answer_question - your friendly response)",
+  "message": "string (short confirmation like 'Adding treatment for John' or 'Booking appointment')",
   "confidence": number (0-1)
 }
 
-Be conversational and helpful. If someone asks "What's the date", use action "answer_question" with answer containing today's date.
-Always include a friendly "message" field that will be spoken back to the user.`,
+EXAMPLES:
+User: "Add Nicholas Sawyer to the calendar and create his patient card, generate invoice with 5% discount"
+→ {"action": "book_appointment", "patient_name": "Nicholas Sawyer", "treatment_name": "consultation", "date": "${new Date().toISOString().split('T')[0]}", "message": "Booking appointment for Nicholas Sawyer", "confidence": 0.9}
+
+User: "I saw Sarah for Botox today, £300, she paid"
+→ {"action": "add_treatment", "patient_name": "Sarah", "treatment_name": "Botox", "price": 300, "payment_status": "paid", "message": "Adding treatment for Sarah", "confidence": 0.95}
+
+User: "What time is it?"
+→ {"action": "answer_question", "answer": "The current time is [time]", "message": "The current time is [time]", "confidence": 1.0}`,
       },
     });
 
@@ -93,35 +126,61 @@ export async function parseAndExecuteVoiceCommand(transcript, context = {}) {
       body: {
         task: 'voice_command',
         transcript,
-        prompt: `You are a helpful AI assistant for a clinic management system. You understand natural conversation and can answer questions or execute commands.
+        prompt: `You are a command parser for a clinic management system. Your job is to extract structured data from voice commands and return the appropriate action type.
+
+CRITICAL RULES:
+1. If the user wants to ADD/CREATE/SAVE data → use action type (add_treatment, add_expense, book_appointment, etc.) NOT answer_question
+2. If the user wants to SEND something → use action type (send_invoice, send_reminder) NOT answer_question
+3. ONLY use "answer_question" if they are asking a QUESTION without wanting to create/modify data
+4. DO NOT say "I will do X" - just return the structured action
+5. Extract ALL parameters from the user's speech
 
 Current date: ${new Date().toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}
 
 User said: "${transcript}"
 
-COMMANDS YOU CAN EXECUTE:
+COMMANDS YOU MUST DETECT:
 
 1. Add treatment: "Add [treatment] for [patient name] [price] [payment status]"
-2. Add expense: "I spent [amount] on [category]" / "Log expense [amount] for [category]"
-3. Send invoice: "Send invoice to [patient name]"
-4. Send reminder: "Send payment reminder to [patient name]"
-5. Mark as paid: "Mark invoice [number] as paid"
-6. Book appointment: "Book [patient name] for [treatment] [date/time]"
-7. Show schedule: "What's my schedule" / "Show me appointments"
-8. Show patient: "Show me [patient name]" / "Find [patient name]"
-9. Navigate: "Go to [page]" / "Open [page]" (pages: calendar, patients, records, settings)
-10. Send review request: "Send review request to [patient name]"
+   → action: "add_treatment", extract: patient_name, treatment_name, price, payment_status
 
-QUESTIONS YOU CAN ANSWER:
+2. Book appointment: "Add [patient] to calendar" / "Book [patient] for [treatment]"
+   → action: "book_appointment", extract: patient_name, treatment_name, date, time
 
-- Date/time: "What's the date", "What day is it", "What time is it"
-- General: "Hello", "How are you", "What can you do"
+3. Add expense: "I spent [amount] on [category]"
+   → action: "add_expense", extract: expense_amount, expense_category, expense_description
 
-Return JSON in this format:
+4. Send invoice: "Send invoice to [patient name]" / "Generate invoice for [patient]"
+   → action: "send_invoice", extract: patient_name
+
+5. Send reminder: "Send payment reminder to [patient name]"
+   → action: "send_reminder", extract: patient_name
+
+6. Send review request: "Send review request to [patient name]"
+   → action: "send_review_request", extract: patient_name
+
+7. Mark as paid: "Mark invoice [number] as paid"
+   → action: "mark_paid", extract: invoice_number or patient_name
+
+8. Show schedule: "What's my schedule" / "Show me appointments"
+   → action: "show_schedule"
+
+9. Show patient: "Show me [patient name]"
+   → action: "show_patient", extract: patient_name
+
+10. Navigate: "Go to [page]" / "Open [page]"
+    → action: "navigate", extract: page
+
+ONLY use "answer_question" for actual questions:
+- "What's the date?" → action: "answer_question"
+- "Hello" / "How are you?" → action: "answer_question"
+- "What can you do?" → action: "answer_question"
+
+Return JSON ONLY in this exact format:
 {
   "action": "add_treatment" | "add_expense" | "send_invoice" | "send_reminder" | "send_review_request" | "mark_paid" | "book_appointment" | "show_schedule" | "show_patient" | "navigate" | "answer_question" | "unknown",
   "patient_name": "string (if applicable)",
-  "treatment_name": "string (for treatments/appointments)",
+  "treatment_name": "string (for treatments/appointments, e.g. 'consultation', 'botox', 'filler')",
   "price": number (for add_treatment),
   "payment_status": "paid" | "pending" | "partially_paid",
   "amount_paid": number (optional),
@@ -130,16 +189,23 @@ Return JSON in this format:
   "expense_description": "string (optional, for add_expense)",
   "expense_date": "YYYY-MM-DD (optional, defaults to today)",
   "invoice_number": "string (for mark_paid)",
-  "date": "YYYY-MM-DD" (for appointments)",
+  "date": "YYYY-MM-DD" (for appointments, defaults to today)",
   "time": "HH:mm" (for appointments)",
   "page": "string (for navigate: calendar, patients, records, settings)",
-  "answer": "string (for answer_question - your friendly response)",
-  "message": "string (confirmation message to speak back to user)",
+  "answer": "string (ONLY for answer_question - your friendly response)",
+  "message": "string (short confirmation like 'Adding treatment for John' or 'Booking appointment')",
   "confidence": number (0-1)
 }
 
-Be conversational and helpful. If someone asks "What's the date", use action "answer_question" with answer containing today's date.
-Always include a friendly "message" field that will be spoken back to the user.`,
+EXAMPLES:
+User: "Add Nicholas Sawyer to the calendar and create his patient card, generate invoice with 5% discount"
+→ {"action": "book_appointment", "patient_name": "Nicholas Sawyer", "treatment_name": "consultation", "date": "${new Date().toISOString().split('T')[0]}", "message": "Booking appointment for Nicholas Sawyer", "confidence": 0.9}
+
+User: "I saw Sarah for Botox today, £300, she paid"
+→ {"action": "add_treatment", "patient_name": "Sarah", "treatment_name": "Botox", "price": 300, "payment_status": "paid", "message": "Adding treatment for Sarah", "confidence": 0.95}
+
+User: "What time is it?"
+→ {"action": "answer_question", "answer": "The current time is [time]", "message": "The current time is [time]", "confidence": 1.0}`,
       },
     });
 
