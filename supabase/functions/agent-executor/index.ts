@@ -29,48 +29,51 @@ const openaiApiKey = Deno.env.get('OPENAI_API_KEY')!;
 /**
  * AGENT SYSTEM PROMPT
  */
-const AGENT_SYSTEM_PROMPT = `You are an elite AI assistant for OptiFinance, a revolutionary clinic management system. You are not just a voice assistant - you are a proactive, intelligent agent that helps clinic staff manage their entire practice.
+const AGENT_SYSTEM_PROMPT = `You are a friendly AI assistant for a clinic. You help staff manage their day naturally, like a helpful colleague would.
 
-## Your Capabilities
-You have access to powerful tools to manage the clinic. When a user gives you a command, think through ALL the steps needed and execute them systematically using your tools.
+## How You Talk
+- CONVERSATIONAL and CASUAL - like texting a friend
+- SHORT responses - get straight to the point
+- NO MARKDOWN - never use asterisks, bullets, or formatting (your responses are spoken out loud)
+- Use natural speech patterns: "You've got Nicholas at 10 today" not "There is an appointment with Nicholas at 10:00"
+- Be warm and helpful, not robotic or formal
 
-## Your Personality
-- Professional yet warm - you're part of the clinic team
-- Proactive - suggest improvements and remind staff of important tasks
-- Efficient - complete tasks without unnecessary back-and-forth
-- Smart - you understand medical terminology and clinic operations
-- Revolutionary - you're not just following commands, you're anticipating needs
+## Examples of Good Responses
+❌ BAD: "Here's what's in the diary for today: - **Appointments:** - Nicholas has a consultation at 10:00"
+✅ GOOD: "You've got Nicholas at 10 for a consultation. That's it for today!"
 
-## Multi-Step Workflow Execution
-When handling complex requests like "Add Sarah to calendar with invoice", break it down:
-1. Create or find the patient record
-2. Book the appointment
-3. Create the invoice
-4. Send the invoice
-Execute each step and report progress clearly.
+❌ BAD: "The treatment has been recorded successfully in the system"
+✅ GOOD: "Done! I've logged Sarah's Botox treatment"
 
-## Date Handling
-- "today" = ${new Date().toISOString().split('T')[0]}
-- "tomorrow" = ${new Date(Date.now() + 86400000).toISOString().split('T')[0]}
-- Default appointment time: 09:00 unless specified
+❌ BAD: "Would you like me to proceed with sending the invoice?"
+✅ GOOD: "Want me to send the invoice now?"
 
-## Time Interpretation
-- "morning" = 09:00
-- "afternoon" = 14:00
-- "evening" = 17:00
+## When There's Nothing
+If there are no appointments/treatments, just say:
+- "Nothing in the diary today! Need help with anything else?"
+- "All quiet today! What would you like to do?"
+- "No appointments scheduled yet. Should I book someone in?"
 
-## Proactive Behavior
-After completing tasks, look for opportunities to help:
-- "I've booked the appointment. Would you like me to send a confirmation SMS?"
-- "I notice you have unpaid invoices. Should I send payment reminders?"
+## Multi-Step Workflows
+When doing multiple things, keep it conversational:
+"Found Sarah's record, booked her in for tomorrow at 2pm, and sent the invoice. All done!"
 
-## Communication Style
-- Be concise but complete
-- Speak in first person ("I've booked...", "I'll create...")
-- Confirm each major action
-- Summarize complex workflows at the end
+Not: "Step 1: Patient record located. Step 2: Appointment created..."
 
-Current date/time: ${new Date().toLocaleString('en-GB', { timeZone: 'Europe/London' })}`;
+## Proactive but Natural
+- "By the way, you have 3 unpaid invoices from last week. Want me to send reminders?"
+- "Just so you know, your calendar is pretty full tomorrow!"
+- "Nicholas is coming in an hour - need me to prepare anything?"
+
+## Important Rules
+- NEVER use formatting symbols (*, -, #, etc.)
+- Keep responses under 3 sentences when possible
+- Talk like a person, not a computer
+- Be helpful, not bossy
+- Ask questions naturally ("Want me to...?" not "Would you like me to...?")
+
+Current date: ${new Date().toISOString().split('T')[0]}
+Current time: ${new Date().toLocaleString('en-GB', { timeZone: 'Europe/London', timeStyle: 'short' })}`;
 
 /**
  * TOOL DEFINITIONS for OpenAI Function Calling
@@ -235,7 +238,7 @@ async function executeFunction(functionName: string, args: any) {
           success: true,
           found: true,
           patient: existingPatients[0],
-          message: `Found existing patient: ${existingPatients[0].name}`,
+          message: `Found ${existingPatients[0].name}'s record`,
         };
       }
 
@@ -258,7 +261,7 @@ async function executeFunction(functionName: string, args: any) {
         success: true,
         found: false,
         patient: newPatient,
-        message: `Created new patient: ${patient_name}`,
+        message: `Created new patient card for ${patient_name}`,
       };
     }
 
@@ -284,7 +287,7 @@ async function executeFunction(functionName: string, args: any) {
       return {
         success: true,
         appointment,
-        message: `Appointment booked for ${patient_name} on ${date} at ${time}`,
+        message: `Booked ${patient_name} in for ${date} at ${time}`,
       };
     }
 
@@ -312,7 +315,7 @@ async function executeFunction(functionName: string, args: any) {
       return {
         success: true,
         treatment,
-        message: `Treatment recorded: ${treatment_name} for ${patient_name} - £${price} (${payment_status})`,
+        message: `Logged ${patient_name}'s ${treatment_name} - £${price} (${payment_status})`,
       };
     }
 
@@ -360,15 +363,15 @@ async function executeFunction(functionName: string, args: any) {
 
       let discountMsg = '';
       if (discount_percentage) {
-        discountMsg = ` (${discount_percentage}% discount applied)`;
+        discountMsg = ` with ${discount_percentage}% off`;
       } else if (discount_amount) {
-        discountMsg = ` (£${discount_amount} discount applied)`;
+        discountMsg = ` with £${discount_amount} off`;
       }
 
       return {
         success: true,
         invoice,
-        message: `Invoice ${invoiceNumber} created for ${patient_name} - £${finalAmount.toFixed(2)}${discountMsg}`,
+        message: `Created invoice for ${patient_name} - £${finalAmount.toFixed(2)}${discountMsg}`,
       };
     }
 
@@ -395,31 +398,52 @@ async function executeFunction(functionName: string, args: any) {
       const revenue = treatments?.reduce((sum, t) => sum + (t.amount_paid || 0), 0) || 0;
       const pending = treatments?.filter((t) => t.payment_status === 'pending').length || 0;
 
-      // Build detailed summary
-      let detailsMsg = `Today (${today}):\n\n`;
+      // Build conversational summary (no markdown - will be spoken)
+      let detailsMsg = '';
 
-      if (appointments && appointments.length > 0) {
-        detailsMsg += `📅 APPOINTMENTS (${appointments.length}):\n`;
-        appointments.forEach((apt, idx) => {
-          detailsMsg += `${idx + 1}. ${apt.patient_name} - ${apt.treatment_name} at ${apt.time} (${apt.status})\n`;
-        });
-        detailsMsg += '\n';
+      // Check if completely empty day
+      const hasAppointments = appointments && appointments.length > 0;
+      const hasTreatments = treatments && treatments.length > 0;
+
+      if (!hasAppointments && !hasTreatments) {
+        detailsMsg = `Nothing in the diary today! All clear. Revenue is £0 and no pending payments.`;
       } else {
-        detailsMsg += '📅 No appointments scheduled\n\n';
-      }
+        // Has some activity - describe naturally
+        if (hasAppointments) {
+          if (appointments.length === 1) {
+            const apt = appointments[0];
+            detailsMsg += `You've got ${apt.patient_name} at ${apt.time} for ${apt.treatment_name}. `;
+          } else {
+            detailsMsg += `You have ${appointments.length} appointments today: `;
+            appointments.forEach((apt, idx) => {
+              if (idx > 0) detailsMsg += ', ';
+              detailsMsg += `${apt.patient_name} at ${apt.time}`;
+            });
+            detailsMsg += '. ';
+          }
+        } else {
+          detailsMsg += `No appointments scheduled today. `;
+        }
 
-      if (treatments && treatments.length > 0) {
-        detailsMsg += `💉 TREATMENTS COMPLETED (${treatments.length}):\n`;
-        treatments.forEach((tx, idx) => {
-          detailsMsg += `${idx + 1}. ${tx.patient_name} - ${tx.treatment_name} £${tx.price_paid} (${tx.payment_status})\n`;
-        });
-        detailsMsg += '\n';
-      } else {
-        detailsMsg += '💉 No treatments completed yet\n\n';
-      }
+        if (hasTreatments) {
+          if (treatments.length === 1) {
+            const tx = treatments[0];
+            detailsMsg += `${tx.patient_name}'s ${tx.treatment_name} is done (£${tx.price_paid}, ${tx.payment_status}). `;
+          } else {
+            detailsMsg += `${treatments.length} treatments completed so far. `;
+          }
+        } else {
+          detailsMsg += `No treatments done yet. `;
+        }
 
-      detailsMsg += `💰 Revenue: £${revenue.toFixed(2)}\n`;
-      detailsMsg += `⏳ Pending Payments: ${pending}`;
+        if (revenue > 0) {
+          detailsMsg += `Made £${revenue.toFixed(0)} today. `;
+        }
+
+        if (pending > 0) {
+          detailsMsg += `${pending} payment${pending > 1 ? 's' : ''} still pending.`;
+        }
+      }
 
       return {
         success: true,
@@ -430,7 +454,7 @@ async function executeFunction(functionName: string, args: any) {
           revenue,
           pending_payments: pending,
         },
-        message: detailsMsg,
+        message: detailsMsg.trim(),
       };
     }
 
