@@ -31,6 +31,10 @@ export default function VoiceDiary() {
   const [showConfirmDialog, setShowConfirmDialog] = useState(false);
   const [parsedCommand, setParsedCommand] = useState(null);
 
+  // Workflow progress tracking
+  const [workflowProgress, setWorkflowProgress] = useState(null);
+  const [isExecutingWorkflow, setIsExecutingWorkflow] = useState(false);
+
   // Patient notes mode
   const [notesMode, setNotesMode] = useState(false);
   const [selectedPatient, setSelectedPatient] = useState(null);
@@ -323,18 +327,71 @@ export default function VoiceDiary() {
 
     setShowConfirmDialog(false);
     setIsProcessing(true);
-    setParsedIntent('Executing command...');
+
+    // Check if this is a workflow
+    const isWorkflow = parsedCommand.action === 'workflow' && parsedCommand.workflow;
+
+    if (isWorkflow) {
+      setIsExecutingWorkflow(true);
+      setParsedIntent('Executing workflow...');
+
+      // Initialize workflow progress
+      setWorkflowProgress({
+        total: parsedCommand.workflow.steps.length,
+        completed: 0,
+        current_step: null,
+        steps: parsedCommand.workflow.steps.map(step => ({
+          ...step,
+          status: 'pending'
+        }))
+      });
+    } else {
+      setParsedIntent('Executing command...');
+    }
 
     try {
       console.log('[VOICE ASSISTANT] Executing command...');
-      const commandResult = await executeVoiceCommand(parsedCommand);
+
+      // Execute with progress callback for workflows
+      const commandResult = await executeVoiceCommand(parsedCommand, {
+        onProgress: isWorkflow ? (progress) => {
+          console.log('[WORKFLOW PROGRESS]', progress);
+
+          setWorkflowProgress(prev => {
+            if (!prev) return null;
+
+            const updatedSteps = [...prev.steps];
+            const stepIndex = progress.step - 1;
+
+            if (stepIndex >= 0 && stepIndex < updatedSteps.length) {
+              updatedSteps[stepIndex] = {
+                ...updatedSteps[stepIndex],
+                status: progress.status,
+                result_message: progress.message
+              };
+            }
+
+            return {
+              ...prev,
+              completed: progress.status === 'completed' ? progress.step : prev.completed,
+              current_step: progress.description,
+              steps: updatedSteps
+            };
+          });
+
+          setParsedIntent(`Step ${progress.step}/${parsedCommand.workflow.steps.length}: ${progress.description}`);
+        } : null
+      });
+
       console.log('[VOICE ASSISTANT] Command result:', commandResult);
 
       setCompletedAction({
         success: commandResult.success,
-        message: commandResult.message
+        message: commandResult.message,
+        workflow_results: commandResult.workflow_results || null
       });
       setParsedIntent('');
+      setWorkflowProgress(null);
 
       // Add to activity feed
       setActivityFeed(prev => [{
@@ -343,6 +400,7 @@ export default function VoiceDiary() {
         action: finalTranscript,
         result: commandResult.message,
         success: commandResult.success,
+        workflow_results: commandResult.workflow_results || null
       }, ...prev]);
 
       // Speak the result
@@ -367,7 +425,7 @@ export default function VoiceDiary() {
         setFinalTranscript('');
         setParsedIntent('');
         setCompletedAction(null);
-      }, 5000);
+      }, 8000); // Longer delay for workflows
 
     } catch (error) {
       console.error('[VOICE ASSISTANT] Error executing command:', error);
@@ -376,6 +434,7 @@ export default function VoiceDiary() {
         message: error.message
       });
       setParsedIntent('');
+      setWorkflowProgress(null);
 
       toast({
         title: 'Execution failed',
@@ -384,6 +443,7 @@ export default function VoiceDiary() {
       });
     } finally {
       setIsProcessing(false);
+      setIsExecutingWorkflow(false);
       setParsedCommand(null);
     }
   };
@@ -409,6 +469,11 @@ export default function VoiceDiary() {
   };
 
   const formatCommandDescription = (command) => {
+    // If this is a workflow, return the workflow summary
+    if (command.action === 'workflow' && command.workflow) {
+      return command.workflow.summary;
+    }
+
     switch (command.action) {
       case 'add_treatment':
         return `Add treatment: ${command.treatment_name || 'Treatment'} for ${command.patient_name || 'patient'} - £${command.price || 0} (${command.payment_status || 'pending'})`;
@@ -1206,7 +1271,49 @@ export default function VoiceDiary() {
                   <Loader2 className="w-16 h-16 text-white/60 animate-spin" style={{ animationDuration: '1.5s' }} />
                 </div>
 
-                {finalTranscript && (
+                {/* Workflow progress display */}
+                {workflowProgress && (
+                  <div className="absolute -bottom-[200px] left-1/2 -translate-x-1/2 text-center w-[600px] px-8">
+                    <div className="text-white/40 text-xs tracking-[0.3em] uppercase mb-4">
+                      Executing Workflow: {workflowProgress.completed}/{workflowProgress.total} Steps
+                    </div>
+
+                    {/* Progress bar */}
+                    <div className="h-2 bg-white/10 rounded-full overflow-hidden mb-4">
+                      <div
+                        className="h-full bg-gradient-to-r from-[#d6b164] to-[#b89a52] transition-all duration-300"
+                        style={{ width: `${(workflowProgress.completed / workflowProgress.total) * 100}%` }}
+                      />
+                    </div>
+
+                    {/* Current step */}
+                    {workflowProgress.current_step && (
+                      <p className="text-white/70 text-sm font-light mb-4">{workflowProgress.current_step}</p>
+                    )}
+
+                    {/* Step indicators */}
+                    <div className="flex items-center justify-center gap-2">
+                      {workflowProgress.steps.map((step, idx) => (
+                        <div
+                          key={idx}
+                          className={`w-2 h-2 rounded-full transition-all duration-300 ${
+                            step.status === 'completed'
+                              ? 'bg-emerald-400 scale-110'
+                              : step.status === 'in_progress'
+                              ? 'bg-[#d6b164] scale-125 animate-pulse'
+                              : step.status === 'failed'
+                              ? 'bg-red-400'
+                              : 'bg-white/20'
+                          }`}
+                          title={step.description}
+                        />
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* Simple command processing */}
+                {!workflowProgress && finalTranscript && (
                   <div className="absolute -bottom-[96px] left-1/2 -translate-x-1/2 text-center w-[600px] px-8">
                     <div className="text-white/40 text-xs tracking-[0.3em] uppercase mb-2">You said</div>
                     <p className="text-white/70 text-base font-light whitespace-normal break-words">"{finalTranscript}"</p>
@@ -1252,6 +1359,33 @@ export default function VoiceDiary() {
                   </span>
                 </div>
                 <p className="text-white/70 text-base font-light mb-6 whitespace-normal break-words">{completedAction.message}</p>
+
+                {/* Show workflow results breakdown */}
+                {completedAction.workflow_results && completedAction.workflow_results.length > 0 && (
+                  <div className="mb-6 space-y-2 max-h-48 overflow-y-auto">
+                    {completedAction.workflow_results.map((result, idx) => (
+                      <div
+                        key={idx}
+                        className="flex items-start gap-3 p-3 bg-white/5 rounded-lg text-left"
+                      >
+                        <div className="flex-shrink-0 w-6 h-6 rounded-full bg-white/10 flex items-center justify-center text-white/60 text-xs">
+                          {result.step}
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <p className="text-xs text-white/90 mb-1">{result.description}</p>
+                          <div className="flex items-center gap-2">
+                            {result.success ? (
+                              <Check className="w-3 h-3 text-emerald-400 flex-shrink-0" />
+                            ) : (
+                              <AlertCircle className="w-3 h-3 text-amber-400 flex-shrink-0" />
+                            )}
+                            <p className="text-xs text-white/50">{result.message}</p>
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
 
                 {/* Action Options */}
                 {actionOptions.length > 0 && (
@@ -1402,11 +1536,37 @@ export default function VoiceDiary() {
                 <p className="text-sm text-white/90">&quot;{finalTranscript}&quot;</p>
               </div>
 
-              {/* Show parsed command */}
-              <div className="bg-[#d6b164]/10 border border-[#d6b164]/30 rounded-lg p-3">
-                <p className="text-xs font-medium text-[#d6b164]/70 mb-1">I will:</p>
-                <p className="text-sm font-medium text-[#d6b164]">{formatCommandDescription(parsedCommand)}</p>
-              </div>
+              {/* Show parsed command or workflow */}
+              {parsedCommand.action === 'workflow' && parsedCommand.workflow ? (
+                <div className="bg-[#d6b164]/10 border border-[#d6b164]/30 rounded-lg p-4">
+                  <p className="text-xs font-medium text-[#d6b164]/70 mb-3">I will complete these steps:</p>
+
+                  {/* Workflow steps */}
+                  <div className="space-y-2">
+                    {parsedCommand.workflow.steps.map((step, idx) => (
+                      <div key={idx} className="flex items-start gap-3 p-2 bg-white/5 rounded-lg">
+                        <div className="flex-shrink-0 w-6 h-6 rounded-full bg-[#d6b164]/20 flex items-center justify-center text-[#d6b164] text-xs font-medium">
+                          {step.step_number}
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm text-[#d6b164] font-medium">{step.description}</p>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+
+                  {/* Workflow summary */}
+                  <div className="mt-3 pt-3 border-t border-[#d6b164]/20">
+                    <p className="text-xs text-[#d6b164]/60 mb-1">Summary:</p>
+                    <p className="text-sm text-[#d6b164]">{parsedCommand.workflow.summary}</p>
+                  </div>
+                </div>
+              ) : (
+                <div className="bg-[#d6b164]/10 border border-[#d6b164]/30 rounded-lg p-3">
+                  <p className="text-xs font-medium text-[#d6b164]/70 mb-1">I will:</p>
+                  <p className="text-sm font-medium text-[#d6b164]">{formatCommandDescription(parsedCommand)}</p>
+                </div>
+              )}
 
               {/* Show confidence if available */}
               {parsedCommand.confidence && (
