@@ -137,9 +137,14 @@ export default function VoiceDiary() {
   }, []);
 
   const handleAction = async (action) => {
+    console.log('[VOICE ASSISTANT PAGE] handleAction called with:', action);
+
     try {
       const actionType = action.action;
       const data = action.data || {};
+
+      console.log('[VOICE ASSISTANT PAGE] Action type:', actionType);
+      console.log('[VOICE ASSISTANT PAGE] Action data:', data);
 
       switch (actionType) {
         case 'log_fridge_temp':
@@ -250,6 +255,38 @@ export default function VoiceDiary() {
             console.error('Error creating invoice:', error);
             toast({
               title: "Failed to create invoice",
+              description: error.message,
+              variant: "destructive",
+            });
+          }
+          break;
+
+        case 'book_appointment':
+          // Create appointment
+          const appointmentData = {
+            date: data.date || new Date().toISOString().split('T')[0],
+            time: data.time || '09:00',
+            patient_name: data.patient || data.patient_name,
+            treatment_name: data.treatment || data.treatment_name || 'Consultation',
+            status: 'scheduled'
+          };
+
+          try {
+            const appointment = await api.entities.Appointment.create(appointmentData);
+
+            toast({
+              title: "Appointment booked",
+              description: `${appointmentData.patient_name} - ${appointmentData.treatment_name} on ${appointmentData.date}`,
+            });
+
+            queryClient.invalidateQueries(['appointments']);
+
+            // Navigate to calendar
+            setTimeout(() => navigate('/Calendar'), 1000);
+          } catch (error) {
+            console.error('Error creating appointment:', error);
+            toast({
+              title: "Failed to book appointment",
               description: error.message,
               variant: "destructive",
             });
