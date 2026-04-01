@@ -207,6 +207,99 @@ const tools = [
   {
     type: 'function',
     function: {
+      name: 'send_invoice',
+      description: 'Send an invoice to a patient via SMS or email. Use this after creating an invoice.',
+      parameters: {
+        type: 'object',
+        properties: {
+          patient_name: {
+            type: 'string',
+            description: 'Patient full name',
+          },
+          invoice_id: {
+            type: 'number',
+            description: 'Specific invoice ID if known',
+          },
+        },
+        required: ['patient_name'],
+      },
+    },
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'add_expense',
+      description: 'Record a business expense (rent, products, wages, etc). Use when clinic has spent money.',
+      parameters: {
+        type: 'object',
+        properties: {
+          amount: {
+            type: 'number',
+            description: 'Expense amount in GBP',
+          },
+          category: {
+            type: 'string',
+            enum: ['Rent', 'Products', 'Wages', 'Insurance', 'Marketing', 'Utilities', 'Equipment', 'Other'],
+            description: 'Expense category',
+          },
+          description: {
+            type: 'string',
+            description: 'Description of the expense',
+          },
+        },
+        required: ['amount', 'category'],
+      },
+    },
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'send_reminder',
+      description: 'Send a payment reminder to a patient about an unpaid invoice.',
+      parameters: {
+        type: 'object',
+        properties: {
+          patient_name: {
+            type: 'string',
+            description: 'Patient full name',
+          },
+        },
+        required: ['patient_name'],
+      },
+    },
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'update_patient',
+      description: 'Update patient information (email, phone, notes). Use when patient details change.',
+      parameters: {
+        type: 'object',
+        properties: {
+          patient_name: {
+            type: 'string',
+            description: 'Patient full name',
+          },
+          email: {
+            type: 'string',
+            description: 'New email address',
+          },
+          contact: {
+            type: 'string',
+            description: 'New phone number',
+          },
+          notes: {
+            type: 'string',
+            description: 'Additional notes',
+          },
+        },
+        required: ['patient_name'],
+      },
+    },
+  },
+  {
+    type: 'function',
+    function: {
       name: 'get_today_summary',
       description: 'Get summary of today\'s activity including appointments, treatments, and revenue. Use this when user asks about today.',
       parameters: {
@@ -220,17 +313,18 @@ const tools = [
 /**
  * TOOL IMPLEMENTATIONS
  */
-async function executeFunction(functionName: string, args: any) {
+async function executeFunction(functionName: string, args: any, userId: string | null) {
   const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
   switch (functionName) {
     case 'create_or_find_patient': {
       const { patient_name, email, contact } = args;
 
-      // Try to find existing patient
+      // Try to find existing patient for this user
       const { data: existingPatients } = await supabase
         .from('patients')
         .select('*')
+        .eq('user_id', userId)
         .ilike('name', `%${patient_name}%`);
 
       if (existingPatients && existingPatients.length > 0) {
@@ -246,6 +340,7 @@ async function executeFunction(functionName: string, args: any) {
       const { data: newPatient, error } = await supabase
         .from('patients')
         .insert({
+          user_id: userId,
           name: patient_name,
           email: email || '',
           contact: contact || '',
@@ -271,6 +366,7 @@ async function executeFunction(functionName: string, args: any) {
       const { data: appointment, error } = await supabase
         .from('appointments')
         .insert({
+          user_id: userId,
           patient_id,
           patient_name,
           treatment_name,
@@ -295,9 +391,49 @@ async function executeFunction(functionName: string, args: any) {
       const { patient_name, treatment_name, price, payment_status, amount_paid } = args;
       const paidAmount = payment_status === 'paid' ? price : (amount_paid || 0);
 
-      const { data: treatment, error } = await supabase
+      // Find or create patient for proper linking
+      let patient_id: number | null = null;
+
+      const { data: existingPatients } = await supabase
+        .from('patients')
+        .select('id, name')
+        .eq('user_id', userId)
+        .ilike('name', `%${patient_name}%`)
+        .limit(1);
+
+      if (existingPatients && existingPatients.length > 0) {
+        patient_id = existingPatients[0].id;
+        console.log(`[AGENT] Found existing patient ID: ${patient_id}`);
+      } else {
+        // Create patient if doesn't exist
+        console.log(`[AGENT] Creating new patient: ${patient_name}`);
+        const { data: newPatient, error: patientError } = await supabase
+          .from('patients')
+          .insert({
+            user_id: userId,
+            name: patient_name,
+            email: '',
+            contact: '',
+            date_added: new Date().toISOString().split('T')[0],
+            notes: 'Auto-created from treatment entry',
+          })
+          .select('id')
+          .single();
+
+        if (patientError) {
+          console.error(`[AGENT] Error creating patient:`, patientError);
+          // Continue anyway - treatment will be created without patient_id
+        } else {
+          patient_id = newPatient?.id || null;
+          console.log(`[AGENT] Created patient with ID: ${patient_id}`);
+        }
+      }
+
+      const { data: treatment, error} = await supabase
         .from('treatment_entries')
         .insert({
+          user_id: userId,
+          patient_id,
           patient_name,
           treatment_name,
           price_paid: price,
@@ -334,6 +470,7 @@ async function executeFunction(functionName: string, args: any) {
       const { data: patients } = await supabase
         .from('patients')
         .select('*')
+        .eq('user_id', userId)
         .ilike('name', `%${patient_name}%`)
         .limit(1);
 
@@ -347,6 +484,7 @@ async function executeFunction(functionName: string, args: any) {
       const { data: invoice, error } = await supabase
         .from('invoices')
         .insert({
+          user_id: userId,
           invoice_number: invoiceNumber,
           patient_name: patient.name,
           patient_contact: patient.contact || patient.email || '',
@@ -386,12 +524,14 @@ async function executeFunction(functionName: string, args: any) {
       const { data: appointments } = await supabase
         .from('appointments')
         .select('*')
+        .eq('user_id', userId)
         .eq('date', today)
         .order('time', { ascending: true });
 
       const { data: treatments } = await supabase
         .from('treatment_entries')
         .select('*')
+        .eq('user_id', userId)
         .eq('date', today)
         .order('created_at', { ascending: false });
 
@@ -458,6 +598,160 @@ async function executeFunction(functionName: string, args: any) {
       };
     }
 
+    case 'send_invoice': {
+      const { patient_name, invoice_id } = args;
+
+      let invoice;
+
+      if (invoice_id) {
+        // Use specific invoice ID
+        const { data } = await supabase
+          .from('invoices')
+          .select('*')
+          .eq('user_id', userId)
+          .eq('id', invoice_id)
+          .single();
+        invoice = data;
+      } else {
+        // Find latest invoice for patient
+        const { data } = await supabase
+          .from('invoices')
+          .select('*')
+          .eq('user_id', userId)
+          .ilike('patient_name', `%${patient_name}%`)
+          .order('created_at', { ascending: false })
+          .limit(1)
+          .single();
+        invoice = data;
+      }
+
+      if (!invoice) {
+        throw new Error(`No invoice found for ${patient_name}`);
+      }
+
+      // Generate PDF if not already generated
+      if (!invoice.invoice_pdf_url) {
+        await supabase.functions.invoke('generate-invoice-pdf', {
+          body: { invoiceId: invoice.id }
+        });
+      }
+
+      // Send invoice via send-invoice function
+      const { error: sendError } = await supabase.functions.invoke('send-invoice', {
+        body: { invoiceId: invoice.id }
+      });
+
+      if (sendError) {
+        throw sendError;
+      }
+
+      // Update invoice status
+      await supabase
+        .from('invoices')
+        .update({ status: 'sent' })
+        .eq('id', invoice.id);
+
+      return {
+        success: true,
+        invoice,
+        message: `Sent invoice to ${invoice.patient_name}`,
+      };
+    }
+
+    case 'add_expense': {
+      const { amount, category, description } = args;
+
+      const { data: expense, error } = await supabase
+        .from('expenses')
+        .insert({
+          user_id: userId,
+          amount: Math.abs(amount),
+          category,
+          description: description || `${category} expense`,
+          date: new Date().toISOString().split('T')[0],
+          notes: description || null,
+        })
+        .select()
+        .single();
+
+      if (error) throw error;
+
+      return {
+        success: true,
+        expense,
+        message: `Logged £${amount} expense for ${category}`,
+      };
+    }
+
+    case 'send_reminder': {
+      const { patient_name } = args;
+
+      // Find unpaid invoice for patient
+      const { data: invoices } = await supabase
+        .from('invoices')
+        .select('*')
+        .eq('user_id', userId)
+        .ilike('patient_name', `%${patient_name}%`)
+        .neq('status', 'paid')
+        .order('created_at', { ascending: false })
+        .limit(1);
+
+      if (!invoices || invoices.length === 0) {
+        throw new Error(`No unpaid invoices for ${patient_name}`);
+      }
+
+      const invoice = invoices[0];
+
+      // Send payment reminder
+      await supabase.functions.invoke('send-payment-reminder', {
+        body: { invoiceId: invoice.id, urgent: false }
+      });
+
+      return {
+        success: true,
+        message: `Sent payment reminder to ${patient_name}`,
+      };
+    }
+
+    case 'update_patient': {
+      const { patient_name, email, contact, notes } = args;
+
+      // Find patient
+      const { data: patients } = await supabase
+        .from('patients')
+        .select('*')
+        .eq('user_id', userId)
+        .ilike('name', `%${patient_name}%`)
+        .limit(1);
+
+      if (!patients || patients.length === 0) {
+        throw new Error(`Patient ${patient_name} not found`);
+      }
+
+      const patient = patients[0];
+
+      // Build update object
+      const updates: any = {};
+      if (email !== undefined) updates.email = email;
+      if (contact !== undefined) updates.contact = contact;
+      if (notes !== undefined) updates.notes = notes;
+
+      const { data: updated, error } = await supabase
+        .from('patients')
+        .update(updates)
+        .eq('id', patient.id)
+        .select()
+        .single();
+
+      if (error) throw error;
+
+      return {
+        success: true,
+        patient: updated,
+        message: `Updated ${patient_name}'s info`,
+      };
+    }
+
     default:
       throw new Error(`Unknown function: ${functionName}`);
   }
@@ -521,7 +815,7 @@ async function saveMessage(sessionId: string, role: string, content: string, too
 /**
  * AGENT EXECUTION with OpenAI Function Calling
  */
-async function runAgent(userInput: string, sessionId: string) {
+async function runAgent(userInput: string, sessionId: string, userId: string | null) {
   // Load conversation history
   const history = await loadConversationHistory(sessionId);
 
@@ -580,7 +874,7 @@ async function runAgent(userInput: string, sessionId: string) {
         console.log(`[AGENT] Calling ${functionName} with`, functionArgs);
 
         try {
-          const functionResult = await executeFunction(functionName, functionArgs);
+          const functionResult = await executeFunction(functionName, functionArgs, userId);
 
           // Add function result to messages
           messages.push({
@@ -640,19 +934,23 @@ serve(async (req) => {
   }
 
   try {
-    const { input, session_id } = await req.json();
+    const { input, session_id, user_id } = await req.json();
 
     if (!input) {
       throw new Error('No input provided');
     }
 
+    if (!user_id) {
+      throw new Error('user_id is required');
+    }
+
     // Generate session ID if not provided
     const sessionId = session_id || `session_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
 
-    console.log('[AGENT] Processing:', input, 'Session:', sessionId);
+    console.log('[AGENT] Processing:', input, 'Session:', sessionId, 'User:', user_id);
 
     // Run the agent
-    const result = await runAgent(input, sessionId);
+    const result = await runAgent(input, sessionId, user_id);
 
     console.log('[AGENT] Success:', result.output);
 

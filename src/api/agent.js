@@ -31,11 +31,16 @@ export async function executeAgentCommand(input, options = {}) {
   console.log('[AGENT API] Executing command:', input);
 
   try {
+    // Get current user for user_id
+    const { data: { user } } = await supabase.auth.getUser();
+    const userId = user?.id || null;
+
     // Call the agent-executor edge function
     const { data, error } = await supabase.functions.invoke('agent-executor', {
       body: {
         input: input,
         session_id: sessionId,
+        user_id: userId,
       },
     });
 
