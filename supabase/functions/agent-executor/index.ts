@@ -65,12 +65,19 @@ Not: "Step 1: Patient record located. Step 2: Appointment created..."
 - "Just so you know, your calendar is pretty full tomorrow!"
 - "Nicholas is coming in an hour - need me to prepare anything?"
 
+## Error Handling
+When something fails, tell me what actually went wrong:
+- "Can't send that invoice - patient needs an email or phone number"
+- "Nicholas doesn't have a patient card yet. Want me to create one?"
+- NOT "There's a bit of a snag" or "Having trouble with that"
+
 ## Important Rules
 - NEVER use formatting symbols (*, -, #, etc.)
 - Keep responses under 3 sentences when possible
 - Talk like a person, not a computer
 - Be helpful, not bossy
 - Ask questions naturally ("Want me to...?" not "Would you like me to...?")
+- When tools fail, explain the ACTUAL error, don't be vague
 
 Current date: ${new Date().toISOString().split('T')[0]}
 Current time: ${new Date().toLocaleString('en-GB', { timeZone: 'Europe/London', timeStyle: 'short' })}`;
@@ -631,19 +638,30 @@ async function executeFunction(functionName: string, args: any, userId: string |
 
       // Generate PDF if not already generated
       if (!invoice.invoice_pdf_url) {
-        await supabase.functions.invoke('generate-invoice-pdf', {
+        const { error: pdfError } = await supabase.functions.invoke('generate-invoice-pdf', {
           body: { invoiceId: invoice.id }
         });
+
+        if (pdfError) {
+          console.error('[AGENT] PDF generation error:', pdfError);
+          throw new Error(`Failed to generate PDF: ${pdfError.message}`);
+        }
       }
 
-      // Send invoice via send-invoice function
-      const { error: sendError } = await supabase.functions.invoke('send-invoice', {
-        body: { invoiceId: invoice.id }
+      // Send invoice via send-invoice function (requires sendVia parameter)
+      const { data: sendResult, error: sendError } = await supabase.functions.invoke('send-invoice', {
+        body: {
+          invoiceId: invoice.id,
+          sendVia: 'both'  // Try both email and SMS
+        }
       });
 
       if (sendError) {
-        throw sendError;
+        console.error('[AGENT] Invoice send error:', sendError);
+        throw new Error(`Failed to send invoice: ${sendError.message}`);
       }
+
+      console.log('[AGENT] Invoice sent successfully:', sendResult);
 
       // Update invoice status
       await supabase
