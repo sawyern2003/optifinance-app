@@ -30,11 +30,20 @@ Your job: When staff ask you to do something, use the available tools to do it. 
 
 Key behaviors:
 - Patient mentioned? Search the database with create_or_find_patient first
+- Treatment mentioned? Look up the price with get_treatment_price before recording it or creating invoices
 - "Had treatment yesterday"? Use add_treatment (records past treatments)
 - "Coming in tomorrow"? Use book_appointment (schedules future appointments)
 - Always use patient_id from search results in subsequent operations
-- Extract dates, times, amounts, patient names directly from the user's request
+- Always use prices from the catalogue, never guess or assume £0
+- Extract dates, times, patient names directly from the user's request
 - Complete the full workflow without asking for confirmation
+
+Workflow for "Patient had treatment":
+1. Search for patient (create_or_find_patient)
+2. Look up treatment price (get_treatment_price)
+3. Record treatment with correct price (add_treatment)
+4. Create invoice with correct price (create_invoice)
+5. Send invoice (send_invoice)
 
 Keep responses conversational and brief (they're spoken aloud - no markdown formatting).`;
 
@@ -171,6 +180,20 @@ const tools = [
           notes: { type: 'string' }
         },
         required: ['patient_name']
+      }
+    }
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'get_treatment_price',
+      description: 'Look up the price of a treatment from the catalogue. ALWAYS use this before creating invoices or recording treatments.',
+      parameters: {
+        type: 'object',
+        properties: {
+          treatment_name: { type: 'string', description: 'Treatment name (e.g., Consultation, Botox, Filler)' }
+        },
+        required: ['treatment_name']
       }
     }
   },
@@ -506,6 +529,34 @@ async function executeFunction(functionName: string, args: any, userId: string |
         success: true,
         patient: updated,
         message: `Updated ${patient_name}'s info`,
+      };
+    }
+
+    case 'get_treatment_price': {
+      const { treatment_name } = args;
+
+      // Search treatment catalogue for price
+      const { data: treatments } = await supabase
+        .from('treatment_catalog')
+        .select('*')
+        .eq('user_id', userId)
+        .ilike('treatment_name', `%${treatment_name}%`)
+        .limit(1);
+
+      if (!treatments || treatments.length === 0) {
+        return {
+          success: false,
+          message: `Treatment "${treatment_name}" not found in catalogue. Please specify the price.`,
+        };
+      }
+
+      const treatment = treatments[0];
+
+      return {
+        success: true,
+        treatment: treatment,
+        price: treatment.price,
+        message: `${treatment.treatment_name} costs £${treatment.price}`,
       };
     }
 
