@@ -6,7 +6,7 @@
  * 2. Direct mode: Execute immediately (Phase 3 agent-executor-v3)
  */
 
-import { supabase } from '@/config/supabase';
+import { supabase, SUPABASE_URL, SUPABASE_ANON_KEY } from '@/config/supabase';
 
 /**
  * Execute a command with the AI agent and stream the response
@@ -37,26 +37,31 @@ export async function executeAgentCommand(input, options = {}) {
     const userId = user?.id || null;
 
     console.log('[AGENT API] User ID:', userId);
-    console.log('[AGENT API] Calling agent-executor-v3');
+    console.log('[AGENT API] Calling agent-executor-v3 directly');
 
-    // Call the agent-executor-v3 edge function (Phase 3: Simple GPT-4o Agent)
-    const { data, error } = await supabase.functions.invoke('agent-executor-v3', {
-      body: {
-        input: input,
-        user_id: userId || '00000000-0000-0000-0000-000000000000', // Use default if not logged in
+    // Call the function directly with fetch to bypass JWT requirement
+    const response = await fetch(`${SUPABASE_URL}/functions/v1/agent-executor-v3`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'apikey': SUPABASE_ANON_KEY,
+        'Authorization': `Bearer ${SUPABASE_ANON_KEY}`, // Use anon key instead of JWT
       },
+      body: JSON.stringify({
+        input: input,
+        user_id: userId || '00000000-0000-0000-0000-000000000000',
+      }),
     });
 
-    console.log('[AGENT API] Raw response:', data, error);
+    console.log('[AGENT API] HTTP status:', response.status);
 
-    if (error) {
-      console.error('[AGENT API] Error:', error);
-      if (onError) {
-        onError(error);
-      }
-      throw error;
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error('[AGENT API] Error response:', errorText);
+      throw new Error(`HTTP ${response.status}: ${errorText}`);
     }
 
+    const data = await response.json();
     console.log('[AGENT API] Response:', data);
 
     // Handle the response

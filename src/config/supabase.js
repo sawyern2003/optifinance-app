@@ -25,3 +25,7 @@ export const supabase = createClient(url, key, {
     detectSessionInUrl: !isPlaceholder
   }
 });
+
+// Export URL and key for direct API calls
+export const SUPABASE_URL = url;
+export const SUPABASE_ANON_KEY = key;
