@@ -36,6 +36,7 @@ serve(async (req) => {
     let currentPatientId: number | null = null;
     let currentPatientName = '';
     let currentPrice = 0;
+    let currentInvoiceId: string | null = null;
 
     // Execute each action in sequence
     for (const action of plan.actions) {
@@ -222,24 +223,17 @@ serve(async (req) => {
               .limit(1)
               .single();
 
-            // Get latest invoice number
-            const { data: latestInvoice } = await supabase
-              .from('invoices')
-              .select('invoice_number')
-              .eq('user_id', user_id)
-              .order('invoice_number', { ascending: false })
-              .limit(1)
-              .single();
-
-            const nextInvoiceNumber = latestInvoice
-              ? parseInt(latestInvoice.invoice_number) + 1
-              : 1;
+            // Generate unique invoice number using timestamp + random
+            // This avoids collisions during testing and concurrent execution
+            const timestamp = Date.now().toString().slice(-8); // Last 8 digits of timestamp
+            const random = Math.floor(Math.random() * 1000).toString().padStart(3, '0');
+            const nextInvoiceNumber = `${timestamp}${random}`;
 
             const { data: invoice, error } = await supabase
               .from('invoices')
               .insert({
                 user_id: user_id,
-                invoice_number: nextInvoiceNumber.toString(),
+                invoice_number: nextInvoiceNumber,
                 patient_name: patient_name,
                 patient_contact: patient?.contact || patient?.email || '',
                 treatment_name: treatment_name,
@@ -253,6 +247,9 @@ serve(async (req) => {
 
             if (error) throw error;
 
+            // Store invoice ID for next steps
+            currentInvoiceId = invoice.id;
+
             result = {
               success: true,
               invoice: invoice,
@@ -264,15 +261,26 @@ serve(async (req) => {
           case 'send_invoice': {
             const { patient_name } = action.params;
 
-            // Find most recent invoice for this patient
-            const { data: invoice } = await supabase
-              .from('invoices')
-              .select('*')
-              .eq('user_id', user_id)
-              .ilike('patient_name', `%${patient_name}%`)
-              .order('created_at', { ascending: false })
-              .limit(1)
-              .single();
+            // Use the invoice we just created, or find most recent
+            let invoice;
+            if (currentInvoiceId) {
+              const { data } = await supabase
+                .from('invoices')
+                .select('*')
+                .eq('id', currentInvoiceId)
+                .single();
+              invoice = data;
+            } else {
+              const { data } = await supabase
+                .from('invoices')
+                .select('*')
+                .eq('user_id', user_id)
+                .ilike('patient_name', `%${patient_name}%`)
+                .order('created_at', { ascending: false })
+                .limit(1)
+                .single();
+              invoice = data;
+            }
 
             if (!invoice) {
               throw new Error(`No invoice found for ${patient_name}`);
@@ -280,18 +288,26 @@ serve(async (req) => {
 
             // Generate PDF if needed
             if (!invoice.invoice_pdf_url) {
-              await supabase.functions.invoke('generate-invoice-pdf', {
+              const { error: pdfError } = await supabase.functions.invoke('generate-invoice-pdf', {
                 body: { invoiceId: invoice.id }
               });
+              if (pdfError) {
+                console.error('[EXECUTOR] PDF generation error:', pdfError);
+                // Continue anyway - send-invoice will handle it
+              }
             }
 
             // Send via SMS and email
-            await supabase.functions.invoke('send-invoice', {
+            const { error: sendError } = await supabase.functions.invoke('send-invoice', {
               body: {
                 invoiceId: invoice.id,
                 sendVia: 'both'
               }
             });
+
+            if (sendError) {
+              throw new Error(`Failed to send invoice: ${sendError.message || sendError}`);
+            }
 
             // Update status
             await supabase
@@ -393,8 +409,9 @@ serve(async (req) => {
 
   } catch (error: any) {
     console.error('[EXECUTOR] Error:', error);
+    const errorMessage = error?.message || error?.toString() || 'Unknown error occurred';
     return new Response(
-      JSON.stringify({ success: false, error: error.message }),
+      JSON.stringify({ success: false, error: errorMessage }),
       { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
   }
