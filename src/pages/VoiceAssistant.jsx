@@ -7,8 +7,7 @@ import { useToast } from "@/components/ui/use-toast";
 import { createPageUrl } from "@/utils";
 import { Link, useNavigate } from "react-router-dom";
 import { useElevenLabs } from '@/hooks/useElevenLabs';
-import { parseVoiceCommand, executeVoiceCommand } from '@/lib/voiceCommands';
-import { executeAgentCommand, parseAgentResponse } from '@/api/agent';
+import { planAgentCommand, executeConfirmedPlan } from '@/api/agent';
 
 /**
  * Voice Command Center - Immersive cinematic interface
@@ -27,9 +26,8 @@ export default function VoiceDiary() {
   const [activityFeed, setActivityFeed] = useState([]);
   const [completedAction, setCompletedAction] = useState(null);
   const [inConversation, setInConversation] = useState(false);
-  // Agent execution tracking
-  const [agentThinking, setAgentThinking] = useState(false);
-  const [agentSteps, setAgentSteps] = useState([]);
+  const [pendingPlan, setPendingPlan] = useState(null);
+  const [showPlanConfirm, setShowPlanConfirm] = useState(false);
 
   // Conversation session management
   const [sessionId, setSessionId] = useState(() => {
@@ -145,11 +143,6 @@ export default function VoiceDiary() {
     setPulseLevel(0);
   }, []);
 
-  // handleAction removed - agent handles all actions now
-
-  // Note: Confirmation dialogs removed - agent executes immediately
-  // Will be added back in Phase 2 with smarter confirmation logic
-
   const startListening = async () => {
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
@@ -160,6 +153,8 @@ export default function VoiceDiary() {
       setFinalTranscript('');
       setParsedIntent('');
       setCompletedAction(null);
+      setPendingPlan(null);
+      setShowPlanConfirm(false);
       attachMicAnalyser(stream);
 
       mediaRecorder.ondataavailable = (event) => {
@@ -217,6 +212,8 @@ export default function VoiceDiary() {
     setFinalTranscript('');
     setParsedIntent('');
     setCompletedAction(null);
+    setPendingPlan(null);
+    setShowPlanConfirm(false);
   };
 
   const processAudio = async (audioBlob) => {
@@ -285,98 +282,179 @@ export default function VoiceDiary() {
 
   const processVoiceCommand = async (transcript) => {
     try {
-      console.log('[VOICE ASSISTANT] Processing with AGENT:', transcript);
-      setParsedIntent('Agent is thinking...');
+      console.log('[VOICE ASSISTANT] Planning command:', transcript);
+      setParsedIntent('Understanding your request...');
       setIsProcessing(true);
 
-      // Execute command with enterprise agent
-      const agentResponse = await executeAgentCommand(transcript);
+      const planResult = await planAgentCommand(transcript);
 
-      console.log('[VOICE ASSISTANT] Agent response:', agentResponse);
-
-      // Parse the agent's response
-      const parsed = parseAgentResponse(agentResponse);
-
-      if (!parsed.success) {
-        setCompletedAction({
-          success: false,
-          message: parsed.message
-        });
+      if (!planResult.success || !planResult.plan) {
+        const msg = planResult.error || 'Could not understand that command. Please try again.';
+        setCompletedAction({ success: false, message: msg });
         setParsedIntent('');
         setIsProcessing(false);
 
-        setActivityFeed(prev => [{
-          id: Date.now(),
-          timestamp: new Date(),
-          action: transcript,
-          result: parsed.message,
-          success: false,
-        }, ...prev]);
+        setActivityFeed((prev) => [
+          {
+            id: Date.now(),
+            timestamp: new Date(),
+            action: transcript,
+            result: msg,
+            success: false,
+          },
+          ...prev,
+        ]);
 
-        await speak(parsed.message, selectedVoiceId);
+        await speak(msg, selectedVoiceId);
 
         setTimeout(() => {
           setFinalTranscript('');
           setCompletedAction(null);
         }, 5000);
-
         return;
       }
 
-      // Success! Show the results
-      setCompletedAction({
-        success: true,
-        message: parsed.message,
-        workflow_results: parsed.steps.map(step => ({
-          step: step.step_number,
-          action: step.tool,
-          description: step.tool.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase()),
-          success: step.status === 'completed',
-          message: typeof step.output === 'string' ? step.output : JSON.stringify(step.output),
-        }))
-      });
+      const plan = planResult.plan;
+      if (!Array.isArray(plan.actions) || plan.actions.length === 0) {
+        const msg = 'No actions were planned. Try rephrasing your request.';
+        setCompletedAction({ success: false, message: msg });
+        setParsedIntent('');
+        setIsProcessing(false);
+        await speak(msg, selectedVoiceId);
+        setTimeout(() => {
+          setFinalTranscript('');
+          setCompletedAction(null);
+        }, 5000);
+        return;
+      }
 
+      setPendingPlan(plan);
+      setShowPlanConfirm(true);
+      setParsedIntent('');
+      setIsProcessing(false);
+    } catch (error) {
+      console.error('[VOICE ASSISTANT] Command processing error:', error);
+      const msg = error.message || 'Failed to process command. Please try again.';
+      setCompletedAction({ success: false, message: msg });
       setParsedIntent('');
       setIsProcessing(false);
 
-      // Add to activity feed
-      setActivityFeed(prev => [{
-        id: Date.now(),
-        timestamp: new Date(),
-        action: transcript,
-        result: parsed.message,
-        success: true,
-        workflow_results: parsed.steps,
-      }, ...prev]);
+      setActivityFeed((prev) => [
+        {
+          id: Date.now(),
+          timestamp: new Date(),
+          action: transcript,
+          result: msg,
+          success: false,
+        },
+        ...prev,
+      ]);
 
-      // Speak the result
-      await speak(parsed.message, selectedVoiceId);
+      await speak('Sorry, something went wrong. Please try again.', selectedVoiceId);
+    }
+  };
 
-      // Auto-clear after delay
+  const handleCancelPlan = () => {
+    setShowPlanConfirm(false);
+    setPendingPlan(null);
+    setParsedIntent('');
+    toast({
+      title: 'Cancelled',
+      description: 'No changes were made.',
+    });
+    setFinalTranscript('');
+  };
+
+  const handleConfirmPlan = async () => {
+    if (!pendingPlan) return;
+
+    const transcriptForFeed = finalTranscript;
+    setShowPlanConfirm(false);
+    setIsProcessing(true);
+    setParsedIntent('Running your request...');
+
+    try {
+      const execResult = await executeConfirmedPlan(pendingPlan);
+      setPendingPlan(null);
+
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ['patients'] }),
+        queryClient.invalidateQueries({ queryKey: ['treatments'] }),
+        queryClient.invalidateQueries({ queryKey: ['treatmentCatalog'] }),
+        queryClient.invalidateQueries({ queryKey: ['invoices'] }),
+        queryClient.invalidateQueries({ queryKey: ['appointments'] }),
+      ]);
+
+      const workflow_results = (execResult.results || []).map((r, idx) => ({
+        step: idx + 1,
+        action: r.action,
+        description:
+          r.description ||
+          String(r.action || '')
+            .replace(/_/g, ' ')
+            .replace(/\b\w/g, (l) => l.toUpperCase()),
+        success: r.result?.success !== false,
+        message:
+          typeof r.result?.message === 'string'
+            ? r.result.message
+            : r.result?.error || JSON.stringify(r.result ?? {}),
+      }));
+
+      const ok = execResult.success === true;
+      const message =
+        execResult.output ||
+        execResult.summary ||
+        (ok ? 'Done.' : execResult.error || 'Something went wrong.');
+
+      setCompletedAction({
+        success: ok,
+        message,
+        workflow_results,
+      });
+      setParsedIntent('');
+
+      setActivityFeed((prev) => [
+        {
+          id: Date.now(),
+          timestamp: new Date(),
+          action: transcriptForFeed || 'Confirmed plan',
+          result: message,
+          success: ok,
+          workflow_results: execResult.results,
+        },
+        ...prev,
+      ]);
+
+      await speak(message, selectedVoiceId);
+
       setTimeout(() => {
         setFinalTranscript('');
         setParsedIntent('');
         setCompletedAction(null);
       }, 8000);
-
     } catch (error) {
-      console.error('[VOICE ASSISTANT] Command processing error:', error);
-      setCompletedAction({
-        success: false,
-        message: 'Failed to process command. Please try again.'
-      });
+      console.error('[VOICE ASSISTANT] Plan execution error:', error);
+      setPendingPlan(null);
+      const msg = error.message || 'Failed to run that plan. Please try again.';
+      setCompletedAction({ success: false, message: msg });
       setParsedIntent('');
+      setActivityFeed((prev) => [
+        {
+          id: Date.now(),
+          timestamp: new Date(),
+          action: transcriptForFeed || 'Confirmed plan',
+          result: msg,
+          success: false,
+        },
+        ...prev,
+      ]);
+      await speak(msg, selectedVoiceId);
+      setTimeout(() => {
+        setFinalTranscript('');
+        setCompletedAction(null);
+      }, 5000);
+    } finally {
       setIsProcessing(false);
-
-      setActivityFeed(prev => [{
-        id: Date.now(),
-        timestamp: new Date(),
-        action: transcript,
-        result: error.message,
-        success: false,
-      }, ...prev]);
-
-      await speak('Sorry, something went wrong. Please try again.', selectedVoiceId);
     }
   };
 
@@ -639,6 +717,100 @@ export default function VoiceDiary() {
               <p className="text-white/60 text-sm leading-relaxed">
                 Voice changes will apply to all future AI responses. The selected voice will be remembered for your session.
               </p>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showPlanConfirm && pendingPlan && (
+        <div
+          className="fixed inset-0 z-[110] flex items-center justify-center p-8 bg-black/80 backdrop-blur-sm"
+          onClick={handleCancelPlan}
+          role="presentation"
+        >
+          <div
+            className="w-full max-w-lg bg-gradient-to-br from-[#1a1f35] to-[#0a0e1a] rounded-3xl border border-[#d6b164]/30 p-8 shadow-2xl"
+            onClick={(e) => e.stopPropagation()}
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="voice-plan-title"
+          >
+            <h3 id="voice-plan-title" className="text-white/90 text-xl font-light tracking-wider mb-2">
+              Confirm this action
+            </h3>
+            <p className="text-white/45 text-sm mb-6">
+              Here is what we understood from your voice command. Confirm to run it, or cancel to make no changes.
+            </p>
+
+            {finalTranscript && (
+              <div className="mb-4 p-4 rounded-2xl bg-white/5 border border-white/10">
+                <div className="text-white/40 text-xs tracking-[0.25em] uppercase mb-2">You said</div>
+                <p className="text-white/80 text-sm font-light whitespace-normal break-words">
+                  &quot;{finalTranscript}&quot;
+                </p>
+              </div>
+            )}
+
+            <div className="mb-4 p-4 rounded-2xl bg-[#d6b164]/10 border border-[#d6b164]/25">
+              <div className="text-[#d6b164]/90 text-xs tracking-[0.25em] uppercase mb-2">Planned summary</div>
+              <p className="text-white/90 text-sm font-light leading-relaxed">{pendingPlan.summary}</p>
+            </div>
+
+            <div className="mb-4 max-h-48 overflow-y-auto space-y-2 pr-1">
+              <div className="text-white/40 text-xs tracking-[0.25em] uppercase mb-2">Steps</div>
+              {pendingPlan.actions.map((a, idx) => (
+                <div
+                  key={`${a.action}-${idx}`}
+                  className="flex gap-3 p-3 rounded-xl bg-white/5 border border-white/10 text-left"
+                >
+                  <span className="flex-shrink-0 w-7 h-7 rounded-full bg-white/10 flex items-center justify-center text-white/60 text-xs">
+                    {idx + 1}
+                  </span>
+                  <div className="min-w-0">
+                    <p className="text-white/85 text-sm font-light">{a.description}</p>
+                    {a.result?.price != null && (
+                      <p className="text-white/45 text-xs mt-1">Catalogue price: £{a.result.price}</p>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            {pendingPlan.warnings?.length > 0 && (
+              <div className="mb-6 p-4 rounded-2xl bg-amber-500/10 border border-amber-400/25">
+                <div className="text-amber-200/90 text-xs tracking-[0.25em] uppercase mb-2">Warnings</div>
+                <ul className="text-amber-100/80 text-sm list-disc list-inside space-y-1">
+                  {pendingPlan.warnings.map((w, i) => (
+                    <li key={i}>{w}</li>
+                  ))}
+                </ul>
+              </div>
+            )}
+
+            <div className="flex flex-col sm:flex-row gap-3 sm:justify-end">
+              <button
+                type="button"
+                onClick={handleCancelPlan}
+                disabled={isProcessing}
+                className="px-6 py-3 rounded-full border border-white/20 text-white/70 hover:bg-white/10 text-sm tracking-[0.2em] uppercase transition-all disabled:opacity-40"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleConfirmPlan}
+                disabled={isProcessing}
+                className="px-6 py-3 rounded-full bg-[#d6b164] text-[#0a0e1a] hover:bg-[#c4a55a] text-sm font-medium tracking-[0.15em] uppercase transition-all disabled:opacity-40 flex items-center justify-center gap-2"
+              >
+                {isProcessing ? (
+                  <>
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                    Running…
+                  </>
+                ) : (
+                  'Confirm'
+                )}
+              </button>
             </div>
           </div>
         </div>
@@ -1117,7 +1289,7 @@ export default function VoiceDiary() {
                 <button
                   key={idx}
                   onClick={() => processSuggestion(cmd.label)}
-                  disabled={isProcessing || isListening || isSpeaking}
+                  disabled={isProcessing || isListening || isSpeaking || showPlanConfirm}
                   className="group relative p-6 rounded-2xl bg-white/5 backdrop-blur-xl border border-white/10 hover:bg-white/10 hover:border-white/20 transition-all duration-300 disabled:opacity-30 disabled:cursor-not-allowed text-left overflow-hidden"
                 >
                   {/* Hover glow effect */}
