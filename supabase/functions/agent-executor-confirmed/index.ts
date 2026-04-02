@@ -24,36 +24,6 @@ serve(async (req) => {
   }
 
   try {
-    // Verify JWT token
-    const authHeader = req.headers.get('Authorization');
-    if (!authHeader) {
-      return new Response(
-        JSON.stringify({ success: false, error: 'Missing authorization header' }),
-        { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
-    }
-
-    // Create Supabase client with the user's JWT to verify authentication
-    const token = authHeader.replace('Bearer ', '');
-    const supabaseClient = createClient(supabaseUrl, supabaseServiceKey, {
-      global: {
-        headers: {
-          Authorization: authHeader,
-        },
-      },
-    });
-
-    // Verify the user is authenticated
-    const { data: { user }, error: authError } = await supabaseClient.auth.getUser(token);
-
-    if (authError || !user) {
-      console.error('[EXECUTOR] Auth error:', authError);
-      return new Response(
-        JSON.stringify({ success: false, error: 'Invalid or expired token' }),
-        { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
-    }
-
     const { plan, user_id } = await req.json();
 
     if (!plan || !plan.actions) throw new Error('No plan provided');
