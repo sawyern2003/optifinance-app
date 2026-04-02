@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from "react";
+import React, { useState, useEffect, useMemo, useCallback } from "react";
 import { api } from "@/api/api";
 import { invoicesAPI } from "@/api/invoices";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
@@ -16,7 +16,41 @@ import { BulkActionsBar } from "@/components/records/BulkActionsBar";
 import {
   friendsFamilyInvoiceFields,
 } from "@/lib/invoiceFriendsFamily";
+import { extractPhoneNumber, looksLikePhone } from "@/lib/contactGuards";
 import Invoices from "./Invoices";
+
+/** SMS after marking a treatment paid (Twilio ~320 chars / segment-friendly). */
+function buildPaymentThankYouMessage(patientDisplayName) {
+  const raw = String(patientDisplayName || "").trim();
+  const first = raw ? raw.split(/\s+/)[0] : "";
+  const greeting = first ? `Hi ${first}` : "Hi";
+  return `${greeting}, thank you so much for your payment — we're really grateful you trusted us with your care. We hope you had a great experience today and we'd love to see you again soon. When you have a moment, if you're happy with your visit we'd truly appreciate a short review online — it helps others find us and means a lot to our team. Warm thanks!`;
+}
+
+function buildMarkPaidPayload(treatment) {
+  const price = Number(treatment.price_paid) || 0;
+  const productCost = Number(treatment.product_cost) || 0;
+  const amountPaid = price;
+  return {
+    date: treatment.date,
+    patient_id: treatment.patient_id ?? null,
+    patient_name: treatment.patient_name,
+    treatment_id: treatment.treatment_id ?? null,
+    treatment_name: treatment.treatment_name,
+    duration_minutes: treatment.duration_minutes ?? null,
+    price_paid: price,
+    payment_status: "paid",
+    amount_paid: amountPaid,
+    product_cost: productCost,
+    profit: amountPaid - productCost,
+    practitioner_id: treatment.practitioner_id ?? null,
+    practitioner_name: treatment.practitioner_name ?? "",
+    notes: treatment.notes ?? null,
+    friends_family_discount_applied: treatment.friends_family_discount_applied ?? false,
+    friends_family_discount_percent: treatment.friends_family_discount_percent ?? null,
+    friends_family_list_price: treatment.friends_family_list_price ?? null,
+  };
+}
 
 export default function RecordsLuxury() {
   const { toast } = useToast();
@@ -42,6 +76,7 @@ export default function RecordsLuxury() {
   // Selection state
   const [selectedTreatments, setSelectedTreatments] = useState([]);
   const [selectedExpenses, setSelectedExpenses] = useState([]);
+  const [markingPaidId, setMarkingPaidId] = useState(null);
 
   // Fetch data
   const { data: treatments = [], isLoading: loadingTreatments } = useQuery({
@@ -80,6 +115,57 @@ export default function RecordsLuxury() {
     initialData: [],
   });
 
+  const applyPaymentConfirmationFlow = useCallback(
+    async ({ treatmentId, prevStatus, patientName, patientId }) => {
+      if (prevStatus === 'paid') return;
+
+      const linkedInvoice = invoices.find((inv) => inv.treatment_entry_id === treatmentId);
+
+      if (linkedInvoice && linkedInvoice.status !== 'paid') {
+        try {
+          await api.entities.Invoice.update(linkedInvoice.id, { status: 'paid' });
+          await queryClient.invalidateQueries({ queryKey: ['invoices'] });
+        } catch (e) {
+          console.warn('Could not sync invoice to paid:', e);
+        }
+      }
+
+      const patient =
+        patients.find((p) => p.id === patientId) ||
+        patients.find((p) => p.name === patientName);
+      const phoneRaw = patient?.phone || patient?.contact || '';
+
+      if (!patient || !looksLikePhone(phoneRaw)) return;
+
+      const patientContact = extractPhoneNumber(phoneRaw) || phoneRaw;
+      try {
+        await api.functions.invoke('sendCustomSMS', {
+          patientName: patientName || patient.name || 'Patient',
+          patientContact,
+          messageBody: buildPaymentThankYouMessage(patientName || patient.name),
+          relatedInvoiceId: linkedInvoice?.id ?? null,
+          metadata: {
+            source: 'records_payment_confirmation',
+            treatment_entry_id: treatmentId,
+          },
+        });
+        toast({
+          title: 'Thank-you text sent',
+          description: `SMS sent to ${patientName || patient.name}.`,
+          className: 'bg-green-50 border-green-200',
+        });
+        queryClient.invalidateQueries({ queryKey: ['communicationMessages'] });
+      } catch (e) {
+        toast({
+          title: 'Payment saved',
+          description: e?.message || 'Could not send thank-you SMS.',
+          variant: 'destructive',
+        });
+      }
+    },
+    [invoices, patients, queryClient, toast],
+  );
+
   // Set active tab from URL
   useEffect(() => {
     const params = new URLSearchParams(location.search || "");
@@ -92,16 +178,18 @@ export default function RecordsLuxury() {
   // Update mutations
   const updateTreatmentMutation = useMutation({
     mutationFn: ({ id, data }) => api.entities.TreatmentEntry.update(id, data),
-    onSuccess: () => {
+    onSuccess: (_result, variables) => {
       queryClient.invalidateQueries({ queryKey: ['treatments'] });
       queryClient.invalidateQueries({ queryKey: ['practitioners'] });
+      queryClient.invalidateQueries({ queryKey: ['invoices'] });
       setEditPanelOpen(false);
       setEditingItem(null);
-      toast({
+      const defaultToast = {
         title: 'Treatment updated',
         description: 'Changes have been saved successfully.',
         className: 'bg-green-50 border-green-200',
-      });
+      };
+      toast(variables?.successToast ?? defaultToast);
     },
     onError: (err) => {
       toast({
@@ -243,10 +331,56 @@ export default function RecordsLuxury() {
       }
     }
 
-    updateTreatmentMutation.mutate({
-      id: editingItem.id,
-      data: finalData
-    });
+    const prevStatus = editingItem.payment_status;
+    const treatmentId = editingItem.id;
+
+    try {
+      await updateTreatmentMutation.mutateAsync({
+        id: treatmentId,
+        data: finalData,
+      });
+    } catch {
+      return;
+    }
+
+    const becamePaid = prevStatus !== 'paid' && finalData.payment_status === 'paid';
+    if (becamePaid) {
+      await applyPaymentConfirmationFlow({
+        treatmentId,
+        prevStatus,
+        patientName: finalData.patient_name,
+        patientId: finalData.patient_id,
+      });
+    }
+  };
+
+  const handleMarkPaidQuick = async (treatment) => {
+    if (treatment.payment_status === 'paid') return;
+    setMarkingPaidId(treatment.id);
+    const prevStatus = treatment.payment_status;
+    const treatmentId = treatment.id;
+    const data = buildMarkPaidPayload(treatment);
+    try {
+      await updateTreatmentMutation.mutateAsync({
+        id: treatmentId,
+        data,
+        successToast: {
+          title: 'Marked as paid',
+          description: `${treatment.patient_name || 'Patient'} · ${treatment.treatment_name || 'Treatment'}`,
+          className: 'bg-green-50 border-green-200',
+        },
+      });
+      await applyPaymentConfirmationFlow({
+        treatmentId,
+        prevStatus,
+        patientName: data.patient_name,
+        patientId: data.patient_id,
+      });
+    } catch {
+      // updateTreatmentMutation.onError already shows toast
+    } finally {
+      setMarkingPaidId(null);
+    }
   };
 
   const handleExpenseSave = (data) => {
@@ -553,6 +687,8 @@ export default function RecordsLuxury() {
               onEdit={handleEditClick}
               onDelete={handleDeleteClick}
               onGenerateInvoice={generateInvoice}
+              onMarkPaid={handleMarkPaidQuick}
+              markingPaidId={markingPaidId}
               practitioners={practitioners}
               invoices={invoices}
             />

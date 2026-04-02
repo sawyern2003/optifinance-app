@@ -1,6 +1,6 @@
 import React from 'react';
 import { format } from 'date-fns';
-import { Calendar, Clock, User, FileText, Pencil, MoreVertical } from 'lucide-react';
+import { Calendar, Clock, User, FileText, Pencil, MoreVertical, CheckCircle2, Loader2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Checkbox } from '@/components/ui/checkbox';
@@ -31,6 +31,8 @@ export function TreatmentCard({
   onSelect,
   onEdit,
   onGenerateInvoice,
+  onMarkPaid,
+  markingPaidId = null,
   onDelete,
   practitioners = [],
   invoices = [],
@@ -41,6 +43,8 @@ export function TreatmentCard({
   const practitioner = practitioners.find(p => p.id === treatment.practitioner_id);
   const invoice = invoices.find(i => i.treatment_entry_id === treatment.id);
   const isLead = practitioner?.is_lead;
+  const isMarkingThisPaid = markingPaidId === treatment.id;
+  const canMarkPaid = treatment.payment_status !== 'paid' && Boolean(onMarkPaid);
 
   // Payment status styling
   const getStatusStyle = () => {
@@ -185,6 +189,31 @@ export function TreatmentCard({
           </div>
         )}
 
+      {canMarkPaid && (
+        <Button
+          type="button"
+          size="sm"
+          disabled={isMarkingThisPaid}
+          onClick={(e) => {
+            e.stopPropagation();
+            onMarkPaid?.(treatment);
+          }}
+          className="w-full mb-3 h-10 rounded-xl bg-emerald-600 text-white hover:bg-emerald-700 border-0 shadow-sm font-medium"
+        >
+          {isMarkingThisPaid ? (
+            <>
+              <Loader2 className="w-4 h-4 mr-2 animate-spin shrink-0" />
+              Marking paid…
+            </>
+          ) : (
+            <>
+              <CheckCircle2 className="w-4 h-4 mr-2 shrink-0" />
+              Mark paid
+            </>
+          )}
+        </Button>
+      )}
+
       {/* Actions */}
       <div className="flex gap-2">
         <Button
@@ -218,6 +247,17 @@ export function TreatmentCard({
             </Button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end">
+            {canMarkPaid && (
+              <DropdownMenuItem
+                disabled={isMarkingThisPaid}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onMarkPaid?.(treatment);
+                }}
+              >
+                Mark as paid
+              </DropdownMenuItem>
+            )}
             <DropdownMenuItem
               onClick={(e) => {
                 e.stopPropagation();

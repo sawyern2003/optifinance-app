@@ -336,6 +336,12 @@ async function runOneAction(
 
         if (error) throw error;
 
+        // set_user_id trigger can overwrite user_id with NULL on service-role inserts — fix ownership for RLS
+        await supabase
+          .from('treatment_entries')
+          .update({ user_id: user_id })
+          .eq('id', treatment.id);
+
         next.currentTreatmentEntryId = String(treatment.id);
         next.currentTreatmentDate = treatmentDate;
 
@@ -415,6 +421,8 @@ async function runOneAction(
 
         if (error) throw error;
 
+        await supabase.from('invoices').update({ user_id: user_id }).eq('id', invoice.id);
+
         next.currentInvoiceId = invoice.id;
 
         const contactHint = patient_contact
@@ -491,10 +499,14 @@ async function runOneAction(
           break;
         }
 
+        await supabase.from('invoices').update({ user_id: user_id }).eq('id', workingInvoice.id);
+
+        const invoiceIdStr = String(workingInvoice.id);
+
         if (!workingInvoice.invoice_pdf_url) {
           await invokeAsUser(
             'generate-invoice-pdf',
-            { invoiceId: workingInvoice.id },
+            { invoiceId: invoiceIdStr },
             accessToken,
           );
         }
@@ -502,7 +514,7 @@ async function runOneAction(
         const sendPayload = await invokeAsUser(
           'send-invoice',
           {
-            invoiceId: workingInvoice.id,
+            invoiceId: invoiceIdStr,
             sendVia: 'both',
           },
           accessToken,

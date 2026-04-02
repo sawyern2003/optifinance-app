@@ -1,22 +1,20 @@
 import React, { useState, useEffect, useRef, useCallback } from "react";
 import { api } from "@/api/api";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { Loader2, Volume2, Check, AlertCircle, X } from "lucide-react";
+import { Loader2, Check, AlertCircle, X } from "lucide-react";
 import { format } from "date-fns";
 import { useToast } from "@/components/ui/use-toast";
 import { createPageUrl } from "@/utils";
 import { Link, useNavigate } from "react-router-dom";
-import { useElevenLabs } from '@/hooks/useElevenLabs';
 import { planAgentCommand, executePlanStep } from '@/api/agent';
 
 /**
- * Voice Command Center - Immersive cinematic interface
+ * Voice Command Center — speak to transcribe, confirm plan, run steps (no TTS).
  */
 export default function VoiceDiary() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const navigate = useNavigate();
-  const { speak, isSpeaking, progress } = useElevenLabs();
 
   const [isListening, setIsListening] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
@@ -31,33 +29,11 @@ export default function VoiceDiary() {
   /** Live agent steps: { action, description, status: 'pending'|'running'|'done'|'error', detailMessage } */
   const [agentStepProgress, setAgentStepProgress] = useState([]);
 
-  // Conversation session management
-  const [sessionId, setSessionId] = useState(() => {
-    // Generate session ID on mount
-    return `session_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
-  });
-
   // Patient notes mode
   const [notesMode, setNotesMode] = useState(false);
   const [selectedPatient, setSelectedPatient] = useState(null);
   const [showPatientSelector, setShowPatientSelector] = useState(false);
   const [patientSearch, setPatientSearch] = useState('');
-
-  // Voice selection
-  const [selectedVoiceId, setSelectedVoiceId] = useState('21m00Tcm4TlvDq8ikWAM'); // Default: Rachel
-  const [showVoiceSelector, setShowVoiceSelector] = useState(false);
-
-  // Available ElevenLabs voices - Female only
-  const voices = [
-    { id: '21m00Tcm4TlvDq8ikWAM', name: 'Rachel', description: 'American - Professional, warm and clear' },
-    { id: 'EXAVITQu4vr4xnSDxMaL', name: 'Bella', description: 'American - Soft, gentle and friendly' },
-    { id: 'MF3mGyEYCl7XYWbV9V6O', name: 'Elli', description: 'American - Bright, cheerful and energetic' },
-    { id: 'XB0fDUnXU5powFXDhCwa', name: 'Charlotte', description: 'British - Elegant, refined and professional' },
-    { id: 'Xb7hH8MSUJpSbSDYk0k2', name: 'Alice', description: 'British - Clear, articulate and confident' },
-    { id: 'ThT5KcBeYPX3keUQqHPh', name: 'Dorothy', description: 'British - Mature, warm and authoritative' },
-    { id: 'pFZP5JQG7iQjIQuC4Bku', name: 'Lily', description: 'British - Young, pleasant and natural' },
-    { id: 'FGY2WhTYpPnrIDTdsKH5', name: 'Laura', description: 'American - Upbeat, friendly and clear' },
-  ];
 
   const mediaRecorderRef = useRef(null);
   const audioChunksRef = useRef([]);
@@ -309,7 +285,7 @@ export default function VoiceDiary() {
           ...prev,
         ]);
 
-        await speak(msg, selectedVoiceId);
+        toast({ title: 'Could not plan that', description: msg, variant: 'destructive' });
 
         setTimeout(() => {
           setFinalTranscript('');
@@ -324,7 +300,7 @@ export default function VoiceDiary() {
         setCompletedAction({ success: false, message: msg });
         setParsedIntent('');
         setIsProcessing(false);
-        await speak(msg, selectedVoiceId);
+        toast({ title: 'No actions planned', description: msg, variant: 'destructive' });
         setTimeout(() => {
           setFinalTranscript('');
           setCompletedAction(null);
@@ -354,7 +330,11 @@ export default function VoiceDiary() {
         ...prev,
       ]);
 
-      await speak('Sorry, something went wrong. Please try again.', selectedVoiceId);
+      toast({
+        title: 'Something went wrong',
+        description: msg,
+        variant: 'destructive',
+      });
     }
   };
 
@@ -509,11 +489,17 @@ export default function VoiceDiary() {
         ...prev,
       ]);
 
-      const speakMsg =
+      const toastDesc =
         ok || !failReason
-          ? message
+          ? message.length > 380
+            ? `${message.slice(0, 380)}…`
+            : message
           : `Attention: ${failReason.slice(0, 320)}${failReason.length > 320 ? '…' : ''}`;
-      await speak(speakMsg, selectedVoiceId);
+      toast({
+        title: ok ? 'Plan complete' : 'Plan finished with issues',
+        description: toastDesc,
+        variant: ok ? 'default' : 'destructive',
+      });
 
       setTimeout(() => {
         setFinalTranscript('');
@@ -538,7 +524,7 @@ export default function VoiceDiary() {
         },
         ...prev,
       ]);
-      await speak(msg, selectedVoiceId);
+      toast({ title: 'Execution failed', description: msg, variant: 'destructive' });
       setTimeout(() => {
         setFinalTranscript('');
         setCompletedAction(null);
@@ -721,19 +707,6 @@ export default function VoiceDiary() {
       {/* Voice & Patient Notes buttons - floating */}
       {!notesMode && !inConversation && !isListening && !isProcessing && (
         <div className="absolute top-8 right-8 z-50 flex items-center gap-4">
-          {/* Voice Selector */}
-          <button
-            onClick={() => setShowVoiceSelector(true)}
-            className="px-6 py-3 rounded-full bg-purple-500/20 backdrop-blur-xl border border-purple-400/30 hover:bg-purple-500/30 hover:border-purple-400/50 transition-all duration-300 group"
-          >
-            <div className="flex items-center gap-3">
-              <Volume2 className="w-4 h-4 text-purple-300" />
-              <span className="text-purple-300/90 text-sm font-light tracking-wider">
-                {voices.find(v => v.id === selectedVoiceId)?.name || 'VOICE'}
-              </span>
-            </div>
-          </button>
-
           {/* Patient Notes */}
           <button
             onClick={startPatientNotes}
@@ -744,71 +717,6 @@ export default function VoiceDiary() {
               <span className="text-blue-300/90 text-sm font-light tracking-wider">PATIENT NOTES</span>
             </div>
           </button>
-        </div>
-      )}
-
-      {/* Voice Selector Modal */}
-      {showVoiceSelector && (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center p-8 bg-black/80 backdrop-blur-sm">
-          <div className="w-full max-w-2xl bg-gradient-to-br from-[#1a1f35] to-[#0a0e1a] rounded-3xl border border-white/10 p-8 shadow-2xl">
-            <div className="flex items-center justify-between mb-8">
-              <div>
-                <h3 className="text-white/90 text-xl font-light tracking-wider mb-2">Select AI Voice</h3>
-                <p className="text-white/40 text-sm">Choose the voice for AI responses</p>
-              </div>
-              <button
-                onClick={() => setShowVoiceSelector(false)}
-                className="text-white/40 hover:text-white/80 transition-colors"
-              >
-                <X className="w-6 h-6" />
-              </button>
-            </div>
-
-            {/* Voice list */}
-            <div className="space-y-3">
-              {voices.map(voice => (
-                <button
-                  key={voice.id}
-                  onClick={() => {
-                    setSelectedVoiceId(voice.id);
-                    setShowVoiceSelector(false);
-                    toast({
-                      title: `Voice changed to ${voice.name}`,
-                      description: voice.description,
-                    });
-                  }}
-                  className={`w-full p-5 text-left rounded-2xl transition-all group ${
-                    selectedVoiceId === voice.id
-                      ? 'bg-purple-500/20 border-2 border-purple-400/50'
-                      : 'bg-white/5 hover:bg-white/10 border-2 border-white/10 hover:border-purple-400/30'
-                  }`}
-                >
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <div className={`text-base font-light mb-1 ${
-                        selectedVoiceId === voice.id ? 'text-purple-200' : 'text-white/90'
-                      }`}>
-                        {voice.name}
-                        {selectedVoiceId === voice.id && (
-                          <span className="ml-3 text-xs text-purple-300/70 tracking-wider">CURRENT</span>
-                        )}
-                      </div>
-                      <div className="text-white/40 text-sm">{voice.description}</div>
-                    </div>
-                    <Volume2 className={`w-5 h-5 ${
-                      selectedVoiceId === voice.id ? 'text-purple-400' : 'text-white/30'
-                    }`} />
-                  </div>
-                </button>
-              ))}
-            </div>
-
-            <div className="mt-6 p-4 bg-white/5 rounded-2xl border border-white/10">
-              <p className="text-white/60 text-sm leading-relaxed">
-                Voice changes will apply to all future AI responses. The selected voice will be remembered for your session.
-              </p>
-            </div>
-          </div>
         </div>
       )}
 
@@ -1254,31 +1162,8 @@ export default function VoiceDiary() {
               </div>
             )}
 
-            {/* AI SPEAKING */}
-            {isSpeaking && !isListening && !isProcessing && (
-              <div className="absolute -bottom-[140px] left-1/2 -translate-x-1/2 w-[600px] px-8">
-                {/* Show the AI response text */}
-                {parsedIntent && (
-                  <p className="text-white/70 text-base font-light mb-6 text-center whitespace-normal break-words">
-                    {parsedIntent}
-                  </p>
-                )}
-
-                <div className="flex items-center gap-3 mb-3 justify-center">
-                  <Volume2 className="w-5 h-5 text-[#d6b164] animate-pulse" />
-                  <span className="text-white/60 text-sm tracking-[0.4em] uppercase font-light">AI Speaking</span>
-                </div>
-                <div className="h-1 bg-white/10 rounded-full overflow-hidden backdrop-blur-sm">
-                  <div
-                    className="h-full bg-gradient-to-r from-[#d6b164] to-[#b89a52] transition-all duration-100"
-                    style={{ width: `${progress * 100}%` }}
-                  />
-                </div>
-              </div>
-            )}
-
             {/* COMPLETED ACTION */}
-            {completedAction && !isProcessing && !isSpeaking && (
+            {completedAction && !isProcessing && (
               <div className="absolute -bottom-[96px] left-1/2 -translate-x-1/2 w-[600px] text-center px-8">
                 <div className="flex items-center gap-2 justify-center mb-4">
                   {completedAction.success ? (
@@ -1414,7 +1299,7 @@ export default function VoiceDiary() {
                 <button
                   key={idx}
                   onClick={() => processSuggestion(cmd.label)}
-                  disabled={isProcessing || isListening || isSpeaking || showPlanConfirm}
+                  disabled={isProcessing || isListening || showPlanConfirm}
                   className="group relative p-6 rounded-2xl bg-white/5 backdrop-blur-xl border border-white/10 hover:bg-white/10 hover:border-white/20 transition-all duration-300 disabled:opacity-30 disabled:cursor-not-allowed text-left overflow-hidden"
                 >
                   {/* Hover glow effect */}

@@ -15,6 +15,8 @@ export function RecordsGrid({
   onEdit,
   onDelete,
   onGenerateInvoice,
+  onMarkPaid,
+  markingPaidId = null,
   practitioners = [],
   invoices = []
 }) {
@@ -65,6 +67,8 @@ export function RecordsGrid({
               onSelect={onSelectItem}
               onEdit={() => onEdit?.(item, 'treatment')}
               onGenerateInvoice={onGenerateInvoice}
+              onMarkPaid={onMarkPaid}
+              markingPaidId={markingPaidId}
               onDelete={() => onDelete?.(item, 'treatment')}
               practitioners={practitioners}
               invoices={invoices}
