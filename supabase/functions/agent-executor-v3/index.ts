@@ -22,15 +22,36 @@ const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
 const openaiApiKey = Deno.env.get('OPENAI_API_KEY')!;
 
 /**
+ * DATABASE SCHEMA - So GPT-4o knows what data exists
+ */
+const DATABASE_SCHEMA = `
+DATABASE TABLES:
+- patients: id, user_id, name, email, contact, date_added, notes
+- appointments: id, user_id, patient_id, patient_name, treatment_name, date, time, status
+- treatment_entries: id, user_id, patient_id, patient_name, treatment_name, price_paid, payment_status, amount_paid, date, product_cost, profit
+- invoices: id, user_id, invoice_number, patient_name, patient_contact, treatment_name, treatment_date, amount, issue_date, status, invoice_pdf_url
+- treatment_catalog: id, user_id, treatment_name, price, category
+- expenses: id, user_id, amount, category, description, date, notes
+- profiles: id, clinic_name, email, bank_name, account_number, sort_code
+`;
+
+/**
  * SIMPLE SYSTEM PROMPT - No examples, no complexity
  */
 const SYSTEM_PROMPT = `You are a helpful AI assistant for a clinic. Staff use you to manage patients, appointments, treatments, and invoices through voice commands.
 
 Your job: When staff ask you to do something, use the available tools to do it. Don't ask for information that might be in the database - search first.
 
+${DATABASE_SCHEMA}
+
+TOOL USAGE:
+- Common tasks: Use specific tools (create_or_find_patient, book_appointment, etc)
+- Complex queries: Use query_database with SQL for unusual requests, reports, analytics
+- Always filter by user_id when using query_database
+- Treatment mentioned? Look up price with get_treatment_price first
+
 Key behaviors:
 - Patient mentioned? Search the database with create_or_find_patient first
-- Treatment mentioned? Look up the price with get_treatment_price before recording it or creating invoices
 - "Had treatment yesterday"? Use add_treatment (records past treatments)
 - "Coming in tomorrow"? Use book_appointment (schedules future appointments)
 - Always use patient_id from search results in subsequent operations
@@ -44,6 +65,10 @@ Workflow for "Patient had treatment":
 3. Record treatment with correct price (add_treatment)
 4. Create invoice with correct price (create_invoice)
 5. Send invoice (send_invoice)
+
+For unusual requests (reports, analytics, complex filters), use query_database:
+Example: "Show patients who haven't paid" → SELECT name FROM invoices WHERE user_id = [userId] AND status != 'paid'
+Example: "Revenue by treatment type" → SELECT treatment_name, SUM(amount) FROM treatment_entries WHERE user_id = [userId] GROUP BY treatment_name
 
 Keep responses conversational and brief (they're spoken aloud - no markdown formatting).`;
 
@@ -194,6 +219,21 @@ const tools = [
           treatment_name: { type: 'string', description: 'Treatment name (e.g., Consultation, Botox, Filler)' }
         },
         required: ['treatment_name']
+      }
+    }
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'query_database',
+      description: 'Execute SQL query to find any information in the database. Use this for complex questions, reports, analytics, or unusual requests that other tools can\'t handle. READ-ONLY queries only.',
+      parameters: {
+        type: 'object',
+        properties: {
+          query: { type: 'string', description: 'SQL SELECT statement. Must be read-only (no INSERT/UPDATE/DELETE). Include WHERE user_id = [userId] to filter by clinic.' },
+          explanation: { type: 'string', description: 'Explain what this query does in plain English' }
+        },
+        required: ['query', 'explanation']
       }
     }
   },
@@ -557,6 +597,43 @@ async function executeFunction(functionName: string, args: any, userId: string |
         treatment: treatment,
         price: treatment.price,
         message: `${treatment.treatment_name} costs £${treatment.price}`,
+      };
+    }
+
+    case 'query_database': {
+      const { query, explanation } = args;
+
+      // Safety: Only allow SELECT queries
+      const trimmedQuery = query.trim().toLowerCase();
+      if (!trimmedQuery.startsWith('select')) {
+        throw new Error('Only SELECT queries are allowed. Use other tools for creating/updating data.');
+      }
+
+      // Block dangerous keywords
+      const dangerous = ['drop', 'delete', 'truncate', 'alter', 'create', 'insert', 'update'];
+      if (dangerous.some(keyword => trimmedQuery.includes(keyword))) {
+        throw new Error('Query contains forbidden operations. Use read-only SELECT queries only.');
+      }
+
+      console.log('[AGENT] SQL Query:', query);
+      console.log('[AGENT] Explanation:', explanation);
+
+      // Execute query
+      const { data, error } = await supabase.rpc('execute_sql', {
+        query_text: query
+      });
+
+      if (error) {
+        // If RPC doesn't exist, fall back to explaining we need direct access
+        console.error('[AGENT] SQL error:', error);
+        throw new Error(`Database query failed: ${error.message}. Try using specific tools instead.`);
+      }
+
+      return {
+        success: true,
+        data: data,
+        rowCount: data?.length || 0,
+        message: `Query returned ${data?.length || 0} results`,
       };
     }
 
