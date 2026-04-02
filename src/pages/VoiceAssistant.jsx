@@ -305,14 +305,18 @@ export default function VoiceDiary() {
       const planResponse = await planAgentCommand(transcript);
 
       if (!planResponse.success || !planResponse.plan) {
+        console.error('[VOICE ASSISTANT] Planning failed:', planResponse);
+
+        const errorMessage = planResponse.error || 'Failed to create execution plan';
+
         setCompletedAction({
           success: false,
-          message: planResponse.error || 'Failed to create execution plan'
+          message: errorMessage
         });
         setParsedIntent('');
         setIsProcessing(false);
 
-        await speak('Sorry, I could not understand that request.', selectedVoiceId);
+        await speak(`Sorry, I could not understand that request. ${errorMessage}`, selectedVoiceId);
 
         setTimeout(() => {
           setFinalTranscript('');

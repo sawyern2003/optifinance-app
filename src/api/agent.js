@@ -172,11 +172,26 @@ export async function planAgentCommand(input) {
     });
 
     if (error) {
-      console.error('[AGENT API] Planning error:', error);
-      throw error;
+      console.error('[AGENT API] Planning error from edge function:', error);
+      return {
+        success: false,
+        error: error.message || JSON.stringify(error),
+        plan: null,
+      };
     }
 
     console.log('[AGENT API] Plan created:', data.plan?.summary);
+    console.log('[AGENT API] Full response:', data);
+
+    // Check if response has the expected structure
+    if (!data || !data.plan) {
+      console.error('[AGENT API] Invalid response structure:', data);
+      return {
+        success: false,
+        error: 'Invalid response from planner',
+        plan: null,
+      };
+    }
 
     return {
       success: true,
@@ -184,10 +199,10 @@ export async function planAgentCommand(input) {
     };
 
   } catch (error) {
-    console.error('[AGENT API] Planning error:', error);
+    console.error('[AGENT API] Planning exception:', error);
     return {
       success: false,
-      error: error.message,
+      error: error.message || String(error),
       plan: null,
     };
   }
