@@ -36,13 +36,18 @@ export async function executeAgentCommand(input, options = {}) {
     const { data: { user } } = await supabase.auth.getUser();
     const userId = user?.id || null;
 
+    console.log('[AGENT API] User ID:', userId);
+    console.log('[AGENT API] Calling agent-executor-v3');
+
     // Call the agent-executor-v3 edge function (Phase 3: Simple GPT-4o Agent)
     const { data, error } = await supabase.functions.invoke('agent-executor-v3', {
       body: {
         input: input,
-        user_id: userId,
+        user_id: userId || '00000000-0000-0000-0000-000000000000', // Use default if not logged in
       },
     });
+
+    console.log('[AGENT API] Raw response:', data, error);
 
     if (error) {
       console.error('[AGENT API] Error:', error);
