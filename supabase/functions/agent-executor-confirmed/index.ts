@@ -88,16 +88,36 @@ async function resolvePatientId(
   return rows?.[0]?.id ?? null;
 }
 
-/** Build a single contact string send-invoice can parse (email and/or phone). */
+/**
+ * Build one string send-invoice can parse (extractEmailAddress / extractPhoneNumber).
+ * Patients table uses `phone` for mobile and often `contact` for email — both must be included.
+ */
 function formatPatientContact(patient: {
   email?: string | null;
   contact?: string | null;
+  phone?: string | null;
 } | null): string {
   if (!patient) return '';
   const email = String(patient.email || '').trim();
   const contact = String(patient.contact || '').trim();
-  if (email && contact) return `${email} · ${contact}`;
-  return email || contact;
+  const phone = String(patient.phone || '').trim();
+
+  const parts: string[] = [];
+  const seen = new Set<string>();
+  const push = (s: string) => {
+    const t = s.trim();
+    if (!t) return;
+    const key = t.toLowerCase();
+    if (seen.has(key)) return;
+    seen.add(key);
+    parts.push(t);
+  };
+
+  if (email) push(email);
+  if (contact) push(contact);
+  if (phone) push(phone);
+
+  return parts.join(' · ');
 }
 
 type PlanAction = {
@@ -305,7 +325,7 @@ async function runOneAction(
 
         const { data: patient } = await supabase
           .from('patients')
-          .select('*')
+          .select('id, name, email, contact, phone')
           .eq('user_id', user_id)
           .ilike('name', `%${patient_name}%`)
           .limit(1)
@@ -379,25 +399,76 @@ async function runOneAction(
           throw new Error(`No invoice found for ${patient_name}`);
         }
 
-        if (!invoice.invoice_pdf_url) {
-          await invokeAsUser('generate-invoice-pdf', { invoiceId: invoice.id }, accessToken);
+        let workingInvoice = invoice as Record<string, unknown> & { id: unknown; patient_contact?: unknown };
+        const contactStr = String(workingInvoice.patient_contact || '').trim();
+        if (!contactStr) {
+          const { data: pRow } = await supabase
+            .from('patients')
+            .select('email, contact, phone')
+            .eq('user_id', user_id)
+            .ilike('name', `%${patient_name}%`)
+            .limit(1)
+            .maybeSingle();
+          const patched = formatPatientContact(pRow);
+          if (patched) {
+            await supabase
+              .from('invoices')
+              .update({ patient_contact: patched })
+              .eq('id', workingInvoice.id);
+            workingInvoice = { ...workingInvoice, patient_contact: patched };
+          }
         }
 
-        await invokeAsUser(
+        if (!String(workingInvoice.patient_contact || '').trim()) {
+          result = {
+            success: false,
+            message:
+              `Cannot send: no email or phone on file for ${patient_name}. Add phone or email to the patient in Catalogue (or on the invoice), then tap Send from Invoices.`,
+          };
+          break;
+        }
+
+        if (!workingInvoice.invoice_pdf_url) {
+          await invokeAsUser(
+            'generate-invoice-pdf',
+            { invoiceId: workingInvoice.id },
+            accessToken,
+          );
+        }
+
+        const sendPayload = await invokeAsUser(
           'send-invoice',
           {
-            invoiceId: invoice.id,
+            invoiceId: workingInvoice.id,
             sendVia: 'both',
           },
           accessToken,
         );
 
-        await supabase.from('invoices').update({ status: 'sent' }).eq('id', invoice.id);
+        const results = sendPayload.results as
+          | { sms?: { success?: boolean }; email?: { success?: boolean; note?: string } }
+          | undefined;
+        const delivered =
+          Boolean(results?.sms?.success) || Boolean(results?.email?.success);
+        if (!delivered) {
+          result = {
+            success: false,
+            message:
+              (typeof sendPayload.error === 'string' && sendPayload.error) ||
+              'Send completed but neither SMS nor email reported success. Check Twilio / SendGrid (or Resend) secrets and patient contact.',
+          };
+          break;
+        }
 
+        await supabase.from('invoices').update({ status: 'sent' }).eq('id', workingInvoice.id);
+
+        const via: string[] = [];
+        if (results?.sms?.success) via.push('SMS');
+        if (results?.email?.success) via.push('email');
         result = {
           success: true,
-          invoice: invoice,
-          message: `Invoice sent to ${patient_name} (SMS and/or email, depending on contact details)`,
+          invoice: workingInvoice,
+          message: `Invoice sent to ${patient_name} (${via.join(' + ') || 'channel'})`,
         };
         break;
       }

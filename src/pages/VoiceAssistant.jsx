@@ -464,9 +464,26 @@ export default function VoiceDiary() {
 
       const ok = aggregatedResults.length > 0 && aggregatedResults.every((r) => r.result?.success !== false);
       const failed = aggregatedResults.filter((r) => r.result?.success === false);
+      const failReason =
+        failed.length > 0
+          ? String(
+              failed[0].result?.message ||
+                failed[0].result?.error ||
+                failed[0].description ||
+                '',
+            ).trim()
+          : '';
+
       const message = ok
         ? `All ${aggregatedResults.length} steps finished. ${plan.summary || ''}`.trim()
-        : `Some steps need attention (${failed.length} issue(s)). Check the list below. ${plan.summary || ''}`.trim();
+        : [
+            failReason ? `Issue: ${failReason}` : `${failed.length} step(s) failed.`,
+            'See the Live agent step list for full detail.',
+            plan.summary || '',
+          ]
+            .filter(Boolean)
+            .join(' ')
+            .trim();
 
       setCompletedAction({
         success: ok,
@@ -487,7 +504,11 @@ export default function VoiceDiary() {
         ...prev,
       ]);
 
-      await speak(message, selectedVoiceId);
+      const speakMsg =
+        ok || !failReason
+          ? message
+          : `Attention: ${failReason.slice(0, 320)}${failReason.length > 320 ? '…' : ''}`;
+      await speak(speakMsg, selectedVoiceId);
 
       setTimeout(() => {
         setFinalTranscript('');
