@@ -8,16 +8,7 @@ import { createPageUrl } from "@/utils";
 import { Link, useNavigate } from "react-router-dom";
 import { useElevenLabs } from '@/hooks/useElevenLabs';
 import { parseVoiceCommand, executeVoiceCommand } from '@/lib/voiceCommands';
-import { planAgentCommand, executeConfirmedPlan, parseAgentResponse } from '@/api/agent';
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
-import { Button } from "@/components/ui/button";
+import { executeAgentCommand, parseAgentResponse } from '@/api/agent';
 
 /**
  * Voice Command Center - Immersive cinematic interface
@@ -39,9 +30,6 @@ export default function VoiceDiary() {
   // Agent execution tracking
   const [agentThinking, setAgentThinking] = useState(false);
   const [agentSteps, setAgentSteps] = useState([]);
-  // Confirmation dialog
-  const [pendingPlan, setPendingPlan] = useState(null);
-  const [showConfirmDialog, setShowConfirmDialog] = useState(false);
 
   // Conversation session management
   const [sessionId, setSessionId] = useState(() => {
@@ -297,93 +285,39 @@ export default function VoiceDiary() {
 
   const processVoiceCommand = async (transcript) => {
     try {
-      console.log('[VOICE ASSISTANT] Creating execution plan:', transcript);
-      setParsedIntent('Creating plan...');
+      console.log('[VOICE ASSISTANT] Processing with AGENT:', transcript);
+      setParsedIntent('Agent is thinking...');
       setIsProcessing(true);
 
-      // Call agent-planner to create execution plan
-      const planResponse = await planAgentCommand(transcript);
+      // Execute command with enterprise agent
+      const agentResponse = await executeAgentCommand(transcript);
 
-      if (!planResponse.success || !planResponse.plan) {
-        console.error('[VOICE ASSISTANT] Planning failed:', planResponse);
+      console.log('[VOICE ASSISTANT] Agent response:', agentResponse);
 
-        const errorMessage = planResponse.error || 'Failed to create execution plan';
+      // Parse the agent's response
+      const parsed = parseAgentResponse(agentResponse);
 
+      if (!parsed.success) {
         setCompletedAction({
           success: false,
-          message: errorMessage
+          message: parsed.message
         });
         setParsedIntent('');
         setIsProcessing(false);
 
-        await speak(`Sorry, I could not understand that request. ${errorMessage}`, selectedVoiceId);
-
-        setTimeout(() => {
-          setFinalTranscript('');
-          setCompletedAction(null);
-        }, 5000);
-
-        return;
-      }
-
-      console.log('[VOICE ASSISTANT] Plan created:', planResponse.plan);
-
-      // Store plan and show confirmation dialog
-      setPendingPlan(planResponse.plan);
-      setShowConfirmDialog(true);
-      setParsedIntent(planResponse.plan.summary);
-      setIsProcessing(false);
-
-      // Speak the plan summary
-      await speak(`I'll ${planResponse.plan.summary}. Please confirm to proceed.`, selectedVoiceId);
-
-    } catch (error) {
-      console.error('[VOICE ASSISTANT] Planning error:', error);
-      setCompletedAction({
-        success: false,
-        message: 'Failed to create plan. Please try again.'
-      });
-      setParsedIntent('');
-      setIsProcessing(false);
-
-      await speak('Sorry, something went wrong. Please try again.', selectedVoiceId);
-
-      setTimeout(() => {
-        setFinalTranscript('');
-        setCompletedAction(null);
-      }, 5000);
-    }
-  };
-
-  const handleConfirmPlan = async () => {
-    if (!pendingPlan) return;
-
-    try {
-      setShowConfirmDialog(false);
-      setIsProcessing(true);
-      setParsedIntent('Executing plan...');
-
-      console.log('[VOICE ASSISTANT] Executing confirmed plan');
-
-      // Execute the confirmed plan
-      const executionResponse = await executeConfirmedPlan(pendingPlan);
-
-      console.log('[VOICE ASSISTANT] Execution complete:', executionResponse);
-
-      if (!executionResponse.success) {
-        setCompletedAction({
+        setActivityFeed(prev => [{
+          id: Date.now(),
+          timestamp: new Date(),
+          action: transcript,
+          result: parsed.message,
           success: false,
-          message: executionResponse.error || 'Execution failed'
-        });
-        setParsedIntent('');
-        setIsProcessing(false);
+        }, ...prev]);
 
-        await speak('Sorry, the execution failed. Please try again.', selectedVoiceId);
+        await speak(parsed.message, selectedVoiceId);
 
         setTimeout(() => {
           setFinalTranscript('');
           setCompletedAction(null);
-          setPendingPlan(null);
         }, 5000);
 
         return;
@@ -392,14 +326,14 @@ export default function VoiceDiary() {
       // Success! Show the results
       setCompletedAction({
         success: true,
-        message: executionResponse.summary,
-        workflow_results: executionResponse.results?.map((result, idx) => ({
-          step: idx + 1,
-          action: result.action,
-          description: result.description,
-          success: result.result?.success || false,
-          message: result.result?.message || '',
-        })) || []
+        message: parsed.message,
+        workflow_results: parsed.steps.map(step => ({
+          step: step.step_number,
+          action: step.tool,
+          description: step.tool.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase()),
+          success: step.status === 'completed',
+          message: typeof step.output === 'string' ? step.output : JSON.stringify(step.output),
+        }))
       });
 
       setParsedIntent('');
@@ -409,53 +343,43 @@ export default function VoiceDiary() {
       setActivityFeed(prev => [{
         id: Date.now(),
         timestamp: new Date(),
-        action: finalTranscript,
-        result: executionResponse.summary,
+        action: transcript,
+        result: parsed.message,
         success: true,
+        workflow_results: parsed.steps,
       }, ...prev]);
 
       // Speak the result
-      await speak(executionResponse.summary, selectedVoiceId);
-
-      // Refresh data
-      queryClient.invalidateQueries(['patients']);
-      queryClient.invalidateQueries(['appointments']);
-      queryClient.invalidateQueries(['treatments']);
-      queryClient.invalidateQueries(['invoices']);
+      await speak(parsed.message, selectedVoiceId);
 
       // Auto-clear after delay
       setTimeout(() => {
         setFinalTranscript('');
+        setParsedIntent('');
         setCompletedAction(null);
-        setPendingPlan(null);
       }, 8000);
 
     } catch (error) {
-      console.error('[VOICE ASSISTANT] Execution error:', error);
+      console.error('[VOICE ASSISTANT] Command processing error:', error);
       setCompletedAction({
         success: false,
-        message: 'Failed to execute plan. Please try again.'
+        message: 'Failed to process command. Please try again.'
       });
       setParsedIntent('');
       setIsProcessing(false);
 
-      await speak('Sorry, the execution failed. Please try again.', selectedVoiceId);
+      setActivityFeed(prev => [{
+        id: Date.now(),
+        timestamp: new Date(),
+        action: transcript,
+        result: error.message,
+        success: false,
+      }, ...prev]);
 
-      setTimeout(() => {
-        setFinalTranscript('');
-        setCompletedAction(null);
-        setPendingPlan(null);
-      }, 5000);
+      await speak('Sorry, something went wrong. Please try again.', selectedVoiceId);
     }
   };
 
-  const handleCancelPlan = async () => {
-    setShowConfirmDialog(false);
-    setPendingPlan(null);
-    setParsedIntent('');
-    setFinalTranscript('');
-    await speak('Cancelled.', selectedVoiceId);
-  };
 
   const processSuggestion = async (suggestionText) => {
     setIsProcessing(true);
@@ -1211,87 +1135,6 @@ export default function VoiceDiary() {
           </div>
         </div>
       </div>
-
-      {/* Confirmation Dialog */}
-      <Dialog open={showConfirmDialog} onOpenChange={setShowConfirmDialog}>
-        <DialogContent className="sm:max-w-[600px] bg-gradient-to-br from-slate-900 to-slate-800 border-[#d6b164]/20">
-          <DialogHeader>
-            <DialogTitle className="text-2xl font-light text-white flex items-center gap-2">
-              <Check className="w-6 h-6 text-[#d6b164]" />
-              Confirm Action
-            </DialogTitle>
-            <DialogDescription className="text-white/60 text-base mt-2">
-              {pendingPlan?.summary}
-            </DialogDescription>
-          </DialogHeader>
-
-          <div className="mt-4 space-y-3">
-            <div className="text-white/80 text-sm font-medium mb-2">Plan:</div>
-            {pendingPlan?.actions?.map((action, idx) => (
-              <div
-                key={idx}
-                className="flex items-start gap-3 p-3 bg-white/5 rounded-lg border border-white/10"
-              >
-                <div className="w-6 h-6 rounded-full bg-[#d6b164]/20 flex items-center justify-center flex-shrink-0 mt-0.5">
-                  <span className="text-[#d6b164] text-xs font-medium">{idx + 1}</span>
-                </div>
-                <div className="flex-1">
-                  <div className="text-white/90 text-sm font-medium">
-                    {action.description}
-                  </div>
-                  {action.result?.price && (
-                    <div className="text-[#d6b164] text-xs mt-1">
-                      Price: £{action.result.price}
-                    </div>
-                  )}
-                </div>
-              </div>
-            ))}
-
-            {pendingPlan?.warnings && pendingPlan.warnings.length > 0 && (
-              <div className="mt-4 p-3 bg-amber-500/10 border border-amber-500/20 rounded-lg">
-                <div className="flex items-start gap-2">
-                  <AlertCircle className="w-4 h-4 text-amber-400 flex-shrink-0 mt-0.5" />
-                  <div className="text-amber-200/90 text-sm">
-                    {pendingPlan.warnings.map((warning, idx) => (
-                      <div key={idx}>{warning}</div>
-                    ))}
-                  </div>
-                </div>
-              </div>
-            )}
-          </div>
-
-          <DialogFooter className="mt-6 gap-2">
-            <Button
-              variant="outline"
-              onClick={handleCancelPlan}
-              className="border-white/20 text-white hover:bg-white/10"
-              disabled={isProcessing}
-            >
-              <X className="w-4 h-4 mr-2" />
-              Cancel
-            </Button>
-            <Button
-              onClick={handleConfirmPlan}
-              className="bg-gradient-to-r from-[#d6b164] to-[#c9a356] hover:from-[#e5c074] hover:to-[#d6b164] text-slate-900 font-medium"
-              disabled={isProcessing}
-            >
-              {isProcessing ? (
-                <>
-                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                  Executing...
-                </>
-              ) : (
-                <>
-                  <Check className="w-4 h-4 mr-2" />
-                  Confirm
-                </>
-              )}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
 
       <style>{`
         @keyframes slideIn {
