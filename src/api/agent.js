@@ -160,8 +160,20 @@ export async function planAgentCommand(input) {
 
   try {
     // Get current user for user_id
-    const { data: { user } } = await supabase.auth.getUser();
-    const userId = user?.id || null;
+    const { data: { user }, error: userError } = await supabase.auth.getUser();
+
+    if (userError || !user) {
+      console.error('[AGENT API] User not authenticated:', userError);
+      return {
+        success: false,
+        error: 'You must be logged in to use voice commands',
+        plan: null,
+      };
+    }
+
+    const userId = user.id;
+
+    console.log('[AGENT API] User authenticated:', userId);
 
     // Call the agent-planner edge function
     const { data, error } = await supabase.functions.invoke('agent-planner', {
