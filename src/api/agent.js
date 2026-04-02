@@ -247,6 +247,7 @@ export async function executeConfirmedPlan(plan) {
       body: {
         plan: plan,
         user_id: userId,
+        access_token: session.access_token,
       },
       headers: {
         Authorization: `Bearer ${session.access_token}`,
@@ -280,6 +281,61 @@ export async function executeConfirmedPlan(plan) {
       error: error.message,
       output: `Failed to execute plan: ${error.message}`,
       results: [],
+    };
+  }
+}
+
+/**
+ * Run one step of a confirmed plan (for live progress UI). Call in order with updated executor_state.
+ *
+ * @param {Object} plan
+ * @param {number} stepIndex
+ * @param {Object|null} executorState - from previous step, or null for step 0
+ * @returns {Promise<{ success: boolean, results: Array, executor_state: Object, done: boolean, error?: string }>}
+ */
+export async function executePlanStep(plan, stepIndex, executorState = null) {
+  try {
+    const session = await ensureSession();
+    const userId = session.user.id;
+
+    const { data, error, response } = await supabase.functions.invoke('agent-executor-confirmed', {
+      body: {
+        plan,
+        user_id: userId,
+        access_token: session.access_token,
+        mode: 'single',
+        step_index: stepIndex,
+        executor_state: executorState,
+      },
+      headers: {
+        Authorization: `Bearer ${session.access_token}`,
+      },
+    });
+
+    if (error) {
+      const msg = await edgeInvokeErrorMessage(error, response);
+      return {
+        success: false,
+        results: [],
+        executor_state: executorState,
+        done: false,
+        error: msg,
+      };
+    }
+
+    return {
+      success: true,
+      results: data.results || [],
+      executor_state: data.executor_state,
+      done: Boolean(data.done),
+    };
+  } catch (error) {
+    return {
+      success: false,
+      results: [],
+      executor_state: executorState,
+      done: false,
+      error: error.message,
     };
   }
 }
@@ -335,6 +391,7 @@ export default {
   executeAgentCommandStreaming,
   planAgentCommand,
   executeConfirmedPlan,
+  executePlanStep,
   parseAgentResponse,
   getAgentCapabilities,
 };

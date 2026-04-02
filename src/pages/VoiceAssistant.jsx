@@ -7,7 +7,7 @@ import { useToast } from "@/components/ui/use-toast";
 import { createPageUrl } from "@/utils";
 import { Link, useNavigate } from "react-router-dom";
 import { useElevenLabs } from '@/hooks/useElevenLabs';
-import { planAgentCommand, executeConfirmedPlan } from '@/api/agent';
+import { planAgentCommand, executePlanStep } from '@/api/agent';
 
 /**
  * Voice Command Center - Immersive cinematic interface
@@ -28,6 +28,8 @@ export default function VoiceDiary() {
   const [inConversation, setInConversation] = useState(false);
   const [pendingPlan, setPendingPlan] = useState(null);
   const [showPlanConfirm, setShowPlanConfirm] = useState(false);
+  /** Live agent steps: { action, description, status: 'pending'|'running'|'done'|'error', detailMessage } */
+  const [agentStepProgress, setAgentStepProgress] = useState([]);
 
   // Conversation session management
   const [sessionId, setSessionId] = useState(() => {
@@ -155,6 +157,7 @@ export default function VoiceDiary() {
       setCompletedAction(null);
       setPendingPlan(null);
       setShowPlanConfirm(false);
+      setAgentStepProgress([]);
       attachMicAnalyser(stream);
 
       mediaRecorder.ondataavailable = (event) => {
@@ -214,6 +217,7 @@ export default function VoiceDiary() {
     setCompletedAction(null);
     setPendingPlan(null);
     setShowPlanConfirm(false);
+    setAgentStepProgress([]);
   };
 
   const processAudio = async (audioBlob) => {
@@ -369,12 +373,70 @@ export default function VoiceDiary() {
     if (!pendingPlan) return;
 
     const transcriptForFeed = finalTranscript;
+    const plan = pendingPlan;
+    const actions = plan.actions || [];
+
     setShowPlanConfirm(false);
     setIsProcessing(true);
-    setParsedIntent('Running your request...');
+    setParsedIntent('Agent is working…');
+    setAgentStepProgress(
+      actions.map((a) => ({
+        action: a.action,
+        description: a.description || String(a.action || '').replace(/_/g, ' '),
+        status: 'pending',
+        detailMessage: '',
+      })),
+    );
 
     try {
-      const execResult = await executeConfirmedPlan(pendingPlan);
+      let executorState = null;
+      const aggregatedResults = [];
+
+      for (let i = 0; i < actions.length; i++) {
+        setAgentStepProgress((prev) =>
+          prev.map((s, j) => ({
+            ...s,
+            status: j < i ? 'done' : j === i ? 'running' : 'pending',
+          })),
+        );
+
+        const stepRes = await executePlanStep(plan, i, executorState);
+
+        if (!stepRes.success) {
+          setAgentStepProgress((prev) =>
+            prev.map((s, j) =>
+              j === i
+                ? { ...s, status: 'error', detailMessage: stepRes.error || 'Request failed' }
+                : s,
+            ),
+          );
+          aggregatedResults.push({
+            action: actions[i].action,
+            description: actions[i].description,
+            result: { success: false, message: stepRes.error },
+          });
+          break;
+        }
+
+        executorState = stepRes.executor_state;
+        const row = stepRes.results[0];
+        if (row) aggregatedResults.push(row);
+
+        const ok = row?.result?.success !== false;
+        const msg =
+          (typeof row?.result?.message === 'string' && row.result.message) ||
+          row?.result?.error ||
+          '';
+
+        setAgentStepProgress((prev) =>
+          prev.map((s, j) =>
+            j === i ? { ...s, status: ok ? 'done' : 'error', detailMessage: msg } : s,
+          ),
+        );
+
+        await new Promise((r) => requestAnimationFrame(() => r()));
+      }
+
       setPendingPlan(null);
 
       await Promise.all([
@@ -385,7 +447,7 @@ export default function VoiceDiary() {
         queryClient.invalidateQueries({ queryKey: ['appointments'] }),
       ]);
 
-      const workflow_results = (execResult.results || []).map((r, idx) => ({
+      const workflow_results = aggregatedResults.map((r, idx) => ({
         step: idx + 1,
         action: r.action,
         description:
@@ -400,11 +462,11 @@ export default function VoiceDiary() {
             : r.result?.error || JSON.stringify(r.result ?? {}),
       }));
 
-      const ok = execResult.success === true;
-      const message =
-        execResult.output ||
-        execResult.summary ||
-        (ok ? 'Done.' : execResult.error || 'Something went wrong.');
+      const ok = aggregatedResults.length > 0 && aggregatedResults.every((r) => r.result?.success !== false);
+      const failed = aggregatedResults.filter((r) => r.result?.success === false);
+      const message = ok
+        ? `All ${aggregatedResults.length} steps finished. ${plan.summary || ''}`.trim()
+        : `Some steps need attention (${failed.length} issue(s)). Check the list below. ${plan.summary || ''}`.trim();
 
       setCompletedAction({
         success: ok,
@@ -420,7 +482,7 @@ export default function VoiceDiary() {
           action: transcriptForFeed || 'Confirmed plan',
           result: message,
           success: ok,
-          workflow_results: execResult.results,
+          workflow_results: aggregatedResults,
         },
         ...prev,
       ]);
@@ -431,13 +493,15 @@ export default function VoiceDiary() {
         setFinalTranscript('');
         setParsedIntent('');
         setCompletedAction(null);
-      }, 8000);
+        setAgentStepProgress([]);
+      }, 12000);
     } catch (error) {
       console.error('[VOICE ASSISTANT] Plan execution error:', error);
       setPendingPlan(null);
       const msg = error.message || 'Failed to run that plan. Please try again.';
       setCompletedAction({ success: false, message: msg });
       setParsedIntent('');
+      setAgentStepProgress([]);
       setActivityFeed((prev) => [
         {
           id: Date.now(),
@@ -1084,45 +1148,79 @@ export default function VoiceDiary() {
 
             {/* PROCESSING STATE */}
             {isProcessing && (
-              <div className="relative w-[500px] h-[500px] flex items-center justify-center">
-                <div className="absolute rounded-full bg-[#d6b164] blur-[100px]" style={{ inset: "-40%", opacity: 0.4 }} />
+              <div className="flex flex-col items-center gap-8 w-full max-w-[640px]">
+                <div className="relative w-[500px] h-[500px] flex items-center justify-center shrink-0">
+                  <div className="absolute rounded-full bg-[#d6b164] blur-[100px]" style={{ inset: "-40%", opacity: 0.4 }} />
 
-                <div
-                  className="absolute inset-[5%] rounded-full"
-                  style={{
-                    background: "radial-gradient(ellipse 115% 95% at 50% 8%, #7f91aa 0%, #647b98 20%, #4d647f 56%, #3b4f67 100%)",
-                    boxShadow: `
-                      inset 0 2px 0 rgba(255, 255, 255, 0.25),
-                      inset 0 -40px 80px rgba(37, 52, 72, 0.4),
-                      0 0 0 2px rgba(214, 177, 100, 0.3),
-                      0 12px 50px -10px rgba(214, 177, 100, 0.4)
-                    `,
-                  }}
-                />
+                  <div
+                    className="absolute inset-[5%] rounded-full"
+                    style={{
+                      background: "radial-gradient(ellipse 115% 95% at 50% 8%, #7f91aa 0%, #647b98 20%, #4d647f 56%, #3b4f67 100%)",
+                      boxShadow: `
+                        inset 0 2px 0 rgba(255, 255, 255, 0.25),
+                        inset 0 -40px 80px rgba(37, 52, 72, 0.4),
+                        0 0 0 2px rgba(214, 177, 100, 0.3),
+                        0 12px 50px -10px rgba(214, 177, 100, 0.4)
+                      `,
+                    }}
+                  />
 
-                <div className="absolute inset-[5%] rounded-full pointer-events-none"
-                  style={{ background: "radial-gradient(circle at 35% 22%, rgba(245, 249, 255, 0.3), transparent 48%)" }}
-                />
+                  <div className="absolute inset-[5%] rounded-full pointer-events-none"
+                    style={{ background: "radial-gradient(circle at 35% 22%, rgba(245, 249, 255, 0.3), transparent 48%)" }}
+                  />
 
-                <div className="absolute inset-0 flex items-center justify-center">
-                  <Loader2 className="w-16 h-16 text-white/60 animate-spin" style={{ animationDuration: '1.5s' }} />
+                  <div className="absolute inset-0 flex items-center justify-center">
+                    <Loader2 className="w-16 h-16 text-white/60 animate-spin" style={{ animationDuration: '1.5s' }} />
+                  </div>
                 </div>
 
-                {/* Agent thinking display */}
-                <div className="absolute -bottom-[120px] left-1/2 -translate-x-1/2 text-center w-[600px] px-8">
+                <div className="w-full px-4 text-center">
                   {finalTranscript && (
                     <div className="mb-4">
                       <div className="text-white/40 text-xs tracking-[0.3em] uppercase mb-2">You said</div>
-                      <p className="text-white/70 text-base font-light whitespace-normal break-words">"{finalTranscript}"</p>
+                      <p className="text-white/70 text-base font-light whitespace-normal break-words">&quot;{finalTranscript}&quot;</p>
                     </div>
                   )}
 
                   {parsedIntent && (
-                    <div className="mt-4">
-                      <div className="flex items-center justify-center gap-3 mb-2">
-                        <Loader2 className="w-4 h-4 text-[#d6b164] animate-spin" />
-                        <span className="text-[#d6b164] text-sm font-light tracking-wide">{parsedIntent}</span>
-                      </div>
+                    <div className="mb-4 flex items-center justify-center gap-3">
+                      <Loader2 className="w-4 h-4 text-[#d6b164] animate-spin" />
+                      <span className="text-[#d6b164] text-sm font-light tracking-wide">{parsedIntent}</span>
+                    </div>
+                  )}
+
+                  {agentStepProgress.length > 0 && (
+                    <div className="mt-2 rounded-2xl border border-[#d6b164]/25 bg-black/50 backdrop-blur-md p-5 text-left max-h-80 overflow-y-auto">
+                      <div className="text-[#d6b164] text-xs tracking-[0.25em] uppercase mb-4">Live agent</div>
+                      <ul className="space-y-3">
+                        {agentStepProgress.map((s, idx) => (
+                          <li key={`${s.action}-${idx}`} className="flex gap-3 text-sm">
+                            <span className="flex-shrink-0 w-6 text-white/30 tabular-nums">{idx + 1}</span>
+                            <div className="flex-1 min-w-0">
+                              <div className="flex items-start gap-2">
+                                {s.status === 'running' && (
+                                  <Loader2 className="w-4 h-4 text-[#d6b164] animate-spin shrink-0 mt-0.5" />
+                                )}
+                                {s.status === 'done' && (
+                                  <Check className="w-4 h-4 text-emerald-400 shrink-0 mt-0.5" />
+                                )}
+                                {s.status === 'error' && (
+                                  <AlertCircle className="w-4 h-4 text-amber-400 shrink-0 mt-0.5" />
+                                )}
+                                {s.status === 'pending' && (
+                                  <span className="w-4 h-4 rounded-full border border-white/25 shrink-0 mt-0.5" />
+                                )}
+                                <span className="text-white/85 font-light leading-snug">{s.description}</span>
+                              </div>
+                              {s.detailMessage ? (
+                                <p className="text-white/50 text-xs mt-1.5 pl-6 whitespace-normal break-words leading-relaxed">
+                                  {s.detailMessage}
+                                </p>
+                              ) : null}
+                            </div>
+                          </li>
+                        ))}
+                      </ul>
                     </div>
                   )}
                 </div>
