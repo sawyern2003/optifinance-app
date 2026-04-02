@@ -349,38 +349,52 @@ export function getAgentCapabilities() {
     {
       category: 'Patient Management',
       tools: [
-        { name: 'Find or Create Patient', description: 'Search for existing patients or create new patient records' },
+        { name: 'Find or Create Patient', description: 'Search or create patients (name, email, phone, contact)' },
+        { name: 'Update Patient', description: 'Change patient email, phone, contact, or notes' },
+        { name: 'Clinical Note', description: 'Add structured clinical notes to a patient file (optionally link to last treatment in the same run)' },
       ],
     },
     {
       category: 'Appointments',
       tools: [
-        { name: 'Book Appointment', description: 'Schedule consultations, treatments, and follow-ups' },
+        { name: 'Book Appointment', description: 'Schedule consultations, treatments, and follow-ups on the calendar' },
       ],
     },
     {
-      category: 'Treatments',
+      category: 'Treatments & Records',
       tools: [
-        { name: 'Record Treatment', description: 'Log completed treatments with payment information' },
+        { name: 'Record Treatment', description: 'Log treatments on Records / patient chart (links to invoices)' },
+        { name: 'Catalogue Price Lookup', description: 'Resolve price from treatment catalogue before billing' },
       ],
     },
     {
       category: 'Billing',
       tools: [
-        { name: 'Create Invoice', description: 'Generate invoices with optional discounts' },
-        { name: 'Send Invoice', description: 'Send invoices to patients via SMS or email' },
+        { name: 'Create Invoice', description: 'Generate invoices with optional discounts, linked to treatment rows' },
+        { name: 'Send Invoice', description: 'Send invoices via SMS and/or email' },
+        { name: 'Payment Reminder', description: 'SMS reminder for an unpaid invoice (Twilio)' },
       ],
     },
     {
       category: 'Expenses',
       tools: [
-        { name: 'Record Expense', description: 'Log business expenses across multiple categories' },
+        { name: 'Record Expense', description: 'Log business expenses by category' },
       ],
     },
     {
-      category: 'Insights',
+      category: 'Inventory & Compliance',
       tools: [
-        { name: 'Today\'s Summary', description: 'Get overview of appointments, treatments, and revenue' },
+        { name: 'Adjust Product Stock', description: 'Increase or decrease inventory product quantity' },
+        { name: 'Fridge Temperature', description: 'Log AM/PM fridge checks for regulatory records' },
+        { name: 'Equipment', description: 'Register equipment or update last/next service dates' },
+      ],
+    },
+    {
+      category: 'Settings & Market',
+      tools: [
+        { name: 'Clinic Profile', description: 'Update clinic name, bank details, invoice sender email fields' },
+        { name: 'Tax Settings', description: 'Update VAT registration, numbers, scheme, UTR, etc.' },
+        { name: 'Competitor Price', description: 'Add a competitor pricing benchmark row' },
       ],
     },
   ];

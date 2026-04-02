@@ -126,6 +126,32 @@ function formatPatientContact(patient: {
   return parts.join(' · ');
 }
 
+function resolveVisitDate(
+  param: string | undefined,
+  fallback: string,
+): string {
+  if (!param) return fallback;
+  if (/^\d{4}-\d{2}-\d{2}$/.test(param)) return param;
+  if (param === 'today') return new Date().toISOString().split('T')[0];
+  if (param === 'yesterday') {
+    const y = new Date();
+    y.setDate(y.getDate() - 1);
+    return y.toISOString().split('T')[0];
+  }
+  return fallback;
+}
+
+const EXPENSE_CATEGORIES = [
+  'Rent',
+  'Products',
+  'Wages',
+  'Insurance',
+  'Marketing',
+  'Utilities',
+  'Equipment',
+  'Other',
+];
+
 type PlanAction = {
   action: string;
   description?: string;
@@ -187,6 +213,7 @@ async function runOneAction(
         const patient_name = String(action.params.patient_name || '');
         const email = String(action.params.email || '');
         const contact = String(action.params.contact || '');
+        const phone = String(action.params.phone || '');
         next.currentPatientName = patient_name;
 
         const { data: newPatient, error } = await supabase
@@ -196,8 +223,9 @@ async function runOneAction(
             name: patient_name,
             email: email || '',
             contact: contact || '',
+            phone: phone || '',
             date_added: new Date().toISOString().split('T')[0],
-            notes: '',
+            notes: String(action.params.notes || ''),
           })
           .select()
           .single();
@@ -548,6 +576,432 @@ async function runOneAction(
           success: true,
           appointment: appointment,
           message: `Calendar: ${patient_name} — ${treatment_name} on ${appointmentDate} at ${time}`,
+        };
+        break;
+      }
+
+      case 'add_clinical_note': {
+        const patient_name = String(action.params.patient_name || '');
+        const raw_narrative = String(
+          action.params.narrative || action.params.raw_narrative || '',
+        ).trim();
+        if (!raw_narrative) {
+          result = { success: false, message: 'Clinical note text is missing' };
+          break;
+        }
+        const visit_date = resolveVisitDate(
+          action.params.visit_date as string | undefined,
+          new Date().toISOString().split('T')[0],
+        );
+        const { data: pn } = await supabase
+          .from('patients')
+          .select('id')
+          .eq('user_id', user_id)
+          .ilike('name', `%${patient_name}%`)
+          .limit(1)
+          .maybeSingle();
+        if (!pn) {
+          result = {
+            success: false,
+            message: `Patient "${patient_name}" not found — add them first or use find_patient/create_patient earlier in the plan`,
+          };
+          break;
+        }
+        const summary = String(action.params.clinical_summary || raw_narrative).slice(0, 2000);
+        const linkLast = action.params.link_to_last_treatment === true ||
+          action.params.link_to_last_treatment === 'true';
+        const teid =
+          (action.params.treatment_entry_id as string | undefined) ||
+          (linkLast ? next.currentTreatmentEntryId : null);
+
+        const noteRow: Record<string, unknown> = {
+          user_id,
+          patient_id: pn.id,
+          visit_date,
+          source: 'voice_diary',
+          raw_narrative,
+          structured: { clinical_summary: summary },
+        };
+        if (teid) noteRow.treatment_entry_id = teid;
+
+        const { error: cnErr } = await supabase.from('clinical_notes').insert(noteRow).select().single();
+        if (cnErr) throw cnErr;
+
+        result = {
+          success: true,
+          message: `Clinical note added to ${patient_name}'s file (${visit_date})`,
+        };
+        break;
+      }
+
+      case 'add_expense': {
+        const amount = Math.abs(Number(action.params.amount));
+        if (!Number.isFinite(amount) || amount <= 0) {
+          result = { success: false, message: 'Expense amount must be a positive number' };
+          break;
+        }
+        let category = String(action.params.category || 'Other');
+        if (!EXPENSE_CATEGORIES.includes(category)) category = 'Other';
+        const notes = String(
+          action.params.notes || action.params.description || `${category} (voice)`,
+        ).slice(0, 2000);
+        const date = resolveVisitDate(
+          action.params.date as string | undefined,
+          new Date().toISOString().split('T')[0],
+        );
+        const { data: exp, error: exErr } = await supabase
+          .from('expenses')
+          .insert({
+            user_id,
+            date,
+            category,
+            amount,
+            notes,
+          })
+          .select()
+          .single();
+        if (exErr) throw exErr;
+        result = {
+          success: true,
+          expense: exp,
+          message: `Logged expense £${amount.toFixed(2)} — ${category}`,
+        };
+        break;
+      }
+
+      case 'adjust_product_stock': {
+        const product_name = String(action.params.product_name || '');
+        const delta = Number(action.params.quantity_change ?? action.params.delta);
+        if (!product_name) {
+          result = { success: false, message: 'product_name is required' };
+          break;
+        }
+        if (!Number.isFinite(delta) || delta === 0) {
+          result = { success: false, message: 'quantity_change must be a non-zero number' };
+          break;
+        }
+        const { data: plist, error: pe } = await supabase
+          .from('products')
+          .select('*')
+          .eq('user_id', user_id)
+          .ilike('name', `%${product_name}%`)
+          .limit(5);
+        if (pe) throw pe;
+        if (!plist?.length) {
+          result = {
+            success: false,
+            message: `No inventory product matches "${product_name}". Add it in Inventory first.`,
+          };
+          break;
+        }
+        const prod = plist[0];
+        const cur = Number(prod.current_stock);
+        const newStock = cur + delta;
+        if (newStock < 0) {
+          result = {
+            success: false,
+            message: `Stock would be negative (${cur} + ${delta}).`,
+          };
+          break;
+        }
+        const { error: ue } = await supabase
+          .from('products')
+          .update({ current_stock: newStock })
+          .eq('id', prod.id)
+          .eq('user_id', user_id);
+        if (ue) throw ue;
+        result = {
+          success: true,
+          message: `${prod.name}: stock ${cur} → ${newStock} (${delta > 0 ? '+' : ''}${delta})`,
+        };
+        break;
+      }
+
+      case 'log_fridge_temperature': {
+        const temperature = Number(action.params.temperature);
+        if (!Number.isFinite(temperature)) {
+          result = { success: false, message: 'temperature must be a number (°C)' };
+          break;
+        }
+        let time_of_day = String(action.params.time_of_day || 'am').toLowerCase();
+        if (time_of_day !== 'am' && time_of_day !== 'pm') time_of_day = 'am';
+        const notes = action.params.notes != null ? String(action.params.notes).slice(0, 500) : null;
+        const { error: fe } = await supabase.from('fridge_temperatures').insert({
+          user_id,
+          temperature,
+          time_of_day,
+          notes,
+        });
+        if (fe) throw fe;
+        result = {
+          success: true,
+          message: `Fridge log: ${temperature}°C (${time_of_day.toUpperCase()})`,
+        };
+        break;
+      }
+
+      case 'register_equipment': {
+        const name = String(action.params.name || '');
+        if (!name) {
+          result = { success: false, message: 'Equipment name is required' };
+          break;
+        }
+        const type = String(action.params.type || 'other');
+        const { data: eq, error: eqe } = await supabase
+          .from('equipment')
+          .insert({
+            user_id,
+            name,
+            type,
+            serial_number: action.params.serial_number
+              ? String(action.params.serial_number)
+              : null,
+            manufacturer: action.params.manufacturer
+              ? String(action.params.manufacturer)
+              : null,
+          })
+          .select()
+          .single();
+        if (eqe) throw eqe;
+        result = {
+          success: true,
+          message: `Registered equipment: ${name} (${type})`,
+        };
+        break;
+      }
+
+      case 'update_equipment_service': {
+        const name = String(action.params.equipment_name || action.params.name || '');
+        if (!name) {
+          result = { success: false, message: 'equipment_name is required' };
+          break;
+        }
+        const { data: elist } = await supabase
+          .from('equipment')
+          .select('*')
+          .eq('user_id', user_id)
+          .ilike('name', `%${name}%`)
+          .limit(3);
+        if (!elist?.length) {
+          result = {
+            success: false,
+            message: `No equipment matches "${name}"`,
+          };
+          break;
+        }
+        const eq = elist[0];
+        const patch: Record<string, unknown> = {};
+        if (action.params.last_service_date) {
+          patch.last_service_date = String(action.params.last_service_date);
+        }
+        if (action.params.next_service_date) {
+          patch.next_service_date = String(action.params.next_service_date);
+        }
+        if (Object.keys(patch).length === 0) {
+          result = {
+            success: false,
+            message: 'Provide last_service_date and/or next_service_date (YYYY-MM-DD)',
+          };
+          break;
+        }
+        const { error: upe } = await supabase
+          .from('equipment')
+          .update(patch)
+          .eq('id', eq.id)
+          .eq('user_id', user_id);
+        if (upe) throw upe;
+        result = {
+          success: true,
+          message: `Updated service dates for ${eq.name}`,
+        };
+        break;
+      }
+
+      case 'update_patient': {
+        const patient_name = String(action.params.patient_name || '');
+        const { data: prows } = await supabase
+          .from('patients')
+          .select('*')
+          .eq('user_id', user_id)
+          .ilike('name', `%${patient_name}%`)
+          .limit(1);
+        if (!prows?.length) {
+          result = { success: false, message: `Patient ${patient_name} not found` };
+          break;
+        }
+        const updates: Record<string, string> = {};
+        if (action.params.email !== undefined) updates.email = String(action.params.email);
+        if (action.params.contact !== undefined) updates.contact = String(action.params.contact);
+        if (action.params.phone !== undefined) updates.phone = String(action.params.phone);
+        if (action.params.notes !== undefined) updates.notes = String(action.params.notes);
+        if (Object.keys(updates).length === 0) {
+          result = {
+            success: false,
+            message: 'Provide at least one of: email, contact, phone, notes',
+          };
+          break;
+        }
+        const { error: pue } = await supabase
+          .from('patients')
+          .update(updates)
+          .eq('id', prows[0].id);
+        if (pue) throw pue;
+        result = {
+          success: true,
+          message: `Updated ${patient_name}'s details`,
+        };
+        break;
+      }
+
+      case 'update_clinic_profile': {
+        const allowed = [
+          'clinic_name',
+          'bank_name',
+          'account_number',
+          'sort_code',
+          'invoice_from_email',
+          'invoice_reply_to_email',
+          'invoice_sender_name',
+        ] as const;
+        const p = action.params as Record<string, unknown>;
+        const patch: Record<string, string> = {};
+        for (const k of allowed) {
+          if (p[k] !== undefined && p[k] !== null) {
+            patch[k] = String(p[k]).trim();
+          }
+        }
+        if (Object.keys(patch).length === 0) {
+          result = {
+            success: false,
+            message: 'No allowed profile fields in params (clinic_name, bank_*, invoice_* emails, etc.)',
+          };
+          break;
+        }
+        const { error: profE } = await supabase
+          .from('profiles')
+          .update(patch)
+          .eq('id', user_id);
+        if (profE) throw profE;
+        result = {
+          success: true,
+          message: `Clinic profile updated (${Object.keys(patch).join(', ')})`,
+        };
+        break;
+      }
+
+      case 'update_tax_settings': {
+        const taxKeys = [
+          'vat_registered',
+          'vat_number',
+          'vat_scheme',
+          'business_structure',
+          'flat_rate_percentage',
+          'utr_number',
+          'company_number',
+        ] as const;
+        const patch: Record<string, unknown> = {};
+        for (const k of taxKeys) {
+          if (action.params[k] !== undefined) {
+            const v = action.params[k];
+            if (k === 'vat_registered') {
+              patch[k] = v === true || v === 'true' || v === '1' || v === 1;
+            } else if (k === 'flat_rate_percentage') {
+              patch[k] = Number(v);
+            } else {
+              patch[k] = String(v);
+            }
+          }
+        }
+        if (Object.keys(patch).length === 0) {
+          result = {
+            success: false,
+            message: 'No tax fields provided (vat_registered, vat_number, …)',
+          };
+          break;
+        }
+        const { data: ts } = await supabase
+          .from('tax_settings')
+          .select('id')
+          .eq('user_id', user_id)
+          .limit(1)
+          .maybeSingle();
+        if (ts?.id) {
+          const { error: tse } = await supabase
+            .from('tax_settings')
+            .update(patch)
+            .eq('id', ts.id);
+          if (tse) throw tse;
+        } else {
+          const { error: tsi } = await supabase
+            .from('tax_settings')
+            .insert({ user_id, ...patch })
+            .select()
+            .single();
+          if (tsi) throw tsi;
+        }
+        result = { success: true, message: 'Tax settings updated' };
+        break;
+      }
+
+      case 'add_competitor_price': {
+        const treatment_name = String(action.params.treatment_name || '');
+        const competitor_name = String(action.params.competitor_name || '');
+        const price = Number(action.params.price);
+        if (!treatment_name || !competitor_name || !Number.isFinite(price)) {
+          result = {
+            success: false,
+            message: 'treatment_name, competitor_name, and price are required',
+          };
+          break;
+        }
+        const { error: cpe } = await supabase.from('competitor_pricing').insert({
+          user_id,
+          treatment_name,
+          competitor_name,
+          price,
+          notes: action.params.notes ? String(action.params.notes).slice(0, 500) : null,
+        });
+        if (cpe) throw cpe;
+        result = {
+          success: true,
+          message: `Saved competitor price: ${competitor_name} — ${treatment_name} @ £${price}`,
+        };
+        break;
+      }
+
+      case 'send_payment_reminder': {
+        if (!accessToken) {
+          throw new Error('send_payment_reminder requires your session (access_token).');
+        }
+        const patient_name = String(action.params.patient_name || '');
+        const { data: invs } = await supabase
+          .from('invoices')
+          .select('id')
+          .eq('user_id', user_id)
+          .ilike('patient_name', `%${patient_name}%`)
+          .neq('status', 'paid')
+          .order('created_at', { ascending: false })
+          .limit(1);
+        if (!invs?.length) {
+          result = {
+            success: false,
+            message: `No unpaid invoice found for ${patient_name}`,
+          };
+          break;
+        }
+        await invokeAsUser(
+          'send-payment-reminder',
+          {
+            invoiceId: invs[0].id,
+            includeReview:
+              Boolean(action.params.include_review) ||
+              Boolean(action.params.includeReview),
+          },
+          accessToken,
+        );
+        result = {
+          success: true,
+          message: `Payment reminder SMS sent for ${patient_name} (needs phone on invoice)`,
         };
         break;
       }

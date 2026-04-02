@@ -445,6 +445,11 @@ export default function VoiceDiary() {
         queryClient.invalidateQueries({ queryKey: ['treatmentCatalog'] }),
         queryClient.invalidateQueries({ queryKey: ['invoices'] }),
         queryClient.invalidateQueries({ queryKey: ['appointments'] }),
+        queryClient.invalidateQueries({ queryKey: ['clinical_notes'] }),
+        queryClient.invalidateQueries({ queryKey: ['expenses'] }),
+        queryClient.invalidateQueries({ queryKey: ['inventory-products'] }),
+        queryClient.invalidateQueries({ queryKey: ['fridge-temps'] }),
+        queryClient.invalidateQueries({ queryKey: ['equipment'] }),
       ]);
 
       const workflow_results = aggregatedResults.map((r, idx) => ({
@@ -825,7 +830,7 @@ export default function VoiceDiary() {
             </h3>
             <p className="text-white/45 text-sm mb-6 leading-relaxed">
               Here is what we understood from your voice command. Confirm to run it, or cancel to make no changes.
-              The assistant only runs the steps listed here (patient lookup, treatment row, invoice, calendar, send, etc.) — it cannot change data that is not covered by a step.
+              The assistant only runs the steps listed here (treatments, invoices, clinical notes, expenses, inventory, fridge logs, equipment, calendar, reminders, clinic/tax settings, etc.) — anything not shown as a step will not run.
             </p>
 
             {finalTranscript && (
