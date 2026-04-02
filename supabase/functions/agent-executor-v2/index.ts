@@ -71,29 +71,36 @@ WHEN TO USE WHAT:
 - "Invoice for consultation he had" → add_treatment first, then create_invoice
 
 CRITICAL RULES:
-1. Extract patient names, dates, amounts, etc. from the USER'S ACTUAL REQUEST
-2. DO NOT use example names like "Sarah" - use the real patient name from the request
+1. Extract ALL information from the USER'S ACTUAL REQUEST only
+2. Use the exact patient names, dates, and amounts from the request
 3. ALWAYS search for patients FIRST before doing anything else
 4. Use patient_id from search results in subsequent operations
 5. Chain operations logically (find patient → book/treatment → invoice → send)
 
 EXTRACTION RULES:
-- If request mentions a patient name → extract that exact name for patient_name
-- If request mentions a date (today, yesterday, tomorrow, specific date) → convert to YYYY-MM-DD
-- If request mentions a time → convert to HH:mm 24-hour format
-- If request mentions an amount → extract the number for amount field
-- If request mentions a treatment → extract that for treatment_name
+- Extract patient name exactly as mentioned in request
+- Convert date references to YYYY-MM-DD format
+- Convert times to HH:mm 24-hour format
+- Extract amounts as numbers
+- Extract treatment types exactly as stated
 
 OUTPUT FORMAT:
-Return ONLY a valid JSON array. Each step must have:
-- "tool": the function name to call
-- "reasoning": one sentence explaining why
-- "args": object with parameters extracted from USER REQUEST
+Return ONLY a valid JSON array:
+[
+  {
+    "tool": "function_name",
+    "reasoning": "brief explanation",
+    "args": {extracted parameters from request}
+  }
+]
 
-Use [FROM_STEP_1] if you need a result from a previous step (like patient_id).
-Use [TOMORROW] or [YESTERDAY] or [TODAY] for relative dates.
+SPECIAL PLACEHOLDERS:
+- [FROM_STEP_1] = use result from step 1 (patient_id)
+- [TOMORROW] = tomorrow's date
+- [YESTERDAY] = yesterday's date
+- [TODAY] = today's date
 
-Now read the user request below and create the plan:`;
+Read the user request and create the plan:`;
 
 const VERIFICATION_PROMPT = `You are verifying if an agent successfully completed the user's request.
 
@@ -655,7 +662,7 @@ async function planningState(context: AgentContext): Promise<AgentContext> {
     }
   ];
 
-  const response = await callClaude(messages, 'You are a planning expert. Extract information from the user request, not from examples.', false);
+  const response = await callClaude(messages, 'You are a planning expert. Read the user request carefully and extract all information from it.', false);
 
   const planText = response.content[0].text;
 
