@@ -1,8 +1,9 @@
 /**
  * ENTERPRISE AGENT API
  *
- * Handles communication with the LangChain-powered agent executor.
- * Supports streaming responses via Server-Sent Events.
+ * Supports two modes:
+ * 1. Planning mode: Parse voice command → Show confirmation dialog → Execute plan
+ * 2. Direct mode: Execute immediately (Phase 3 agent-executor-v3)
  */
 
 import { supabase } from '@/config/supabase';
@@ -149,6 +150,96 @@ export function parseAgentResponse(agentResponse) {
 }
 
 /**
+ * PLANNING MODE: Create execution plan for user confirmation
+ *
+ * @param {string} input - User's voice command or text input
+ * @returns {Promise<Object>} Execution plan with actions array
+ */
+export async function planAgentCommand(input) {
+  console.log('[AGENT API] Planning command:', input);
+
+  try {
+    // Get current user for user_id
+    const { data: { user } } = await supabase.auth.getUser();
+    const userId = user?.id || null;
+
+    // Call the agent-planner edge function
+    const { data, error } = await supabase.functions.invoke('agent-planner', {
+      body: {
+        input: input,
+        user_id: userId,
+      },
+    });
+
+    if (error) {
+      console.error('[AGENT API] Planning error:', error);
+      throw error;
+    }
+
+    console.log('[AGENT API] Plan created:', data.plan?.summary);
+
+    return {
+      success: true,
+      plan: data.plan,
+    };
+
+  } catch (error) {
+    console.error('[AGENT API] Planning error:', error);
+    return {
+      success: false,
+      error: error.message,
+      plan: null,
+    };
+  }
+}
+
+/**
+ * Execute a confirmed plan
+ *
+ * @param {Object} plan - Execution plan from planAgentCommand
+ * @returns {Promise<Object>} Execution results
+ */
+export async function executeConfirmedPlan(plan) {
+  console.log('[AGENT API] Executing confirmed plan:', plan.summary);
+
+  try {
+    // Get current user for user_id
+    const { data: { user } } = await supabase.auth.getUser();
+    const userId = user?.id || null;
+
+    // Call the agent-executor-confirmed edge function
+    const { data, error } = await supabase.functions.invoke('agent-executor-confirmed', {
+      body: {
+        plan: plan,
+        user_id: userId,
+      },
+    });
+
+    if (error) {
+      console.error('[AGENT API] Execution error:', error);
+      throw error;
+    }
+
+    console.log('[AGENT API] Execution complete:', data.summary);
+
+    return {
+      success: data.success,
+      summary: data.summary,
+      results: data.results,
+      output: data.output,
+    };
+
+  } catch (error) {
+    console.error('[AGENT API] Execution error:', error);
+    return {
+      success: false,
+      error: error.message,
+      output: `Failed to execute plan: ${error.message}`,
+    };
+  }
+}
+
+/**
  * Get agent capabilities (list of available tools)
  * This helps the UI show what the agent can do
  */
@@ -197,6 +288,8 @@ export function getAgentCapabilities() {
 export default {
   executeAgentCommand,
   executeAgentCommandStreaming,
+  planAgentCommand,
+  executeConfirmedPlan,
   parseAgentResponse,
   getAgentCapabilities,
 };
