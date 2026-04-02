@@ -25,6 +25,10 @@ type ExecutorState = {
   currentPatientName: string;
   currentPrice: number;
   currentInvoiceId: string | number | null;
+  /** UUID of treatment row created in this plan — links invoice in app (Records, PDF). */
+  currentTreatmentEntryId: string | null;
+  /** YYYY-MM-DD from last add_treatment in this plan — used on invoice.treatment_date. */
+  currentTreatmentDate: string | null;
 };
 
 function defaultState(): ExecutorState {
@@ -33,6 +37,8 @@ function defaultState(): ExecutorState {
     currentPatientName: '',
     currentPrice: 0,
     currentInvoiceId: null,
+    currentTreatmentEntryId: null,
+    currentTreatmentDate: null,
   };
 }
 
@@ -302,6 +308,9 @@ async function runOneAction(
 
         if (error) throw error;
 
+        next.currentTreatmentEntryId = String(treatment.id);
+        next.currentTreatmentDate = treatmentDate;
+
         result = {
           success: true,
           treatment: treatment,
@@ -337,19 +346,42 @@ async function runOneAction(
         const random = Math.floor(Math.random() * 1000).toString().padStart(3, '0');
         const nextInvoiceNumber = `${timestamp}${random}`;
 
+        const paramTreatmentDate = action.params.treatment_date as string | undefined;
+        let resolvedFromParam: string | null = null;
+        if (paramTreatmentDate) {
+          if (/^\d{4}-\d{2}-\d{2}$/.test(paramTreatmentDate)) {
+            resolvedFromParam = paramTreatmentDate;
+          } else if (paramTreatmentDate === 'today') {
+            resolvedFromParam = new Date().toISOString().split('T')[0];
+          } else if (paramTreatmentDate === 'yesterday') {
+            const y = new Date();
+            y.setDate(y.getDate() - 1);
+            resolvedFromParam = y.toISOString().split('T')[0];
+          }
+        }
+        const treatmentDateForInvoice =
+          resolvedFromParam ||
+          next.currentTreatmentDate ||
+          new Date().toISOString().split('T')[0];
+
+        const insertRow: Record<string, unknown> = {
+          user_id: user_id,
+          invoice_number: nextInvoiceNumber,
+          patient_name: patient_name,
+          patient_contact: patient_contact,
+          treatment_name: treatment_name,
+          treatment_date: treatmentDateForInvoice,
+          amount: finalAmount,
+          issue_date: new Date().toISOString().split('T')[0],
+          status: 'draft',
+        };
+        if (next.currentTreatmentEntryId) {
+          insertRow.treatment_entry_id = next.currentTreatmentEntryId;
+        }
+
         const { data: invoice, error } = await supabase
           .from('invoices')
-          .insert({
-            user_id: user_id,
-            invoice_number: nextInvoiceNumber,
-            patient_name: patient_name,
-            patient_contact: patient_contact,
-            treatment_name: treatment_name,
-            treatment_date: new Date().toISOString().split('T')[0],
-            amount: finalAmount,
-            issue_date: new Date().toISOString().split('T')[0],
-            status: 'draft',
-          })
+          .insert(insertRow)
           .select()
           .single();
 
@@ -360,10 +392,13 @@ async function runOneAction(
         const contactHint = patient_contact
           ? ''
           : ' Add phone or email on the patient or invoice to send.';
+        const linkHint = next.currentTreatmentEntryId
+          ? ' Linked to the treatment record you just saved.'
+          : '';
         result = {
           success: true,
           invoice: invoice,
-          message: `Created invoice for £${finalAmount.toFixed(2)}${contactHint}`,
+          message: `Created invoice for £${finalAmount.toFixed(2)} (${treatmentDateForInvoice})${linkHint}${contactHint}`,
         };
         break;
       }

@@ -823,8 +823,9 @@ export default function VoiceDiary() {
             <h3 id="voice-plan-title" className="text-white/90 text-xl font-light tracking-wider mb-2">
               Confirm this action
             </h3>
-            <p className="text-white/45 text-sm mb-6">
+            <p className="text-white/45 text-sm mb-6 leading-relaxed">
               Here is what we understood from your voice command. Confirm to run it, or cancel to make no changes.
+              The assistant only runs the steps listed here (patient lookup, treatment row, invoice, calendar, send, etc.) — it cannot change data that is not covered by a step.
             </p>
 
             {finalTranscript && (
