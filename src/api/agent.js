@@ -35,11 +35,10 @@ export async function executeAgentCommand(input, options = {}) {
     const { data: { user } } = await supabase.auth.getUser();
     const userId = user?.id || null;
 
-    // Call the agent-executor-v2 edge function (Phase 2: Autonomous Agent)
-    const { data, error } = await supabase.functions.invoke('agent-executor-v2', {
+    // Call the agent-executor-v3 edge function (Phase 3: Simple GPT-4o Agent)
+    const { data, error } = await supabase.functions.invoke('agent-executor-v3', {
       body: {
         input: input,
-        session_id: sessionId,
         user_id: userId,
       },
     });
