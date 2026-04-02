@@ -7,6 +7,7 @@
  */
 
 import { supabase, SUPABASE_URL, SUPABASE_ANON_KEY } from '@/config/supabase';
+import { ensureSession, edgeInvokeErrorMessage } from '@/api/invoices';
 
 /**
  * Execute a command with the AI agent and stream the response
@@ -169,48 +170,47 @@ export async function planAgentCommand(input) {
   console.log('[AGENT API] Planning command:', input);
 
   try {
-    // Get current user for user_id
-    const { data: { user }, error: userError } = await supabase.auth.getUser();
-
-    if (userError || !user) {
-      console.error('[AGENT API] User not authenticated:', userError);
-      return {
-        success: false,
-        error: 'You must be logged in to use voice commands',
-        plan: null,
-      };
-    }
-
-    const userId = user.id;
+    const session = await ensureSession();
+    const userId = session.user.id;
 
     console.log('[AGENT API] User authenticated:', userId);
 
-    // Call the agent-planner edge function
-    const { data, error } = await supabase.functions.invoke('agent-planner', {
+    const { data, error, response } = await supabase.functions.invoke('agent-planner', {
       body: {
         input: input,
         user_id: userId,
       },
+      headers: {
+        Authorization: `Bearer ${session.access_token}`,
+      },
     });
 
     if (error) {
-      console.error('[AGENT API] Planning error from edge function:', error);
+      const msg = await edgeInvokeErrorMessage(error, response);
+      console.error('[AGENT API] Planning error from edge function:', msg);
       return {
         success: false,
-        error: error.message || JSON.stringify(error),
+        error: msg,
         plan: null,
       };
     }
 
-    console.log('[AGENT API] Plan created:', data.plan?.summary);
+    console.log('[AGENT API] Plan created:', data?.plan?.summary);
     console.log('[AGENT API] Full response:', data);
 
-    // Check if response has the expected structure
+    if (data && data.success === false && data.error) {
+      return {
+        success: false,
+        error: String(data.error),
+        plan: null,
+      };
+    }
+
     if (!data || !data.plan) {
       console.error('[AGENT API] Invalid response structure:', data);
       return {
         success: false,
-        error: 'Invalid response from planner',
+        error: data?.error ? String(data.error) : 'Invalid response from planner',
         plan: null,
       };
     }
@@ -240,24 +240,31 @@ export async function executeConfirmedPlan(plan) {
   console.log('[AGENT API] Executing confirmed plan:', plan.summary);
 
   try {
-    // Get current user for user_id
-    const { data: { user } } = await supabase.auth.getUser();
-    const userId = user?.id || null;
+    const session = await ensureSession();
+    const userId = session.user.id;
 
-    // Call the agent-executor-confirmed edge function
-    const { data, error } = await supabase.functions.invoke('agent-executor-confirmed', {
+    const { data, error, response } = await supabase.functions.invoke('agent-executor-confirmed', {
       body: {
         plan: plan,
         user_id: userId,
       },
+      headers: {
+        Authorization: `Bearer ${session.access_token}`,
+      },
     });
 
     if (error) {
-      console.error('[AGENT API] Execution error:', error);
-      throw error;
+      const msg = await edgeInvokeErrorMessage(error, response);
+      console.error('[AGENT API] Execution error:', msg);
+      return {
+        success: false,
+        error: msg,
+        output: msg,
+        results: [],
+      };
     }
 
-    console.log('[AGENT API] Execution complete:', data.summary);
+    console.log('[AGENT API] Execution complete:', data?.summary);
 
     return {
       success: data.success,
@@ -272,6 +279,7 @@ export async function executeConfirmedPlan(plan) {
       success: false,
       error: error.message,
       output: `Failed to execute plan: ${error.message}`,
+      results: [],
     };
   }
 }

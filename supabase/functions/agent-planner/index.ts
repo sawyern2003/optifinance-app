@@ -14,9 +14,11 @@ const corsHeaders = {
   'Access-Control-Allow-Methods': 'POST, OPTIONS',
 };
 
-const openaiApiKey = Deno.env.get('OPENAI_API_KEY')!;
-const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
-const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
+const json = (body: Record<string, unknown>, status = 200) =>
+  new Response(JSON.stringify(body), {
+    status,
+    headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+  });
 
 const PLANNING_PROMPT = `You are a clinic AI assistant. Parse the user's voice command and create a detailed execution plan.
 
@@ -67,46 +69,84 @@ serve(async (req) => {
   }
 
   try {
+    const openaiApiKey = Deno.env.get('OPENAI_API_KEY')?.trim();
+    if (!openaiApiKey) {
+      console.error('[PLANNER] OPENAI_API_KEY is not set');
+      return json({
+        success: false,
+        error:
+          'Voice planner is not configured (OpenAI key missing). Add OPENAI_API_KEY to Edge Function secrets in Supabase.',
+      });
+    }
+
+    const supabaseUrl = Deno.env.get('SUPABASE_URL');
+    const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
+    if (!supabaseUrl || !supabaseServiceKey) {
+      console.error('[PLANNER] Supabase env missing');
+      return json({ success: false, error: 'Server configuration error. Please contact support.' });
+    }
+
     const { input, user_id } = await req.json();
 
-    if (!input) throw new Error('No input provided');
-    if (!user_id) throw new Error('user_id required');
+    if (!input) return json({ success: false, error: 'No input provided' });
+    if (!user_id) return json({ success: false, error: 'user_id required' });
 
     console.log('[PLANNER] Parsing:', input);
 
-    // Call GPT-4o to create plan
     const response = await fetch('https://api.openai.com/v1/chat/completions', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'Authorization': `Bearer ${openaiApiKey}`,
+        Authorization: `Bearer ${openaiApiKey}`,
       },
       body: JSON.stringify({
         model: 'gpt-4o',
         messages: [
           { role: 'system', content: 'You create execution plans for clinic voice commands.' },
-          { role: 'user', content: PLANNING_PROMPT + `\n\n"${input}"` }
+          { role: 'user', content: PLANNING_PROMPT + `\n\n"${input}"` },
         ],
         temperature: 0.1,
-        response_format: { type: 'json_object' }
+        response_format: { type: 'json_object' },
       }),
     });
 
     if (!response.ok) {
       const errorText = await response.text();
       console.error('[PLANNER] OpenAI error:', response.status, errorText);
-      throw new Error(`OpenAI error ${response.status}: ${errorText}`);
+      return json({
+        success: false,
+        error: `OpenAI request failed (${response.status}). Check API key and billing.`,
+      });
     }
 
     const result = await response.json();
-    const planText = result.choices[0].message.content;
-    const plan = JSON.parse(planText);
+    const planText = result.choices?.[0]?.message?.content;
+    if (!planText || typeof planText !== 'string') {
+      return json({ success: false, error: 'Empty response from language model. Please try again.' });
+    }
 
-    // If needs price check, look up prices from catalogue
-    if (plan.needsPriceCheck) {
+    let plan: Record<string, unknown>;
+    try {
+      plan = JSON.parse(planText) as Record<string, unknown>;
+    } catch {
+      console.error('[PLANNER] JSON parse failed:', planText.slice(0, 500));
+      return json({ success: false, error: 'Could not parse planner output. Please try rephrasing your request.' });
+    }
+
+    if (!Array.isArray(plan.actions)) {
+      plan.actions = [];
+    }
+
+    if (plan.needsPriceCheck && (plan.actions as { action?: string; params?: { treatment_name?: string }; result?: unknown; description?: string }[]).length > 0) {
       const supabase = createClient(supabaseUrl, supabaseServiceKey);
+      const actions = plan.actions as {
+        action: string;
+        params?: { treatment_name?: string };
+        result?: { price?: number };
+        description?: string;
+      }[];
 
-      for (const action of plan.actions) {
+      for (const action of actions) {
         if (action.action === 'get_price' && action.params?.treatment_name) {
           const { data } = await supabase
             .from('treatment_catalog')
@@ -114,7 +154,7 @@ serve(async (req) => {
             .eq('user_id', user_id)
             .ilike('treatment_name', `%${action.params.treatment_name}%`)
             .limit(1)
-            .single();
+            .maybeSingle();
 
           if (data) {
             action.result = { price: data.price };
@@ -126,16 +166,10 @@ serve(async (req) => {
 
     console.log('[PLANNER] Plan:', plan.summary);
 
-    return new Response(
-      JSON.stringify({ type: 'plan', plan, success: true }),
-      { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-    );
-
-  } catch (error: any) {
+    return json({ type: 'plan', plan, success: true });
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : String(error);
     console.error('[PLANNER] Error:', error);
-    return new Response(
-      JSON.stringify({ type: 'error', error: error.message }),
-      { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-    );
+    return json({ success: false, error: message || 'Planner failed' });
   }
 });

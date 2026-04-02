@@ -23,3 +23,10 @@ verify_jwt = false
 
 [functions.clinic-llm]
 verify_jwt = false
+
+# Voice plan → confirm flow (same as clinic-llm: avoid gateway 401 when JWT is stale).
+[functions.agent-planner]
+verify_jwt = false
+
+[functions.agent-executor-confirmed]
+verify_jwt = false
