@@ -40,35 +40,36 @@ DATABASE TABLES:
  */
 const SYSTEM_PROMPT = `You are a helpful AI assistant for a clinic. Staff use you to manage patients, appointments, treatments, and invoices through voice commands.
 
-Your job: When staff ask you to do something, use the available tools to do it. Don't ask for information that might be in the database - search first.
+CRITICAL RULES:
+1. NEVER ask the user for information - ALWAYS search the database first
+2. NEVER ask for prices - ALWAYS use get_treatment_price to look them up
+3. NEVER ask for patient details - ALWAYS use create_or_find_patient to search
+4. Use fuzzy/partial matching - "Morpheus aid" should find "Morpheus 8"
+5. If treatment name doesn't match exactly, try variations and partial matches
+6. Complete the ENTIRE workflow - don't stop halfway
 
 ${DATABASE_SCHEMA}
 
-TOOL USAGE:
-- Common tasks: Use specific tools (create_or_find_patient, book_appointment, etc)
-- Complex queries: Use query_database with SQL for unusual requests, reports, analytics
-- Always filter by user_id when using query_database
-- Treatment mentioned? Look up price with get_treatment_price first
+WORKFLOW - Follow this EXACTLY for invoice requests:
+User says: "Invoice [patient] for [treatment] with [discount]"
 
-Key behaviors:
-- Patient mentioned? Search the database with create_or_find_patient first
-- "Had treatment yesterday"? Use add_treatment (records past treatments)
-- "Coming in tomorrow"? Use book_appointment (schedules future appointments)
-- Always use patient_id from search results in subsequent operations
-- Always use prices from the catalogue, never guess or assume £0
-- Extract dates, times, patient names directly from the user's request
-- Complete the full workflow without asking for confirmation
+YOU MUST:
+1. Search for patient → create_or_find_patient with patient name
+2. Look up treatment price → get_treatment_price (REQUIRED - handles fuzzy matching)
+3. Record treatment → add_treatment (use price from step 2)
+4. Create invoice → create_invoice (apply discount if mentioned)
+5. Send invoice → send_invoice (REQUIRED - don't skip this)
 
-Workflow for "Patient had treatment":
-1. Search for patient (create_or_find_patient)
-2. Look up treatment price (get_treatment_price)
-3. Record treatment with correct price (add_treatment)
-4. Create invoice with correct price (create_invoice)
-5. Send invoice (send_invoice)
+TREATMENT NAME MATCHING:
+- User says "Morpheus aid" → Look for "Morpheus" (partial match)
+- User says "consultation" → Look for "Consultation" (case insensitive)
+- get_treatment_price tool handles fuzzy matching automatically
+- If not found, check treatment_catalog table with SQL query for similar names
 
-For unusual requests (reports, analytics, complex filters), use query_database:
-Example: "Show patients who haven't paid" → SELECT name FROM invoices WHERE user_id = [userId] AND status != 'paid'
-Example: "Revenue by treatment type" → SELECT treatment_name, SUM(amount) FROM treatment_entries WHERE user_id = [userId] GROUP BY treatment_name
+NEVER STOP HALFWAY:
+- Always complete ALL 5 steps for invoice requests
+- If a step fails, continue with the workflow anyway
+- Report what was done and what failed at the end
 
 Keep responses conversational and brief (they're spoken aloud - no markdown formatting).`;
 
@@ -212,11 +213,11 @@ const tools = [
     type: 'function',
     function: {
       name: 'get_treatment_price',
-      description: 'Look up the price of a treatment from the catalogue. ALWAYS use this before creating invoices or recording treatments.',
+      description: 'Look up the price of a treatment from the catalogue. ALWAYS use this before creating invoices or recording treatments. Uses fuzzy matching - "Morpheus aid" will find "Morpheus 8". Always returns a price (£0 if not found).',
       parameters: {
         type: 'object',
         properties: {
-          treatment_name: { type: 'string', description: 'Treatment name (e.g., Consultation, Botox, Filler)' }
+          treatment_name: { type: 'string', description: 'Treatment name as mentioned by user (can be partial or misspelled)' }
         },
         required: ['treatment_name']
       }
@@ -575,22 +576,42 @@ async function executeFunction(functionName: string, args: any, userId: string |
     case 'get_treatment_price': {
       const { treatment_name } = args;
 
-      // Search treatment catalogue for price
-      const { data: treatments } = await supabase
+      console.log('[AGENT] Looking up treatment price for:', treatment_name);
+
+      // Try exact fuzzy match first
+      let { data: treatments } = await supabase
         .from('treatment_catalog')
         .select('*')
         .eq('user_id', userId)
         .ilike('treatment_name', `%${treatment_name}%`)
         .limit(1);
 
+      // If not found, try extracting first word for broader match
       if (!treatments || treatments.length === 0) {
+        const firstWord = treatment_name.split(' ')[0];
+        console.log('[AGENT] Trying broader match with:', firstWord);
+
+        const { data: broadMatch } = await supabase
+          .from('treatment_catalog')
+          .select('*')
+          .eq('user_id', userId)
+          .ilike('treatment_name', `%${firstWord}%`)
+          .limit(1);
+
+        treatments = broadMatch;
+      }
+
+      if (!treatments || treatments.length === 0) {
+        console.log('[AGENT] Treatment not found, using default price £0');
         return {
-          success: false,
-          message: `Treatment "${treatment_name}" not found in catalogue. Please specify the price.`,
+          success: true,
+          price: 0,
+          message: `Treatment "${treatment_name}" not found in catalogue. Using £0 - you may need to update the price manually.`,
         };
       }
 
       const treatment = treatments[0];
+      console.log('[AGENT] Found treatment:', treatment.treatment_name, '£' + treatment.price);
 
       return {
         success: true,
