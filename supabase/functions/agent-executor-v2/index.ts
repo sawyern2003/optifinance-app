@@ -52,73 +52,48 @@ interface AgentContext {
  * SYSTEM PROMPTS FOR EACH STATE
  */
 
-const PLANNING_PROMPT = `You are an expert clinic management AI. Analyze the user's request and create a step-by-step execution plan.
+const PLANNING_PROMPT = `You are an expert clinic management AI. Read the user's request carefully and create an execution plan using their EXACT details.
 
 AVAILABLE TOOLS:
 - create_or_find_patient: Search for or create patient records
-- book_appointment: Schedule appointments in calendar
-- add_treatment: Record completed treatments
-- create_invoice: Generate invoices
+- book_appointment: Schedule FUTURE appointments (use when patient is coming in)
+- add_treatment: Record COMPLETED treatments (use when patient already had treatment)
+- create_invoice: Generate invoices for treatments
 - send_invoice: Send invoices via SMS/email
 - add_expense: Record business expenses
 - send_reminder: Send payment reminders
 - update_patient: Update patient information
 - get_today_summary: Get today's activity summary
 
+WHEN TO USE WHAT:
+- "Patient is coming tomorrow" → book_appointment
+- "Patient had treatment yesterday" → add_treatment (NOT book_appointment)
+- "Invoice for consultation he had" → add_treatment first, then create_invoice
+
 CRITICAL RULES:
-1. ALWAYS search for patients FIRST before asking for their details
-2. Use patient_id from search results in subsequent operations
-3. Chain operations logically (find patient → book appointment → create invoice → send)
-4. If user mentions a patient name, ASSUME they exist in database - search for them
-5. Only create new patient if search truly returns no results
+1. Extract patient names, dates, amounts, etc. from the USER'S ACTUAL REQUEST
+2. DO NOT use example names like "Sarah" - use the real patient name from the request
+3. ALWAYS search for patients FIRST before doing anything else
+4. Use patient_id from search results in subsequent operations
+5. Chain operations logically (find patient → book/treatment → invoice → send)
+
+EXTRACTION RULES:
+- If request mentions a patient name → extract that exact name for patient_name
+- If request mentions a date (today, yesterday, tomorrow, specific date) → convert to YYYY-MM-DD
+- If request mentions a time → convert to HH:mm 24-hour format
+- If request mentions an amount → extract the number for amount field
+- If request mentions a treatment → extract that for treatment_name
 
 OUTPUT FORMAT:
-Return a JSON array of steps, each with:
-{
-  "tool": "tool_name",
-  "reasoning": "why this step is needed",
-  "args": { "arg_name": "value" }
-}
+Return ONLY a valid JSON array. Each step must have:
+- "tool": the function name to call
+- "reasoning": one sentence explaining why
+- "args": object with parameters extracted from USER REQUEST
 
-Example:
-User: "Add Sarah to calendar tomorrow at 2pm and invoice her £100"
-Plan:
-[
-  {
-    "tool": "create_or_find_patient",
-    "reasoning": "Search for Sarah in database to get her patient_id and contact info",
-    "args": { "patient_name": "Sarah" }
-  },
-  {
-    "tool": "book_appointment",
-    "reasoning": "Schedule Sarah's appointment using her patient_id from step 1",
-    "args": {
-      "patient_id": "[FROM_STEP_1]",
-      "patient_name": "Sarah",
-      "treatment_name": "Consultation",
-      "date": "[TOMORROW]",
-      "time": "14:00"
-    }
-  },
-  {
-    "tool": "create_invoice",
-    "reasoning": "Generate invoice for Sarah",
-    "args": {
-      "patient_name": "Sarah",
-      "treatment_name": "Consultation",
-      "amount": 100
-    }
-  },
-  {
-    "tool": "send_invoice",
-    "reasoning": "Send the invoice to Sarah",
-    "args": {
-      "patient_name": "Sarah"
-    }
-  }
-]
+Use [FROM_STEP_1] if you need a result from a previous step (like patient_id).
+Use [TOMORROW] or [YESTERDAY] or [TODAY] for relative dates.
 
-Now analyze this request and create the plan:`;
+Now read the user request below and create the plan:`;
 
 const VERIFICATION_PROMPT = `You are verifying if an agent successfully completed the user's request.
 
@@ -676,11 +651,11 @@ async function planningState(context: AgentContext): Promise<AgentContext> {
   const messages = [
     {
       role: 'user',
-      content: PLANNING_PROMPT + `\n\nUSER REQUEST: ${context.userRequest}`
+      content: PLANNING_PROMPT + `\n\n====================\nUSER REQUEST TO ANALYZE:\n"${context.userRequest}"\n====================\n\nCreate a plan using the EXACT patient names, dates, and amounts from the user request above.`
     }
   ];
 
-  const response = await callClaude(messages, 'You are a planning expert.', false);
+  const response = await callClaude(messages, 'You are a planning expert. Extract information from the user request, not from examples.', false);
 
   const planText = response.content[0].text;
 
@@ -844,6 +819,14 @@ function resolveArgs(args: any, context: AgentContext): any {
       // Resolve [TODAY]
       if ((value as string).includes('[TODAY]')) {
         resolved[key] = new Date().toISOString().split('T')[0];
+        continue;
+      }
+
+      // Resolve [YESTERDAY]
+      if ((value as string).includes('[YESTERDAY]')) {
+        const yesterday = new Date();
+        yesterday.setDate(yesterday.getDate() - 1);
+        resolved[key] = yesterday.toISOString().split('T')[0];
         continue;
       }
     }
