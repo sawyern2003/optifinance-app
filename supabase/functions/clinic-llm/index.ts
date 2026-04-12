@@ -500,6 +500,295 @@ async function handleVoiceDiary(
   );
 }
 
+const POPULATE_FROM_TEXT_MAX_CHARS = 80_000;
+
+function buildPopulateFromTextPrompt(ctx: {
+  userNotes: string;
+  todayDate: string;
+  yesterdayDate: string;
+  treatmentsCatalog: CatalogRow[];
+  practitionerNames: string[];
+  patientNames: string[];
+  recentPending: PendingRow[];
+}): string {
+  const catalogStr = (ctx.treatmentsCatalog || [])
+    .map(
+      (t) =>
+        `${t.treatment_name} (£${t.default_price ?? 0}, ${t.duration_minutes ?? "N/A"} min)`,
+    )
+    .join(", ");
+
+  const pendingStr =
+    ctx.recentPending && ctx.recentPending.length > 0
+      ? ctx.recentPending
+          .map(
+            (r) =>
+              `${r.patient_name} - ${r.treatment_name} - £${r.price_paid} (${r.date})`,
+          )
+          .join(", ")
+      : "None";
+
+  const notesJson = JSON.stringify(ctx.userNotes);
+
+  return `You extract structured data from free text a clinic owner typed or pasted: patient lists, treatment/service menus, historical visits, expenses, or clinical narrative.
+
+TODAY'S DATE: ${ctx.todayDate}
+YESTERDAY'S DATE: ${ctx.yesterdayDate}
+
+AVAILABLE TREATMENTS (match names when possible; use default price when amount omitted): ${
+    catalogStr || "None listed"
+  }
+
+AVAILABLE PRACTITIONERS: ${(ctx.practitionerNames || []).join(", ") || "None"}
+
+KNOWN PATIENTS: ${(ctx.patientNames || []).join(", ") || "None"}
+
+RECENT PENDING TREATMENTS (for payment matching): ${pendingStr}
+
+USER NOTES (JSON string): ${notesJson}
+
+Extract ALL applicable structured data (same JSON schema as a voice diary):
+
+1) TREATMENTS / VISITS — dated services. For historical visit lists default payment_status to "paid" unless the text indicates unpaid/pending.
+   Fields: date, patient_name, treatment_name, price_paid, payment_status, amount_paid, practitioner_name (or null), duration_minutes (or null), notes (or null).
+
+2) PAYMENT UPDATES — money received against pending work.
+
+3) INVOICES — only when the user explicitly asks to invoice or send a bill (for pasted migration data, usually leave this empty).
+
+4) NEW PATIENTS — names with any contact given (phone, email, address, notes, F&F % if stated).
+
+5) CATALOG TREATMENTS — services to add to the price list.
+
+6) EXPENSES — business costs if mentioned.
+
+7) CLINICAL NOTES — clinical detail per patient visit when described.
+
+Rules: Do not invent people or amounts not supported by the text. Match treatment names to AVAILABLE TREATMENTS when reasonable.
+
+Respond with ONLY a single JSON object (no markdown), exactly in this shape:
+{"treatments":[],"payment_updates":[],"invoices":[],"patients":[],"catalog_treatments":[],"expenses":[],"clinical_notes":[]}
+Each object in "invoices" must include: patient_name, treatment_name, amount, date, send_after_create (boolean), send_via ("email"|"sms"|"both"), patient_contact (string or null).
+Each object in "clinical_notes" must include: patient_name, visit_date, raw_narrative, clinical_summary (and optional fields as above).`;
+}
+
+async function handlePopulateFromText(
+  apiKey: string,
+  body: Record<string, unknown>,
+): Promise<Response> {
+  let userNotes = typeof body.message === "string"
+    ? body.message.trim()
+    : typeof body.userNotes === "string"
+    ? body.userNotes.trim()
+    : "";
+  if (!userNotes) throw new Error("message is required");
+  userNotes = userNotes.replace(/^\uFEFF/, "");
+  if (userNotes.length > POPULATE_FROM_TEXT_MAX_CHARS) {
+    userNotes = userNotes.slice(0, POPULATE_FROM_TEXT_MAX_CHARS);
+  }
+
+  const todayDate = (body.todayDate as string) ||
+    new Date().toISOString().slice(0, 10);
+  const yesterdayFromToday = (() => {
+    const d = new Date(todayDate + "T12:00:00Z");
+    d.setUTCDate(d.getUTCDate() - 1);
+    return d.toISOString().slice(0, 10);
+  })();
+
+  const ctx = {
+    userNotes,
+    todayDate,
+    yesterdayDate: (body.yesterdayDate as string) || yesterdayFromToday,
+    treatmentsCatalog: Array.isArray(body.treatmentsCatalog)
+      ? body.treatmentsCatalog as CatalogRow[]
+      : [],
+    practitionerNames: Array.isArray(body.practitionerNames)
+      ? body.practitionerNames as string[]
+      : [],
+    patientNames: Array.isArray(body.patientNames)
+      ? body.patientNames as string[]
+      : [],
+    recentPending: Array.isArray(body.recentPending)
+      ? body.recentPending as PendingRow[]
+      : [],
+  };
+
+  const parsed = await openaiChatJson({
+    apiKey,
+    system:
+      "You extract structured clinic data from typed notes or pasted exports. Output valid JSON only, no prose.",
+    userContent: buildPopulateFromTextPrompt(ctx),
+    maxTokens: 8192,
+    temperature: 0.2,
+  });
+
+  const normalized = normalizeVoiceDiaryParsed(parsed);
+
+  const treatments = normalized.treatments.map((t) => ({
+    date: String(t.date ?? ctx.todayDate),
+    patient_name: String(t.patient_name ?? ""),
+    treatment_name: String(t.treatment_name ?? ""),
+    price_paid: Number(t.price_paid ?? 0),
+    payment_status: String(t.payment_status ?? "pending"),
+    amount_paid: Number(t.amount_paid ?? 0),
+    practitioner_name: t.practitioner_name != null
+      ? String(t.practitioner_name)
+      : null,
+    duration_minutes:
+      t.duration_minutes != null && t.duration_minutes !== ""
+        ? Number(t.duration_minutes)
+        : null,
+    notes: t.notes != null && String(t.notes).length ? String(t.notes) : null,
+  }));
+
+  const payment_updates = normalized.payment_updates.map((u) => ({
+    patient_name: String(u.patient_name ?? ""),
+    treatment_name:
+      u.treatment_name != null && String(u.treatment_name).length
+        ? String(u.treatment_name)
+        : null,
+    amount_paid: Number(u.amount_paid ?? 0),
+    date_hint:
+      u.date_hint != null && String(u.date_hint).length
+        ? String(u.date_hint)
+        : null,
+  }));
+
+  const invoices = normalized.invoices.map((i) => {
+    const sendViaRaw = String(i.send_via ?? "").toLowerCase().trim();
+    let send_via: "email" | "sms" | "both" = "email";
+    if (sendViaRaw === "sms") send_via = "sms";
+    else if (sendViaRaw === "both") send_via = "both";
+
+    const patient_contact =
+      i.patient_contact != null && String(i.patient_contact).trim().length > 0
+        ? String(i.patient_contact).trim()
+        : null;
+
+    return {
+      patient_name: String(i.patient_name ?? ""),
+      treatment_name: String(i.treatment_name ?? ""),
+      amount: Number(i.amount ?? 0),
+      date: String(i.date ?? ctx.todayDate),
+      send_after_create: false,
+      send_via,
+      patient_contact,
+    };
+  });
+
+  const patients = normalized.patients.map((p) => {
+    const row = p as Record<string, unknown>;
+    const ff = row.friends_family_discount_percent;
+    return {
+      name: String(row.name ?? "").trim(),
+      contact:
+        row.contact != null && String(row.contact).trim().length
+          ? String(row.contact).trim()
+          : null,
+      phone:
+        row.phone != null && String(row.phone).trim().length
+          ? String(row.phone).trim()
+          : null,
+      email:
+        row.email != null && String(row.email).trim().length
+          ? String(row.email).trim()
+          : null,
+      address:
+        row.address != null && String(row.address).trim().length
+          ? String(row.address).trim()
+          : null,
+      notes:
+        row.notes != null && String(row.notes).trim().length
+          ? String(row.notes).trim()
+          : null,
+      friends_family_discount_percent:
+        ff != null && ff !== "" && Number.isFinite(Number(ff))
+          ? Number(ff)
+          : null,
+    };
+  }).filter((p) => p.name.length > 0);
+
+  const catalog_treatments = normalized.catalog_treatments.map((t) => ({
+    treatment_name: String(t.treatment_name ?? ""),
+    category:
+      t.category != null && String(t.category).trim().length
+        ? String(t.category).trim()
+        : null,
+    default_price:
+      t.default_price != null && t.default_price !== ""
+        ? Number(t.default_price)
+        : null,
+    typical_product_cost:
+      t.typical_product_cost != null && t.typical_product_cost !== ""
+        ? Number(t.typical_product_cost)
+        : null,
+    default_duration_minutes:
+      t.default_duration_minutes != null && t.default_duration_minutes !== ""
+        ? Number(t.default_duration_minutes)
+        : null,
+  }));
+
+  const expenses = normalized.expenses.map((e) => ({
+    date: String(e.date ?? ctx.todayDate),
+    category: String(e.category ?? "Other"),
+    amount: Math.abs(Number(e.amount ?? 0)),
+    notes:
+      e.notes != null && String(e.notes).trim().length
+        ? String(e.notes).trim()
+        : null,
+  }));
+
+  const clinical_notes = normalized.clinical_notes.map((c) => ({
+    patient_name: String(c.patient_name ?? ""),
+    visit_date: String(c.visit_date ?? ctx.todayDate),
+    treatment_name:
+      c.treatment_name != null && String(c.treatment_name).trim().length
+        ? String(c.treatment_name).trim()
+        : null,
+    raw_narrative: String(c.raw_narrative ?? "").trim() ||
+      String(c.clinical_summary ?? "").trim(),
+    procedure_summary:
+      c.procedure_summary != null && String(c.procedure_summary).trim().length
+        ? String(c.procedure_summary).trim()
+        : null,
+    areas:
+      c.areas != null && String(c.areas).trim().length
+        ? String(c.areas).trim()
+        : null,
+    units:
+      c.units != null && c.units !== "" && Number.isFinite(Number(c.units))
+        ? Number(c.units)
+        : null,
+    complications:
+      c.complications != null && String(c.complications).trim().length
+        ? String(c.complications).trim()
+        : null,
+    patient_feedback:
+      c.patient_feedback != null && String(c.patient_feedback).trim().length
+        ? String(c.patient_feedback).trim()
+        : null,
+    next_steps:
+      c.next_steps != null && String(c.next_steps).trim().length
+        ? String(c.next_steps).trim()
+        : null,
+    clinical_summary: String(c.clinical_summary ?? "").trim() ||
+      String(c.raw_narrative ?? "").trim(),
+  }));
+
+  return new Response(
+    JSON.stringify({
+      treatments,
+      payment_updates,
+      invoices,
+      patients,
+      catalog_treatments,
+      expenses,
+      clinical_notes,
+    }),
+    { headers: { ...corsHeaders, "Content-Type": "application/json" } },
+  );
+}
+
 // --- Quick Add: natural language treatments ---
 
 async function handleQuickaddTreatments(
@@ -1251,9 +1540,11 @@ Deno.serve(async (req) => {
         return await handleCsvImportPatients(apiKey, body);
       case "csv_import_treatment_entries":
         return await handleCsvImportTreatmentEntries(apiKey, body);
+      case "populate_from_text":
+        return await handlePopulateFromText(apiKey, body);
       default:
         throw new Error(
-          `Unknown task "${task}". Use: voice_diary | quickadd_treatments | csv_import_patients | csv_import_treatment_entries | bank_expenses | pricing_insights | voice_command | voice_conversation`,
+          `Unknown task "${task}". Use: voice_diary | populate_from_text | quickadd_treatments | csv_import_patients | csv_import_treatment_entries | bank_expenses | pricing_insights | voice_command | voice_conversation`,
         );
     }
   } catch (error) {

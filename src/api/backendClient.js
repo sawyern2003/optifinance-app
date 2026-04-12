@@ -216,6 +216,7 @@ class Integrations {
       ParseQuickAddTreatments: this.ParseQuickAddTreatments.bind(this),
       ParseCsvPatients: this.ParseCsvPatients.bind(this),
       ParseCsvTreatmentEntries: this.ParseCsvTreatmentEntries.bind(this),
+      ParsePopulateFromText: this.ParsePopulateFromText.bind(this),
       ParseBankStatementExpenses: this.ParseBankStatementExpenses.bind(this),
       AnalyzePricingInsights: this.AnalyzePricingInsights.bind(this),
       ProcessVoiceConversation: this.ProcessVoiceConversation.bind(this),
@@ -231,7 +232,7 @@ class Integrations {
 
   async InvokeLLM(_args) {
     throw new Error(
-      'InvokeLLM is not used. Use ParseVoiceDiary, ParseQuickAddTreatments, ParseCsvPatients, ParseCsvTreatmentEntries, ParseBankStatementExpenses, or AnalyzePricingInsights (clinic-llm Edge Function).',
+      'InvokeLLM is not used. Use ParseVoiceDiary, ParsePopulateFromText, ParseQuickAddTreatments, ParseCsvPatients, ParseCsvTreatmentEntries, ParseBankStatementExpenses, or AnalyzePricingInsights (clinic-llm Edge Function).',
     );
   }
 
@@ -279,6 +280,20 @@ class Integrations {
     return {
       treatments: data?.treatments ?? [],
       catalog_treatments: data?.catalog_treatments ?? [],
+    };
+  }
+
+  /** Typed notes / pasted history → same shape as voice diary (for bulk apply). */
+  async ParsePopulateFromText(payload) {
+    const data = await this._invokeClinicLlm('populate_from_text', payload);
+    return {
+      treatments: data?.treatments ?? [],
+      payment_updates: data?.payment_updates ?? [],
+      invoices: data?.invoices ?? [],
+      patients: data?.patients ?? [],
+      catalog_treatments: data?.catalog_treatments ?? [],
+      expenses: data?.expenses ?? [],
+      clinical_notes: data?.clinical_notes ?? [],
     };
   }
 

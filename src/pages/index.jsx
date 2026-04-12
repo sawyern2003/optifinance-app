@@ -42,6 +42,8 @@ import Regulatory from "./Regulatory";
 
 import CsvImport from "./CsvImport";
 
+import ClinicDataChat from "./ClinicDataChat";
+
 import { BrowserRouter as Router, Route, Routes, useLocation, Navigate } from 'react-router-dom';
 import { useState, useEffect } from 'react';
 import { supabase } from '@/config/supabase';
@@ -86,6 +88,8 @@ const PAGES = {
     Regulatory: Regulatory,
 
     CsvImport: CsvImport,
+
+    ClinicDataChat: ClinicDataChat,
 
 }
 
@@ -205,6 +209,7 @@ function PagesContent() {
                             <Route path="/Inventory" element={<Inventory />} />
                             <Route path="/Regulatory" element={<Regulatory />} />
                             <Route path="/csvimport" element={<CsvImport />} />
+                            <Route path="/clinicdatachat" element={<ClinicDataChat />} />
                             <Route path="*" element={<Navigate to="/" replace />} />
                         </Routes>
                     </Layout>

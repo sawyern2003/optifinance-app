@@ -465,6 +465,13 @@ export default function CsvImport() {
           <p className="text-sm mt-2">
             <Link
               className="text-[#1a2845] underline underline-offset-2"
+              to={createPageUrl("ClinicDataChat")}
+            >
+              AI data chat
+            </Link>
+            {" · "}
+            <Link
+              className="text-[#1a2845] underline underline-offset-2"
               to={createPageUrl("Dashboard")}
             >
               Open dashboard
