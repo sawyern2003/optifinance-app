@@ -1,9 +1,20 @@
 /**
- * Unified clinic LLM: voice diary, Quick Add treatments, bank statement expenses, pricing analysis.
+ * Unified clinic LLM: voice diary, Quick Add treatments, CSV import (patients / treatment rows),
+ * bank statement expenses, pricing analysis.
  * Secret: OPENAI_API_KEY
  *
  * Deploy: supabase functions deploy clinic-llm --no-verify-jwt --project-ref YOUR_REF
  */
+
+const CSV_IMPORT_MAX_CHARS = 120_000;
+
+function stripBomAndClampCsv(text: string): string {
+  let s = text.replace(/^\uFEFF/, "").trim();
+  if (s.length > CSV_IMPORT_MAX_CHARS) {
+    s = s.slice(0, CSV_IMPORT_MAX_CHARS);
+  }
+  return s;
+}
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -575,6 +586,213 @@ Return ONLY JSON: {"treatments":[]}`;
   });
 }
 
+// --- CSV import: patients ---
+
+async function handleCsvImportPatients(
+  apiKey: string,
+  body: Record<string, unknown>,
+): Promise<Response> {
+  const csvText = stripBomAndClampCsv(
+    typeof body.csvText === "string" ? body.csvText : "",
+  );
+  if (!csvText) throw new Error("csvText is required");
+
+  const userContent =
+    `You map a clinic spreadsheet CSV into patient records. Headers may be arbitrary; infer columns.
+
+CSV:
+---
+${csvText}
+---
+
+Rules:
+- One object per data row (skip empty rows and obvious totals/headers repeated as data).
+- name is required per row; skip rows without a usable person name.
+- friends_family_discount_percent: number 0–100 or null if absent/unknown.
+- Do not invent rows not present in the CSV.
+
+Return ONLY JSON: {"patients":[{"name","contact","phone","email","address","notes","friends_family_discount_percent"}]}`;
+
+  const parsed = (await openaiChatJson({
+    apiKey,
+    system:
+      "You convert clinic CSV rows to JSON only. Output valid JSON with key patients (array).",
+    userContent,
+    maxTokens: 8192,
+    temperature: 0.1,
+  })) as Record<string, unknown>;
+
+  const raw = Array.isArray(parsed.patients) ? parsed.patients : [];
+  const patients = raw.map((p) => {
+    const row = p as Record<string, unknown>;
+    const name = String(row.name ?? "").trim();
+    const ff = row.friends_family_discount_percent;
+    return {
+      name,
+      contact:
+        row.contact != null && String(row.contact).trim().length
+          ? String(row.contact).trim()
+          : null,
+      phone:
+        row.phone != null && String(row.phone).trim().length
+          ? String(row.phone).trim()
+          : null,
+      email:
+        row.email != null && String(row.email).trim().length
+          ? String(row.email).trim()
+          : null,
+      address:
+        row.address != null && String(row.address).trim().length
+          ? String(row.address).trim()
+          : null,
+      notes:
+        row.notes != null && String(row.notes).trim().length
+          ? String(row.notes).trim()
+          : null,
+      friends_family_discount_percent:
+        ff != null && ff !== "" && !Number.isNaN(Number(ff))
+          ? Number(ff)
+          : null,
+    };
+  }).filter((p) => p.name.length > 0);
+
+  return new Response(JSON.stringify({ patients }), {
+    headers: { ...corsHeaders, "Content-Type": "application/json" },
+  });
+}
+
+// --- CSV import: treatment history (+ new catalogue types) ---
+
+async function handleCsvImportTreatmentEntries(
+  apiKey: string,
+  body: Record<string, unknown>,
+): Promise<Response> {
+  const csvText = stripBomAndClampCsv(
+    typeof body.csvText === "string" ? body.csvText : "",
+  );
+  if (!csvText) throw new Error("csvText is required");
+
+  const todayDate = (body.todayDate as string) ||
+    new Date().toISOString().slice(0, 10);
+  const catalog = Array.isArray(body.treatmentsCatalog)
+    ? body.treatmentsCatalog as CatalogRow[]
+    : [];
+  const catalogStr = catalog
+    .map(
+      (t) =>
+        `${t.treatment_name} (£${t.default_price ?? 0}, ${t.duration_minutes ?? "N/A"} min)`,
+    )
+    .join("; ");
+
+  const practitioners = Array.isArray(body.practitionerNames)
+    ? body.practitionerNames as string[]
+    : [];
+  const patients = Array.isArray(body.patientNames)
+    ? body.patientNames as string[]
+    : [];
+
+  const userContent =
+    `You map a clinic treatment history CSV into structured rows. Column names may vary; infer date, patient, treatment, price, payment, practitioner, duration, notes.
+
+AVAILABLE TREATMENTS (match names when possible; minor spelling OK): ${
+      catalogStr || "None"
+    }
+KNOWN PATIENTS: ${patients.join(", ") || "None"}
+KNOWN PRACTITIONERS: ${practitioners.join(", ") || "None"}
+TODAY (fallback date): ${todayDate}
+
+CSV:
+---
+${csvText}
+---
+
+For each billing/treatment row output an object in "treatments" with:
+- date (YYYY-MM-DD; infer year sensibly if missing)
+- patient_name (string or null)
+- treatment_name (string)
+- price_paid (number)
+- payment_status: "paid" | "pending" | "partially_paid"
+- amount_paid (number; for partially_paid less than price_paid; else match price or 0 if pending)
+- practitioner_name (string or null)
+- duration_minutes (number or null)
+- notes (string or null)
+
+Put NEW service types not in AVAILABLE TREATMENTS into "catalog_treatments" (dedupe by name): treatment_name, category (or null), default_price (from row if known else null), typical_product_cost (null unless stated), default_duration_minutes (or null).
+
+Skip header-only rows, subtotals, and blank lines. Do not invent patients or amounts not supported by the CSV.
+
+Return ONLY JSON: {"treatments":[],"catalog_treatments":[]}`;
+
+  const parsed = (await openaiChatJson({
+    apiKey,
+    system:
+      "You convert clinic treatment CSVs to JSON only. Output keys treatments and catalog_treatments (arrays).",
+    userContent,
+    maxTokens: 8192,
+    temperature: 0.1,
+  })) as Record<string, unknown>;
+
+  const rawT = Array.isArray(parsed.treatments) ? parsed.treatments : [];
+  const treatments = rawT.map((t) => {
+    const row = t as Record<string, unknown>;
+    return {
+      date: String(row.date ?? todayDate),
+      patient_name: row.patient_name != null && String(row.patient_name).length
+        ? String(row.patient_name).trim()
+        : null,
+      treatment_name: String(row.treatment_name ?? "").trim(),
+      price_paid: Number(row.price_paid ?? 0),
+      payment_status: String(row.payment_status ?? "paid"),
+      amount_paid: Number(row.amount_paid ?? row.price_paid ?? 0),
+      practitioner_name:
+        row.practitioner_name != null &&
+          String(row.practitioner_name).trim().length
+          ? String(row.practitioner_name).trim()
+          : null,
+      duration_minutes:
+        row.duration_minutes != null && row.duration_minutes !== ""
+          ? Number(row.duration_minutes)
+          : null,
+      notes:
+        row.notes != null && String(row.notes).trim().length
+          ? String(row.notes).trim()
+          : null,
+    };
+  }).filter((t) => t.treatment_name.length > 0);
+
+  const rawC = Array.isArray(parsed.catalog_treatments)
+    ? parsed.catalog_treatments
+    : [];
+  const catalog_treatments = rawC.map((c) => {
+    const row = c as Record<string, unknown>;
+    return {
+      treatment_name: String(row.treatment_name ?? "").trim(),
+      category:
+        row.category != null && String(row.category).trim().length
+          ? String(row.category).trim()
+          : null,
+      default_price:
+        row.default_price != null && row.default_price !== ""
+          ? Number(row.default_price)
+          : null,
+      typical_product_cost:
+        row.typical_product_cost != null && row.typical_product_cost !== ""
+          ? Number(row.typical_product_cost)
+          : null,
+      default_duration_minutes:
+        row.default_duration_minutes != null &&
+          row.default_duration_minutes !== ""
+          ? Number(row.default_duration_minutes)
+          : null,
+    };
+  }).filter((c) => c.treatment_name.length > 0);
+
+  return new Response(
+    JSON.stringify({ treatments, catalog_treatments }),
+    { headers: { ...corsHeaders, "Content-Type": "application/json" } },
+  );
+}
+
 // --- Bank statement → expenses ---
 
 const EXPENSE_CATEGORIES = [
@@ -1029,9 +1247,13 @@ Deno.serve(async (req) => {
         return await handleVoiceCommand(apiKey, body);
       case "voice_conversation":
         return await handleVoiceConversation(apiKey, body);
+      case "csv_import_patients":
+        return await handleCsvImportPatients(apiKey, body);
+      case "csv_import_treatment_entries":
+        return await handleCsvImportTreatmentEntries(apiKey, body);
       default:
         throw new Error(
-          `Unknown task "${task}". Use: voice_diary | quickadd_treatments | bank_expenses | pricing_insights | voice_command | voice_conversation`,
+          `Unknown task "${task}". Use: voice_diary | quickadd_treatments | csv_import_patients | csv_import_treatment_entries | bank_expenses | pricing_insights | voice_command | voice_conversation`,
         );
     }
   } catch (error) {

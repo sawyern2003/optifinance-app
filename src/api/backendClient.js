@@ -214,6 +214,8 @@ class Integrations {
       InvokeLLM: this.InvokeLLM.bind(this),
       ParseVoiceDiary: this.ParseVoiceDiary.bind(this),
       ParseQuickAddTreatments: this.ParseQuickAddTreatments.bind(this),
+      ParseCsvPatients: this.ParseCsvPatients.bind(this),
+      ParseCsvTreatmentEntries: this.ParseCsvTreatmentEntries.bind(this),
       ParseBankStatementExpenses: this.ParseBankStatementExpenses.bind(this),
       AnalyzePricingInsights: this.AnalyzePricingInsights.bind(this),
       ProcessVoiceConversation: this.ProcessVoiceConversation.bind(this),
@@ -229,7 +231,7 @@ class Integrations {
 
   async InvokeLLM(_args) {
     throw new Error(
-      'InvokeLLM is not used. Use ParseVoiceDiary, ParseQuickAddTreatments, ParseBankStatementExpenses, or AnalyzePricingInsights (clinic-llm Edge Function).',
+      'InvokeLLM is not used. Use ParseVoiceDiary, ParseQuickAddTreatments, ParseCsvPatients, ParseCsvTreatmentEntries, ParseBankStatementExpenses, or AnalyzePricingInsights (clinic-llm Edge Function).',
     );
   }
 
@@ -263,6 +265,21 @@ class Integrations {
   async ParseQuickAddTreatments(payload) {
     const data = await this._invokeClinicLlm('quickadd_treatments', payload);
     return { treatments: data?.treatments ?? [] };
+  }
+
+  /** CSV text → patient rows for bulk import. */
+  async ParseCsvPatients(payload) {
+    const data = await this._invokeClinicLlm('csv_import_patients', payload);
+    return { patients: data?.patients ?? [] };
+  }
+
+  /** CSV text → treatment entry rows + optional new catalogue types. */
+  async ParseCsvTreatmentEntries(payload) {
+    const data = await this._invokeClinicLlm('csv_import_treatment_entries', payload);
+    return {
+      treatments: data?.treatments ?? [],
+      catalog_treatments: data?.catalog_treatments ?? [],
+    };
   }
 
   /** Bank statement file URL → expense rows. */
