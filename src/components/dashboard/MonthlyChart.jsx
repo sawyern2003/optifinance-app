@@ -100,6 +100,11 @@ export default function MonthlyChart({ data }) {
         <h3 className="text-lg font-light text-white/90 mb-6 tracking-wider">
           {isSingleMonth ? 'Revenue, Costs & Profit' : 'Revenue, Costs & Profit Trend'}
         </h3>
+        {data.length === 0 ? (
+          <div className="text-center py-12">
+            <p className="text-white/40 font-light">No data available for this period</p>
+          </div>
+        ) : (
         <ResponsiveContainer width="100%" height={300}>
           {isSingleMonth ? (
             <BarChart data={enhancedData}>
@@ -194,6 +199,7 @@ export default function MonthlyChart({ data }) {
             </LineChart>
           )}
         </ResponsiveContainer>
+        )}
       </div>
     </div>
   );

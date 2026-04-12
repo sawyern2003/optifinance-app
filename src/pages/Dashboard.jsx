@@ -7,9 +7,10 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Link } from "react-router-dom";
 import { createPageUrl } from "@/utils";
-import { Banknote, TrendingDown, Wallet, Download, Hourglass, CheckCircle, FileText, TrendingUp, Lightbulb, LayoutGrid } from "lucide-react";
+import { Banknote, TrendingDown, Wallet, Download, Hourglass, CheckCircle, FileText, TrendingUp, Lightbulb, LayoutGrid, Sparkles } from "lucide-react";
 import { format, startOfMonth, endOfMonth, subMonths, startOfYear, addMonths } from "date-fns";
 import { useToast } from "@/components/ui/use-toast";
+import { parseRecordDate } from "@/lib/parseRecordDate";
 
 import StatCard from "../components/dashboard/StatCard";
 import MonthlyChart from "../components/dashboard/MonthlyChart";
@@ -211,13 +212,15 @@ export default function Dashboard() {
     const { start: startDate, end: endDate } = getDateRange();
     
     // Inline date filtering
-    const thisPeriodTreatments = treatments.filter(item => {
-      const itemDate = new Date(item.date);
+    const thisPeriodTreatments = treatments.filter((item) => {
+      const itemDate = parseRecordDate(item.date);
+      if (!itemDate) return false;
       return (startDate === null || itemDate >= startDate) && (endDate === null || itemDate <= endDate);
     });
-    
-    const thisPeriodExpenses = expenses.filter(item => {
-      const itemDate = new Date(item.date);
+
+    const thisPeriodExpenses = expenses.filter((item) => {
+      const itemDate = parseRecordDate(item.date);
+      if (!itemDate) return false;
       return (startDate === null || itemDate >= startDate) && (endDate === null || itemDate <= endDate);
     });
     
@@ -256,13 +259,15 @@ export default function Dashboard() {
     previousStart.setDate(previousStart.getDate() - daysDiff + 1);
     
     // Inline date filtering for previous period
-    const lastPeriodTreatments = treatments.filter(item => {
-      const itemDate = new Date(item.date);
+    const lastPeriodTreatments = treatments.filter((item) => {
+      const itemDate = parseRecordDate(item.date);
+      if (!itemDate) return false;
       return itemDate >= previousStart && itemDate <= previousEnd;
     });
 
-    const lastPeriodExpenses = expenses.filter(item => {
-      const itemDate = new Date(item.date);
+    const lastPeriodExpenses = expenses.filter((item) => {
+      const itemDate = parseRecordDate(item.date);
+      if (!itemDate) return false;
       return itemDate >= previousStart && itemDate <= previousEnd;
     });
     
@@ -285,12 +290,12 @@ export default function Dashboard() {
     // If 'all-time', determine the actual min/max dates from data
     if (rangeStartDate === null && rangeEndDate === null) {
         const allItemDates = [
-            ...treatments.map(t => new Date(t.date)),
-            ...expenses.map(e => new Date(e.date))
-        ].filter(d => !isNaN(d.getTime())); // Filter out invalid dates
-        
+            ...treatments.map((t) => parseRecordDate(t.date)),
+            ...expenses.map((e) => parseRecordDate(e.date)),
+        ].filter((d) => d && !isNaN(d.getTime()));
+
         if (allItemDates.length === 0) return []; // No data
-        
+
         rangeStartDate = startOfMonth(new Date(Math.min(...allItemDates)));
         rangeEndDate = endOfMonth(new Date(Math.max(...allItemDates)));
     } else {
@@ -298,23 +303,25 @@ export default function Dashboard() {
         rangeStartDate = startOfMonth(rangeStartDate);
         rangeEndDate = endOfMonth(rangeEndDate);
     }
-    
+
     let currentMonth = rangeStartDate;
-    
+
     while (currentMonth <= rangeEndDate) {
       const monthStart = startOfMonth(currentMonth);
       const monthEnd = endOfMonth(currentMonth);
-      
-      const monthTreatments = treatments.filter(t => {
-        const tDate = new Date(t.date);
+
+      const monthTreatments = treatments.filter((t) => {
+        const tDate = parseRecordDate(t.date);
+        if (!tDate) return false;
         return tDate >= monthStart && tDate <= monthEnd;
       });
-      
-      const monthExpenses = expenses.filter(e => {
-        const eDate = new Date(e.date);
+
+      const monthExpenses = expenses.filter((e) => {
+        const eDate = parseRecordDate(e.date);
+        if (!eDate) return false;
         return eDate >= monthStart && eDate <= monthEnd;
       });
-      
+
       const revenue = monthTreatments.reduce((sum, t) => {
         if (t.payment_status === 'pending') return sum;
         return sum + (t.amount_paid || t.price_paid || 0);
@@ -340,16 +347,16 @@ export default function Dashboard() {
   const getCashFlowData = () => {
     let { start: rangeStartDate, end: rangeEndDate } = getDateRange();
     const months = [];
-    
+
     // If 'all-time', determine the actual min/max dates from data
     if (rangeStartDate === null && rangeEndDate === null) {
         const allItemDates = [
-            ...treatments.map(t => new Date(t.date)),
-            ...expenses.map(e => new Date(e.date))
-        ].filter(d => !isNaN(d.getTime())); // Filter out invalid dates
-        
+            ...treatments.map((t) => parseRecordDate(t.date)),
+            ...expenses.map((e) => parseRecordDate(e.date)),
+        ].filter((d) => d && !isNaN(d.getTime()));
+
         if (allItemDates.length === 0) return []; // No data
-        
+
         rangeStartDate = startOfMonth(new Date(Math.min(...allItemDates)));
         rangeEndDate = endOfMonth(new Date(Math.max(...allItemDates)));
     } else {
@@ -357,23 +364,25 @@ export default function Dashboard() {
         rangeStartDate = startOfMonth(rangeStartDate);
         rangeEndDate = endOfMonth(rangeEndDate);
     }
-    
+
     let currentMonth = rangeStartDate;
-    
+
     while (currentMonth <= rangeEndDate) {
       const monthStart = startOfMonth(currentMonth);
       const monthEnd = endOfMonth(currentMonth);
-      
-      const monthTreatments = treatments.filter(t => {
-        const tDate = new Date(t.date);
+
+      const monthTreatments = treatments.filter((t) => {
+        const tDate = parseRecordDate(t.date);
+        if (!tDate) return false;
         return tDate >= monthStart && tDate <= monthEnd;
       });
-      
-      const monthExpenses = expenses.filter(e => {
-        const eDate = new Date(e.date);
+
+      const monthExpenses = expenses.filter((e) => {
+        const eDate = parseRecordDate(e.date);
+        if (!eDate) return false;
         return eDate >= monthStart && eDate <= monthEnd;
       });
-      
+
       const cashIn = monthTreatments.reduce((sum, t) => {
         if (t.payment_status === 'pending') return sum;
         return sum + (t.amount_paid || t.price_paid || 0);
@@ -395,13 +404,14 @@ export default function Dashboard() {
 
   const getCategoryBreakdown = () => {
     const { start: startDate, end: endDate } = getDateRange();
-    
+
     // Inline date filtering
-    const filteredTreatments = treatments.filter(item => {
-      const itemDate = new Date(item.date);
+    const filteredTreatments = treatments.filter((item) => {
+      const itemDate = parseRecordDate(item.date);
+      if (!itemDate) return false;
       return (startDate === null || itemDate >= startDate) && (endDate === null || itemDate <= endDate);
     });
-    
+
     const categoryMap = {};
     filteredTreatments.forEach(t => {
       const catalogTreatment = treatmentCatalog.find(ct => ct.treatment_name === t.treatment_name);
@@ -426,11 +436,12 @@ export default function Dashboard() {
     const { start: startDate, end: endDate } = getDateRange();
     
     // Inline date filtering
-    const filteredTreatments = treatments.filter(item => {
-      const itemDate = new Date(item.date);
+    const filteredTreatments = treatments.filter((item) => {
+      const itemDate = parseRecordDate(item.date);
+      if (!itemDate) return false;
       return (startDate === null || itemDate >= startDate) && (endDate === null || itemDate <= endDate);
     });
-    
+
     const treatmentMap = {};
     filteredTreatments.forEach(t => {
       if (!treatmentMap[t.treatment_name]) {

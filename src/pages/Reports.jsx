@@ -9,6 +9,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { FileDown, Loader2, Download, Calendar, FileText, Trash2 } from "lucide-react";
 import { format, startOfMonth, endOfMonth, startOfYear, subMonths } from "date-fns";
+import { parseRecordDate } from "@/lib/parseRecordDate";
 import { useToast } from "@/components/ui/use-toast";
 
 export default function Reports() {
@@ -113,13 +114,15 @@ export default function Reports() {
     
     const { start: startDate, end: endDate } = dateRange;
     
-    const filteredTreatments = treatments.filter(t => {
-      const tDate = new Date(t.date);
+    const filteredTreatments = treatments.filter((t) => {
+      const tDate = parseRecordDate(t.date);
+      if (!tDate) return false;
       return tDate >= startDate && tDate <= endDate;
     });
-    
-    const filteredExpenses = expenses.filter(e => {
-      const eDate = new Date(e.date);
+
+    const filteredExpenses = expenses.filter((e) => {
+      const eDate = parseRecordDate(e.date);
+      if (!eDate) return false;
       return eDate >= startDate && eDate <= endDate;
     });
     

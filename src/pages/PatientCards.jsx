@@ -41,6 +41,20 @@ function money(n) {
   return v.toFixed(2);
 }
 
+/** Remove newlines / pasted template junk from treatment_name (e.g. £{money(...)} from bad imports). */
+function cleanTreatmentDisplayName(name) {
+  const raw = String(name || "").trim();
+  if (!raw) return "Treatment";
+  const lines = raw.split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
+  const isJunkLine = (line) =>
+    /\{money|\$\{|£\{/.test(line) || (/^£[\d.,]+\s*[·•]/.test(line) && /\{/.test(line));
+  const kept = lines.filter((l) => !isJunkLine(l));
+  let title = (kept.length ? kept : lines).join(" — ").replace(/\s+/g, " ").trim();
+  const beforeTemplate = title.split(/\s+£\{/)[0]?.trim();
+  if (beforeTemplate) title = beforeTemplate;
+  return title || "Treatment";
+}
+
 function patientInitials(name) {
   if (!name || typeof name !== "string") return "?";
   const parts = name.trim().split(/\s+/).filter(Boolean);
@@ -268,7 +282,7 @@ function TreatmentTimeline({ treatments }) {
     return (
       <div className="py-12 text-center">
         <FileText className="h-10 w-10 text-white/20 mx-auto mb-2" />
-        <p className="text-sm text-white/40 font-light">No treatments recorded</p>
+        <p className="text-sm text-white/55 font-light">No treatments recorded</p>
       </div>
     );
   }
@@ -276,7 +290,7 @@ function TreatmentTimeline({ treatments }) {
   return (
     <div className="relative">
       {/* Timeline line */}
-      <div className="absolute left-[7px] top-6 bottom-6 w-px bg-gray-200" />
+      <div className="absolute left-[7px] top-6 bottom-6 w-px bg-white/15" />
 
       <div className="space-y-6">
         {treatments.map((t, index) => {
@@ -290,46 +304,56 @@ function TreatmentTimeline({ treatments }) {
               <div
                 className={`absolute left-0 top-1.5 h-4 w-4 rounded-full border-2 ${
                   isPaid
-                    ? "bg-emerald-500 border-emerald-500"
+                    ? "bg-emerald-500 border-emerald-400"
                     : isPartial
-                    ? "bg-rose-400 border-rose-400"
-                    : "bg-white border-gray-300"
+                    ? "bg-rose-500 border-rose-400"
+                    : "bg-white/10 border-white/35"
                 }`}
               />
 
               <div>
                 {/* Date */}
-                <div className="text-xs font-medium text-gray-500 mb-1">
+                <div className="text-xs font-medium text-white/50 mb-1 tracking-wide">
                   {t.date ? format(new Date(t.date), "d MMM yyyy") : "—"}
                 </div>
 
                 {/* Treatment name */}
-                <div className="font-medium text-gray-900 mb-1">
-                  {t.treatment_name || "Treatment"}
+                <div className="font-medium text-white/95 mb-1.5 leading-snug">
+                  {cleanTreatmentDisplayName(t.treatment_name)}
                 </div>
 
                 {/* Details */}
-                <div className="text-sm text-gray-600 space-y-1">
+                <div className="text-sm text-white/70 space-y-1.5">
                   {t.practitioner_name && (
-                    <div className="text-xs text-gray-500">with {t.practitioner_name}</div>
+                    <div className="text-xs text-white/45">with {t.practitioner_name}</div>
                   )}
 
-                  <div className="flex items-center gap-3 text-xs">
-                    <span className="tabular-nums">
-                      £{money(t.price_paid)} {!isPaid && `· £{money(t.amount_paid)} paid`}
+                  <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs">
+                    <span className="tabular-nums text-white/90 font-medium">
+                      £{money(t.price_paid)}
+                      {isPaid ? (
+                        <span className="text-white/45 font-normal"> · full amount</span>
+                      ) : (
+                        <>
+                          <span className="text-white/35 mx-1">·</span>
+                          <span className="text-white/75 font-normal">
+                            £{money(t.amount_paid)} paid
+                          </span>
+                        </>
+                      )}
                     </span>
                     {!isPaid && dueAmount > 0 && (
-                      <span className="text-rose-600 font-medium">
+                      <span className="text-rose-300 font-medium tabular-nums">
                         £{money(dueAmount)} due
                       </span>
                     )}
                     {isPaid && (
-                      <span className="text-emerald-600 font-medium">Paid</span>
+                      <span className="text-emerald-400 font-medium">Paid</span>
                     )}
                   </div>
 
                   {t.notes && (
-                    <p className="text-xs text-gray-600 mt-2 pt-2 border-t border-gray-100">
+                    <p className="text-xs text-white/55 mt-2 pt-2 border-t border-white/10 leading-relaxed">
                       {t.notes}
                     </p>
                   )}
@@ -348,11 +372,14 @@ function NotesTimeline({ notes }) {
   if (notes.length === 0) {
     return (
       <div className="py-12 text-center">
-        <FileText className="h-10 w-10 text-gray-300 mx-auto mb-2" />
-        <p className="text-sm text-gray-500 mb-1">No clinical notes yet</p>
-        <p className="text-xs text-gray-400">
+        <FileText className="h-10 w-10 text-white/25 mx-auto mb-2" />
+        <p className="text-sm text-white/55 mb-1">No clinical notes yet</p>
+        <p className="text-xs text-white/40">
           Add notes from{" "}
-          <Link to={createPageUrl("Catalogue")} className="text-gray-900 font-medium hover:underline">
+          <Link
+            to={createPageUrl("Catalogue")}
+            className="text-[#d6b164] font-medium hover:text-[#e4c77a] hover:underline"
+          >
             Catalogue
           </Link>
         </p>
@@ -366,13 +393,13 @@ function NotesTimeline({ notes }) {
         const s = note.structured && typeof note.structured === "object" ? note.structured : {};
         const summary = s.clinical_summary || note.raw_narrative || "—";
         return (
-          <div key={note.id} className="border-l-2 border-gray-200 pl-4 py-1">
-            <div className="text-xs font-medium text-gray-500 mb-1">
+          <div key={note.id} className="border-l-2 border-white/20 pl-4 py-1">
+            <div className="text-xs font-medium text-white/50 mb-1">
               {note.visit_date ? format(new Date(note.visit_date), "d MMM yyyy") : "—"}
             </div>
-            <p className="text-sm text-gray-700 leading-relaxed">{summary}</p>
+            <p className="text-sm text-white/85 leading-relaxed">{summary}</p>
             {note.source && (
-              <div className="text-xs text-gray-400 mt-1 capitalize">
+              <div className="text-xs text-white/40 mt-1 capitalize">
                 {note.source.replace(/_/g, " ")}
               </div>
             )}
@@ -523,16 +550,19 @@ function VoiceNoteComposer({ patient, onSave, isSaving, focusToken }) {
   };
 
   return (
-    <form onSubmit={submitNote} className="mb-4 rounded-lg border border-gray-200 bg-gray-50 p-4">
+    <form
+      onSubmit={submitNote}
+      className="mb-4 rounded-xl border border-white/10 bg-white/5 backdrop-blur-sm p-4"
+    >
       <div className="flex items-center justify-between gap-3 mb-3">
-        <p className="text-sm font-medium text-gray-900">Add note (voice or typed)</p>
+        <p className="text-sm font-medium text-white/90">Add note (voice or typed)</p>
         <Button
           type="button"
           variant={isRecording ? "destructive" : "outline"}
           size="sm"
           onClick={toggleVoiceRecording}
           disabled={isTranscribing}
-          className="h-8"
+          className="h-8 border-white/20 bg-white/5 text-white/90 hover:bg-white/10"
         >
           {isTranscribing ? (
             <>
@@ -554,7 +584,12 @@ function VoiceNoteComposer({ patient, onSave, isSaving, focusToken }) {
       </div>
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
         <div className="sm:col-span-1">
-          <Input type="date" value={visitDate} onChange={(e) => setVisitDate(e.target.value)} className="h-9" />
+          <Input
+            type="date"
+            value={visitDate}
+            onChange={(e) => setVisitDate(e.target.value)}
+            className="h-9 border-white/15 bg-white/10 text-white placeholder:text-white/40 [color-scheme:dark]"
+          />
         </div>
         <div className="sm:col-span-2">
           <Textarea
@@ -563,12 +598,17 @@ function VoiceNoteComposer({ patient, onSave, isSaving, focusToken }) {
             value={rawNarrative}
             onChange={(e) => setRawNarrative(e.target.value)}
             placeholder="Record a voice note or type your clinical note..."
-            className="bg-white"
+            className="border-white/15 bg-white/10 text-white placeholder:text-white/40"
           />
         </div>
       </div>
       <div className="mt-3 flex justify-end">
-        <Button type="submit" size="sm" disabled={!rawNarrative.trim() || isSaving || isTranscribing}>
+        <Button
+          type="submit"
+          size="sm"
+          disabled={!rawNarrative.trim() || isSaving || isTranscribing}
+          className="bg-[#d6b164]/25 border border-[#d6b164]/40 text-[#d6b164] hover:bg-[#d6b164]/35"
+        >
           {isSaving ? "Saving..." : "Save note"}
         </Button>
       </div>
@@ -1007,7 +1047,9 @@ export default function PatientCards() {
                 key={i}
                 onClick={() => setCurrentIndex(i)}
                 className={`rounded-full transition-all ${
-                  i === currentIndex ? "w-6 h-2 bg-gray-900" : "w-2 h-2 bg-gray-300 hover:bg-gray-400"
+                  i === currentIndex
+                    ? "w-6 h-2 bg-[#d6b164]"
+                    : "w-2 h-2 bg-white/25 hover:bg-white/40"
                 }`}
                 aria-label={`Go to patient ${i + 1}`}
               />

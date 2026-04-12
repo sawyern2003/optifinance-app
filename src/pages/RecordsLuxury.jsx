@@ -19,12 +19,20 @@ import {
 import { extractPhoneNumber, looksLikePhone } from "@/lib/contactGuards";
 import Invoices from "./Invoices";
 
-/** SMS after marking a treatment paid (Twilio ~320 chars / segment-friendly). */
-function buildPaymentThankYouMessage(patientDisplayName) {
-  const raw = String(patientDisplayName || "").trim();
-  const first = raw ? raw.split(/\s+/)[0] : "";
-  const greeting = first ? `Hi ${first}` : "Hi";
-  return `${greeting}, thank you so much for your payment — we're really grateful you trusted us with your care. We hope you had a great experience today and we'd love to see you again soon. When you have a moment, if you're happy with your visit we'd truly appreciate a short review online — it helps others find us and means a lot to our team. Warm thanks!`;
+/** SMS after marking a treatment paid (uses profile clinic_name for sign-off). */
+function buildPaymentThankYouMessage(patientDisplayName, clinicName) {
+  const patientName = String(patientDisplayName || "").trim() || "there";
+  const clinic = String(clinicName || "").trim() || "Your clinic";
+  return `Hi ${patientName},
+
+We're just writing to confirm that your payment has been received.
+
+If you have any questions or need any advice following your treatment, please feel free to contact us at any time.
+
+We look forward to welcoming you again soon.
+
+Kind regards,
+${clinic}`;
 }
 
 function buildMarkPaidPayload(treatment) {
@@ -115,6 +123,12 @@ export default function RecordsLuxury() {
     initialData: [],
   });
 
+  const { data: currentUser } = useQuery({
+    queryKey: ['auth', 'me'],
+    queryFn: () => api.auth.me(),
+    staleTime: 5 * 60 * 1000,
+  });
+
   const applyPaymentConfirmationFlow = useCallback(
     async ({ treatmentId, prevStatus, patientName, patientId }) => {
       if (prevStatus === 'paid') return;
@@ -142,7 +156,10 @@ export default function RecordsLuxury() {
         await api.functions.invoke('sendCustomSMS', {
           patientName: patientName || patient.name || 'Patient',
           patientContact,
-          messageBody: buildPaymentThankYouMessage(patientName || patient.name),
+          messageBody: buildPaymentThankYouMessage(
+            patientName || patient.name,
+            currentUser?.clinic_name,
+          ),
           relatedInvoiceId: linkedInvoice?.id ?? null,
           metadata: {
             source: 'records_payment_confirmation',
@@ -163,7 +180,7 @@ export default function RecordsLuxury() {
         });
       }
     },
-    [invoices, patients, queryClient, toast],
+    [invoices, patients, queryClient, toast, currentUser?.clinic_name],
   );
 
   // Set active tab from URL
