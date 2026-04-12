@@ -40,8 +40,6 @@ import Inventory from "./Inventory";
 
 import Regulatory from "./Regulatory";
 
-import CsvImport from "./CsvImport";
-
 import ClinicDataChat from "./ClinicDataChat";
 
 import { BrowserRouter as Router, Route, Routes, useLocation, Navigate } from 'react-router-dom';
@@ -86,8 +84,6 @@ const PAGES = {
     Inventory: Inventory,
 
     Regulatory: Regulatory,
-
-    CsvImport: CsvImport,
 
     ClinicDataChat: ClinicDataChat,
 
@@ -208,7 +204,12 @@ function PagesContent() {
                             <Route path="/Settings" element={<Settings />} />
                             <Route path="/Inventory" element={<Inventory />} />
                             <Route path="/Regulatory" element={<Regulatory />} />
-                            <Route path="/csvimport" element={<CsvImport />} />
+                            <Route
+                              path="/csvimport"
+                              element={
+                                <Navigate to={createPageUrl("ClinicDataChat")} replace />
+                              }
+                            />
                             <Route path="/clinicdatachat" element={<ClinicDataChat />} />
                             <Route path="*" element={<Navigate to="/" replace />} />
                         </Routes>
