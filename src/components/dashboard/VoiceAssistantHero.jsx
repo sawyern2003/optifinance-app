@@ -217,7 +217,7 @@ Return JSON with action and workflow info.`,
         case 'confirm_invoice':
           if (isYes) {
             return {
-              message: "Perfect! Is there any friends and family discount?",
+              message: "Perfect! Is there any discount?",
               workflow: { ...workflow, step: 'ask_discount' },
             };
           } else {

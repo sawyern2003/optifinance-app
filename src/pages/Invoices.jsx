@@ -446,7 +446,7 @@ ${clinicName}
                           {invoice.treatment_name}
                           {invoice.friends_family_discount_applied && (
                             <span className="text-[10px] font-semibold uppercase tracking-wide px-2 py-0.5 rounded-full bg-indigo-100 text-indigo-800">
-                              F&amp;F
+                              Discount
                             </span>
                           )}
                         </span>

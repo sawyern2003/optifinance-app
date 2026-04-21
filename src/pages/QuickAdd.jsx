@@ -144,7 +144,7 @@ export default function QuickAdd({ isModal = false, onClose = null }) {
     }
   }, [practitioners, useLeadPractitioner, treatmentForm.practitioner_id]);
 
-  // When F&F is on, charged amount is derived from catalogue list price and discount; keeps Records and revenue in sync.
+  // When discount is on, charged amount is derived from catalogue list price and discount; keeps Records and revenue in sync.
   useEffect(() => {
     if (!treatmentForm.friends_family_discount_applied || !treatmentForm.treatment_id) {
       return;
@@ -368,7 +368,7 @@ export default function QuickAdd({ isModal = false, onClose = null }) {
       );
       if (data.friends_family_discount_applied && effectiveFfPct === null) {
         throw new Error(
-          "Enter a friends & family discount % (0–100), or pick a patient with a default rate in Catalogue.",
+          "Enter a discount % (0-100), or pick a patient with a default rate in Catalogue.",
         );
       }
       const ffApplied =
@@ -383,7 +383,7 @@ export default function QuickAdd({ isModal = false, onClose = null }) {
       });
       if (ffApplied && !ffPricing.ok) {
         throw new Error(
-          "Friends & family needs a default list price on this treatment in Catalogue.",
+          "Discount needs a default list price on this treatment in Catalogue.",
         );
       }
 
@@ -644,7 +644,7 @@ export default function QuickAdd({ isModal = false, onClose = null }) {
       );
       if (eff === null) {
         toast({
-          title: "Friends & family discount",
+          title: "Discount",
           description:
             "Enter a discount % between 0 and 100, or choose a patient who has a default rate saved in Catalogue → Patients.",
           variant: "destructive",
@@ -661,7 +661,7 @@ export default function QuickAdd({ isModal = false, onClose = null }) {
       });
       if (!pr.ok) {
         toast({
-          title: "Friends & family discount",
+          title: "Discount",
           description:
             "Set a default price on this treatment in Catalogue so we can calculate the discounted amount.",
           variant: "destructive",
@@ -1272,7 +1272,7 @@ export default function QuickAdd({ isModal = false, onClose = null }) {
 
                   <div className="md:col-span-2 rounded-xl border border-indigo-100 bg-indigo-50/50 p-4 space-y-3">
                     <p className="text-sm font-semibold text-gray-900">
-                      Friends &amp; family discount
+                      Discount
                     </p>
                     <div className="flex items-start gap-3">
                       <input
@@ -1315,7 +1315,7 @@ export default function QuickAdd({ isModal = false, onClose = null }) {
                           htmlFor="quickadd-friends-family"
                           className="text-sm font-medium text-gray-900 cursor-pointer"
                         >
-                          Apply friends &amp; family discount to this visit
+                          Apply discount to this visit
                         </Label>
                         {treatmentForm.friends_family_discount_applied && (
                           <div className="space-y-2">
@@ -1341,6 +1341,9 @@ export default function QuickAdd({ isModal = false, onClose = null }) {
                               }
                               className="rounded-xl border-gray-300 h-11 max-w-[200px]"
                             />
+                            <p className="text-xs text-gray-500">
+                              If this is friends and family, add that in Notes.
+                            </p>
                           </div>
                         )}
                       </div>

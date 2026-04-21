@@ -977,7 +977,7 @@ export default function Catalogue() {
                           {patient.friends_family_discount_percent != null &&
                             patient.friends_family_discount_percent !== "" && (
                               <span className="text-[10px] font-light uppercase tracking-wider px-3 py-1 rounded-full bg-indigo-500/10 backdrop-blur-xl border border-indigo-500/30 text-indigo-400">
-                                F&amp;F {Number(patient.friends_family_discount_percent)}%
+                                Discount {Number(patient.friends_family_discount_percent)}%
                               </span>
                             )}
                         </p>
@@ -1293,7 +1293,7 @@ export default function Catalogue() {
                   </div>
                   <div className="space-y-2">
                     <Label htmlFor="patient_friends_family_discount_percent" className="text-sm font-medium text-gray-700">
-                      Friends &amp; family discount (%)
+                      Discount (%)
                     </Label>
                     <Input
                       id="patient_friends_family_discount_percent"
@@ -1309,7 +1309,7 @@ export default function Catalogue() {
                       className="rounded-xl border-gray-300"
                     />
                     <p className="text-xs text-gray-500">
-                      Only for patients you offer friends &amp; family rates. When set, you can mark each of their visits for invoice disclosure; other patients never see this option.
+                      Optional default discount for this patient. If this is friends and family, mention that in visit Notes/comments.
                     </p>
                   </div>
                 </>

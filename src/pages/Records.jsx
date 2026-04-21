@@ -569,7 +569,7 @@ export default function Records() {
         );
         if (eff === null) {
           toast({
-            title: "Friends & family discount",
+            title: "Discount",
             description:
               "Enter a discount % between 0 and 100, or choose a patient with a default rate in Catalogue → Patients.",
             variant: "destructive",
@@ -588,7 +588,7 @@ export default function Records() {
         });
         if (!prEarly.ok) {
           toast({
-            title: "Friends & family discount",
+            title: "Discount",
             description:
               "Set a default price on this treatment in Catalogue so we can calculate the discounted amount.",
             variant: "destructive",
@@ -669,7 +669,7 @@ export default function Records() {
       });
       if (ffApplied && !ffPricing.ok) {
         toast({
-          title: "Friends & family discount",
+          title: "Discount",
           description:
             "Set a default price on this treatment in Catalogue so we can calculate the discounted amount.",
           variant: "destructive",
@@ -1283,7 +1283,7 @@ export default function Records() {
                           {treatment.treatment_name}
                           {treatment.friends_family_discount_applied && (
                             <span className="text-[10px] font-semibold uppercase tracking-wide px-2 py-0.5 rounded-full bg-indigo-100 text-indigo-800">
-                              F&amp;F
+                              Discount
                             </span>
                           )}
                         </span>
@@ -1302,7 +1302,7 @@ export default function Records() {
                                 List £
                                 {Number(treatment.friends_family_list_price).toFixed(2)} · −
                                 {treatment.friends_family_discount_percent ?? "?"}
-                                % F&amp;F
+                                % discount
                               </span>
                             )}
                         </div>
@@ -1791,7 +1791,7 @@ export default function Records() {
 
                   <div className="rounded-xl border border-indigo-100 bg-indigo-50/50 p-4 space-y-3">
                     <p className="text-sm font-semibold text-gray-900">
-                      Friends &amp; family discount
+                      Discount
                     </p>
                     <div className="flex items-start gap-3">
                       <input
@@ -1832,7 +1832,7 @@ export default function Records() {
                           htmlFor="edit-friends-family"
                           className="text-sm font-medium text-gray-900 cursor-pointer"
                         >
-                          Apply friends &amp; family discount to this visit
+                          Apply discount to this visit
                         </Label>
                         {editForm.friends_family_discount_applied && (
                           <div className="space-y-2">
@@ -1858,6 +1858,9 @@ export default function Records() {
                               }
                               className="rounded-xl border-gray-300 h-11 max-w-[200px]"
                             />
+                            <p className="text-xs text-gray-500">
+                              If this is friends and family, add that in Notes.
+                            </p>
                           </div>
                         )}
                       </div>

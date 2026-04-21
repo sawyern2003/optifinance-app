@@ -133,10 +133,10 @@ export function TreatmentCard({
           </div>
         </div>
 
-        {/* F&F Badge */}
+        {/* Discount Badge */}
         {treatment.friends_family_discount_applied && (
           <Badge variant="secondary" className="bg-indigo-100 text-indigo-800 flex-shrink-0 ml-2">
-            F&F
+            Discount
           </Badge>
         )}
       </div>
@@ -179,13 +179,13 @@ export function TreatmentCard({
         </div>
       )}
 
-      {/* Detailed Pricing (F&F) */}
+      {/* Detailed Pricing (discount) */}
       {treatment.friends_family_discount_applied &&
         treatment.friends_family_list_price != null &&
         Number(treatment.friends_family_list_price) > Number(treatment.price_paid || 0) + 0.005 && (
           <div className="text-xs text-gray-500 mb-4 bg-indigo-50 p-2 rounded-lg">
             List price: £{Number(treatment.friends_family_list_price).toFixed(2)} ·
-            -{treatment.friends_family_discount_percent ?? '?'}% F&F discount
+            -{treatment.friends_family_discount_percent ?? '?'}% discount
           </div>
         )}
 

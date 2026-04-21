@@ -102,7 +102,7 @@ export function TreatmentEditPanel({
     }
   }, [treatment, isOpen, patients, practitioners]);
 
-  // Auto-calculate F&F pricing when relevant fields change
+  // Auto-calculate discount pricing when relevant fields change
   useEffect(() => {
     if (!isOpen || !formData.friends_family_discount_applied || !formData.treatment_id) return;
 
@@ -458,7 +458,7 @@ export function TreatmentEditPanel({
                   </div>
                 )}
 
-                {/* Friends & Family Discount */}
+                {/* Discount */}
                 <div className="rounded-xl border border-indigo-100 bg-indigo-50/50 p-4 space-y-3">
                   <div className="flex items-start gap-3">
                     <input
@@ -487,7 +487,7 @@ export function TreatmentEditPanel({
                     />
                     <div className="flex-1 space-y-3 min-w-0">
                       <Label htmlFor="friends-family" className="text-sm font-medium text-gray-900 cursor-pointer">
-                        Apply friends & family discount to this visit
+                        Apply discount to this visit
                       </Label>
                       {formData.friends_family_discount_applied && (
                         <div>
@@ -510,6 +510,9 @@ export function TreatmentEditPanel({
                             }
                             className="rounded-xl border-gray-300 h-11 max-w-[200px] mt-1"
                           />
+                          <p className="text-xs text-gray-500 mt-1">
+                            If this is friends and family, add that in Notes.
+                          </p>
                         </div>
                       )}
                     </div>
