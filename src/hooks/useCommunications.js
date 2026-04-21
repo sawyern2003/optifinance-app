@@ -10,7 +10,11 @@ import { useMemo } from 'react';
  */
 export function useCommunications(invoices, customMessages = [], filter = 'all', searchQuery = '') {
   return useMemo(() => {
-    const toPatientKey = (name) => String(name || '').trim().toLowerCase();
+    const toPatientKey = (name) =>
+      String(name || '')
+        .trim()
+        .replace(/\s+/g, ' ')
+        .toLowerCase();
 
     // Filter invoices based on selected filter
     let filtered = invoices;
@@ -36,12 +40,11 @@ export function useCommunications(invoices, customMessages = [], filter = 'all',
           outstandingCount: 0,
           lastActivity: null,
           contactSet: new Set(),
+          contactUpdatedAt: null,
         };
       }
       if (contact) {
         grouped[key].contactSet.add(String(contact).trim());
-        // Prefer the latest non-empty contact for display.
-        grouped[key].patient_contact = String(contact).trim();
       }
       return grouped[key];
     };
@@ -50,6 +53,16 @@ export function useCommunications(invoices, customMessages = [], filter = 'all',
       const group = ensureGroup(invoice.patient_name, invoice.patient_contact);
       if (!group) return;
       group.invoices.push(invoice);
+      const contact = String(invoice.patient_contact || '').trim();
+      const activityDate = new Date(invoice.updated_at || invoice.created_at || Date.now());
+      if (
+        contact &&
+        (!group.contactUpdatedAt || activityDate >= group.contactUpdatedAt)
+      ) {
+        // Keep display contact aligned with most recent known activity.
+        group.patient_contact = contact;
+        group.contactUpdatedAt = activityDate;
+      }
 
       // Calculate outstanding amounts
       if (invoice.status !== 'paid' && invoice.status !== 'Paid') {
@@ -58,7 +71,6 @@ export function useCommunications(invoices, customMessages = [], filter = 'all',
       }
 
       // Track most recent activity
-      const activityDate = new Date(invoice.updated_at || invoice.created_at);
       if (!group.lastActivity || activityDate > group.lastActivity) {
         group.lastActivity = activityDate;
       }
@@ -71,6 +83,14 @@ export function useCommunications(invoices, customMessages = [], filter = 'all',
       group.customMessages.push(msg);
 
       const activityDate = new Date(msg.created_at || msg.updated_at || Date.now());
+      const contact = String(msg.patient_contact || '').trim();
+      if (
+        contact &&
+        (!group.contactUpdatedAt || activityDate >= group.contactUpdatedAt)
+      ) {
+        group.patient_contact = contact;
+        group.contactUpdatedAt = activityDate;
+      }
       if (!group.lastActivity || activityDate > group.lastActivity) {
         group.lastActivity = activityDate;
       }

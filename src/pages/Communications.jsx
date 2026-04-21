@@ -11,8 +11,6 @@ import {
 import {
   extractEmailAddress,
   extractPhoneNumber,
-  looksLikeEmail,
-  looksLikePhone,
 } from '@/lib/contactGuards';
 
 // Import new components
@@ -20,6 +18,17 @@ import { useCommunications } from '@/hooks/useCommunications';
 import { PatientSidebar } from '@/components/communications/PatientSidebar';
 import { MessageThread } from '@/components/communications/MessageThread';
 import { EmptyState } from '@/components/communications/EmptyState';
+
+function normalizePatientKey(value) {
+  return String(value || '')
+    .trim()
+    .replace(/\s+/g, ' ')
+    .toLowerCase();
+}
+
+function normalizePatientLooseKey(value) {
+  return normalizePatientKey(value).replace(/[^a-z0-9]/g, '');
+}
 
 export default function Communications() {
   const { toast } = useToast();
@@ -70,7 +79,7 @@ export default function Communications() {
   const patientConversations = useMemo(() => {
     const outstandingByName = new Map();
     for (const t of treatmentEntries || []) {
-      const key = String(t.patient_name || '').trim().toLowerCase();
+      const key = normalizePatientKey(t.patient_name);
       if (!key) continue;
       const pricePaid = Number(t.price_paid || 0);
       const amountPaid = Number(t.amount_paid || 0);
@@ -87,24 +96,50 @@ export default function Communications() {
       outstandingByName.set(key, prev);
     }
 
-    const patientByName = new Map(
-      (patients || []).map((p) => [String(p.name || '').trim().toLowerCase(), p]),
-    );
+    const patientByName = new Map();
+    const patientByLooseName = new Map();
+    for (const p of patients || []) {
+      const nameKey = normalizePatientKey(p.name);
+      const looseKey = normalizePatientLooseKey(p.name);
+      if (nameKey && !patientByName.has(nameKey)) patientByName.set(nameKey, p);
+      if (looseKey && !patientByLooseName.has(looseKey)) patientByLooseName.set(looseKey, p);
+    }
     let conversations = rawConversations.map((conv) => {
-      const patientKey = String(conv.patient_name || '').trim().toLowerCase();
-      const p = patientByName.get(patientKey);
+      const patientKey = normalizePatientKey(conv.patient_name || conv.key);
+      const p =
+        patientByName.get(patientKey) ||
+        patientByLooseName.get(normalizePatientLooseKey(conv.patient_name || conv.key));
       const outstanding = outstandingByName.get(patientKey) || { balance: 0, count: 0 };
+      const displayContact =
+        String(p?.contact || '').trim() ||
+        String(p?.email || '').trim() ||
+        String(p?.phone || '').trim() ||
+        String(conv.patient_contact || '').trim();
       const messagingPhone =
-        extractPhoneNumber(conv.patient_contact) ||
         extractPhoneNumber(p?.phone) ||
         extractPhoneNumber(p?.contact) ||
+        extractPhoneNumber(conv.patient_contact) ||
         null;
       const messagingEmail =
-        extractEmailAddress(conv.patient_contact) ||
+        extractEmailAddress(p?.email) ||
         extractEmailAddress(p?.contact) ||
+        extractEmailAddress(conv.patient_contact) ||
         null;
+      const contacts = Array.from(
+        new Set(
+          [
+            ...(conv.contacts || []),
+            conv.patient_contact,
+            p?.contact,
+            p?.email,
+            p?.phone,
+          ].filter(Boolean),
+        ),
+      );
       return {
         ...conv,
+        patient_contact: displayContact,
+        contacts,
         outstandingBalance: Number(outstanding.balance || 0),
         outstandingCount: Number(outstanding.count || 0),
         messagingPhone,
@@ -113,9 +148,9 @@ export default function Communications() {
     });
 
     // Include patients with no invoice/message history so a new chat can be started.
-    const existingKeys = new Set(conversations.map((c) => String(c.key || '').trim().toLowerCase()));
+    const existingKeys = new Set(conversations.map((c) => normalizePatientKey(c.key || c.patient_name)));
     for (const p of patients || []) {
-      const key = String(p.name || '').trim().toLowerCase();
+      const key = normalizePatientKey(p.name);
       if (!key || existingKeys.has(key)) continue;
       const contact = p.contact || p.email || p.phone || '';
       conversations.push({
@@ -148,9 +183,11 @@ export default function Communications() {
     return patientConversations.find(p => p.key === selectedPatientKey);
   }, [patientConversations, selectedPatientKey]);
 
-  // Auto-select first patient on load
+  // Auto-select first patient on load or when selected key disappears after recompute.
   React.useEffect(() => {
-    if (!selectedPatientKey && patientConversations.length > 0) {
+    if (patientConversations.length === 0) return;
+    const hasSelection = patientConversations.some((p) => p.key === selectedPatientKey);
+    if (!selectedPatientKey || !hasSelection) {
       setSelectedPatientKey(patientConversations[0].key);
     }
   }, [patientConversations, selectedPatientKey]);
@@ -158,7 +195,11 @@ export default function Communications() {
   // === Communication Functions (same logic as original) ===
 
   const sendReminderSms = async (invoice) => {
-    if (!looksLikePhone(invoice.patient_contact)) {
+    const targetPhone =
+      selectedPatient?.messagingPhone ||
+      extractPhoneNumber(invoice.patient_contact) ||
+      null;
+    if (!targetPhone) {
       toast({
         title: 'Phone number required',
         description:
@@ -170,7 +211,15 @@ export default function Communications() {
 
     setBusyInvoiceId(invoice.id);
     try {
-      await invoicesAPI.sendPaymentReminder(invoice.id, false);
+      let invoiceForSend = invoice;
+      if (String(invoice.patient_contact || '').trim() !== targetPhone) {
+        await api.entities.Invoice.update(invoice.id, { patient_contact: targetPhone });
+        queryClient.setQueryData(['invoices'], (prev = []) =>
+          prev.map((inv) => (inv.id === invoice.id ? { ...inv, patient_contact: targetPhone } : inv)),
+        );
+        invoiceForSend = { ...invoice, patient_contact: targetPhone };
+      }
+      await invoicesAPI.sendPaymentReminder(invoiceForSend.id, false);
       toast({
         title: 'Reminder sent',
         description: `Payment reminder SMS sent for ${invoice.invoice_number}`,
@@ -190,7 +239,11 @@ export default function Communications() {
   };
 
   const sendInvoiceEmail = async (invoice) => {
-    if (!looksLikeEmail(invoice.patient_contact)) {
+    const targetEmail =
+      selectedPatient?.messagingEmail ||
+      extractEmailAddress(invoice.patient_contact) ||
+      null;
+    if (!targetEmail) {
       toast({
         title: 'Email address required',
         description:
@@ -202,15 +255,24 @@ export default function Communications() {
 
     setBusyInvoiceId(invoice.id);
     try {
+      let invoiceForSend = invoice;
+      if (String(invoice.patient_contact || '').trim().toLowerCase() !== String(targetEmail).toLowerCase()) {
+        await api.entities.Invoice.update(invoice.id, { patient_contact: targetEmail });
+        queryClient.setQueryData(['invoices'], (prev = []) =>
+          prev.map((inv) => (inv.id === invoice.id ? { ...inv, patient_contact: targetEmail } : inv)),
+        );
+        invoiceForSend = { ...invoice, patient_contact: targetEmail };
+      }
+
       // Generate PDF if needed
-      if (!invoice.invoice_pdf_url) {
-        await invoicesAPI.generateInvoicePDF(invoice.id);
+      if (!invoiceForSend.invoice_pdf_url) {
+        await invoicesAPI.generateInvoicePDF(invoiceForSend.id);
         await queryClient.refetchQueries({ queryKey: ['invoices'] });
       }
 
       // Get fresh invoice data
       const list = queryClient.getQueryData(['invoices']) || [];
-      const invFresh = list.find((i) => i.id === invoice.id) || invoice;
+      const invFresh = list.find((i) => i.id === invoice.id) || invoiceForSend;
 
       // Send email
       const sendData = await invoicesAPI.sendInvoice(invFresh.id, 'email');
@@ -244,7 +306,11 @@ export default function Communications() {
   };
 
   const sendInvoiceSmsLink = async (invoice) => {
-    if (!looksLikePhone(invoice.patient_contact)) {
+    const targetPhone =
+      selectedPatient?.messagingPhone ||
+      extractPhoneNumber(invoice.patient_contact) ||
+      null;
+    if (!targetPhone) {
       toast({
         title: 'Phone number required',
         description: 'Patient contact must be a phone number to send SMS.',
@@ -255,15 +321,24 @@ export default function Communications() {
 
     setBusyInvoiceId(invoice.id);
     try {
+      let invoiceForSend = invoice;
+      if (String(invoice.patient_contact || '').trim() !== targetPhone) {
+        await api.entities.Invoice.update(invoice.id, { patient_contact: targetPhone });
+        queryClient.setQueryData(['invoices'], (prev = []) =>
+          prev.map((inv) => (inv.id === invoice.id ? { ...inv, patient_contact: targetPhone } : inv)),
+        );
+        invoiceForSend = { ...invoice, patient_contact: targetPhone };
+      }
+
       // Generate PDF if needed
-      if (!invoice.invoice_pdf_url) {
-        await invoicesAPI.generateInvoicePDF(invoice.id);
+      if (!invoiceForSend.invoice_pdf_url) {
+        await invoicesAPI.generateInvoicePDF(invoiceForSend.id);
         await queryClient.refetchQueries({ queryKey: ['invoices'] });
       }
 
       // Get fresh invoice data
       const list = queryClient.getQueryData(['invoices']) || [];
-      const invFresh = list.find((i) => i.id === invoice.id) || invoice;
+      const invFresh = list.find((i) => i.id === invoice.id) || invoiceForSend;
 
       // Send SMS
       const sendData = await invoicesAPI.sendInvoice(invFresh.id, 'sms');
