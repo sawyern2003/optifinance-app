@@ -359,7 +359,7 @@ serve(async (req) => {
         const disc = Math.max(0, ffStd - invAmount);
         const pctLabel =
           Number.isFinite(ffPct) && ffPct > 0 ? ` (${ffPct}% off)` : "";
-        page.drawText(`  Friends & family discount${pctLabel}: -£${disc.toFixed(2)}`, {
+        page.drawText(`  Discount${pctLabel}: -£${disc.toFixed(2)}`, {
           x: margin + 8,
           y,
           font,
@@ -369,12 +369,12 @@ serve(async (req) => {
         step(13);
       } else if (Number.isFinite(ffPct) && ffPct > 0) {
         page.drawText(
-          `  Friends & family rate (${ffPct}% off standard list)`,
+          `  Discount rate (${ffPct}% off standard list)`,
           { x: margin + 8, y, font, size: 9.5, color: muted },
         );
         step(13);
       } else {
-        page.drawText("  Friends & family pricing applied", {
+        page.drawText("  Discount pricing applied", {
           x: margin + 8,
           y,
           font,
